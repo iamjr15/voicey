@@ -49,7 +49,7 @@ def _agent(**changes: Any) -> Agent:
         "web": Web(enabled=True, allowed_origins=["https://example.test"]),
         "results": Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",
+            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     }
     values.update(changes)
@@ -58,10 +58,10 @@ def _agent(**changes: Any) -> Agent:
 
 def _valid_environment() -> dict[str, str]:
     return {
-        "ANTHROPIC_API_KEY": "anthropic-test",
-        "CARTESIA_API_KEY": "cartesia-test",
-        "DEEPGRAM_API_KEY": "deepgram-test",
-        "ELEVENLABS_API_KEY": "elevenlabs-test",
+        "ANTHROPIC_API_KEY": "anthropic-test",  # pragma: allowlist secret
+        "CARTESIA_API_KEY": "cartesia-test",  # pragma: allowlist secret
+        "DEEPGRAM_API_KEY": "deepgram-test",  # pragma: allowlist secret
+        "ELEVENLABS_API_KEY": "elevenlabs-test",  # pragma: allowlist secret
         "VOICEKIT_WEBHOOK_SECRET": encode_secret(b"current-test-key"),
     }
 
@@ -147,14 +147,14 @@ def test_agent_rejects_local_callable_tools_with_a_fix() -> None:
         (
             lambda: Results(
                 webhook="http://receiver.test",
-                secret_env="VOICEKIT_WEBHOOK_SECRET",
+                secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
             ),
             "Fix: use an https://",
         ),
         (
             lambda: Results(
                 webhook="https://receiver.test",
-                secret_env="not-valid",
+                secret_env="not-valid",  # pragma: allowlist secret
             ),
             "Fix: use uppercase",
         ),

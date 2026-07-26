@@ -36,7 +36,7 @@ agent = Agent(
     ),
     results=Results(
         webhook="https://api.sunrisedental.example/voice-results",
-        secret_env="VOICEKIT_WEBHOOK_SECRET",
+        secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
         previous_secret_env=None,
         redact=["phone_number"],
         purge_after_days=30,

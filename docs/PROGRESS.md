@@ -5,9 +5,9 @@ Last updated: 2026-07-26
 ## Current checkpoint
 
 - **Phase:** P1 — engine spine, Pipecat, Twilio, CLI/playground, recipe #1, Docker
-- **Current unit:** P1.2 `obs/`
-- **Next task:** implement correlated JSON/dev logging, PII leak enforcement, latency series, and the lifecycle-safe SQLite call-record foundation
-- **Completed:** all P0 units; P1.1 typed Agent schema, fix-carrying catalog validation, deterministic config hash, atomic JSON5 manifest, tests, and configuration docs
+- **Current unit:** P1.3 `results/`
+- **Next task:** write the results chaos contracts first, then implement repository interfaces, fenced call leases, atomic terminal envelopes/outbox delivery, recording-ready events, redaction, retention, recovery, and pull/redelivery APIs
+- **Completed:** all P0 units; P1.1 configuration; P1.2 correlated PII-safe logging, latency series, and protected SQLite WAL/FULL call-record foundation
 
 ## Gate status
 
@@ -20,6 +20,7 @@ Last updated: 2026-07-26
 | P0 LiveKit walking skeleton | green | Native AgentServer/AgentSession/function_tool, dispatch token, tool/results, mocked termination, verified signed delivery |
 | P0 exact verification | green | `uv run pytest -m integration --no-cov tests/integration/test_p0_walking_skeleton.py` → 2 passed |
 | P1.1 configuration unit | green | `uv run pytest` → 54 passed; ruff and strict pyright green; total branch coverage 90.57% |
+| P1.2 observability unit | green | Correlation/PII leak, latency, WAL/FULL durability, reopen, schema, and parallel-write tests green; `uv run pytest` → 73 passed |
 | Physical handset/manual gates | pending-live | Carrier/handset harnesses begin in P1; tracked without claiming P0 provider-mocked coverage |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

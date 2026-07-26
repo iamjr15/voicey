@@ -93,9 +93,11 @@ def collect_config_issues(
         for entry in entries
         for env_name in entry.key_env_vars
     }
-    key_owners[agent.results.secret_env] = "webhook"
+    key_owners[agent.results.secret_env] = "webhook"  # pragma: allowlist secret
     if agent.results.previous_secret_env is not None:
-        key_owners[agent.results.previous_secret_env] = "webhook"
+        key_owners[agent.results.previous_secret_env] = (  # pragma: allowlist secret
+            "webhook"
+        )
     for env_name, owner in sorted(key_owners.items()):
         if not environ.get(env_name):
             issues.append(

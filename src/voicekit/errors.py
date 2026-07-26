@@ -30,6 +30,31 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The voicekit.jsonc manifest could not be saved atomically.",
         fix="Check project-directory permissions and available disk space, then retry.",
     ),
+    "VK-OBS-001": ErrorDefinition(
+        code="VK-OBS-001",
+        cause="The protected call-record database could not be opened or closed.",
+        fix="Check the data-directory permissions and disk health, then retry.",
+    ),
+    "VK-OBS-002": ErrorDefinition(
+        code="VK-OBS-002",
+        cause="A call-record observation could not be committed durably.",
+        fix="Resolve the reported SQLite error before accepting more calls.",
+    ),
+    "VK-OBS-003": ErrorDefinition(
+        code="VK-OBS-003",
+        cause="The requested call record does not exist.",
+        fix="Run `voicekit calls list` and retry with an existing call id.",
+    ),
+    "VK-OBS-004": ErrorDefinition(
+        code="VK-OBS-004",
+        cause="The call-record schema is newer or incompatible.",
+        fix="Install the matching voicekit version or run its documented upgrade.",
+    ),
+    "VK-OBS-005": ErrorDefinition(
+        code="VK-OBS-005",
+        cause="The requested call-record query is outside safe limits.",
+        fix="Choose a result limit from 1 through 1000.",
+    ),
     "VK-SEC-001": ErrorDefinition(
         code="VK-SEC-001",
         cause="A protected local path has unsafe permissions.",
