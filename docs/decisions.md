@@ -30,3 +30,14 @@ These choices apply the documented proposals authorized in the build mandate and
 - Standard Webhooks interoperability pins Python `standardwebhooks==1.1.0`,
   npm `standardwebhooks@1.0.0`, and Go source commit
   `01d6eb75702229a0927c07d52fda7223e201c03d` for the cross-language vector.
+
+## 2026-07-26 — P1 Twilio adapter pin and safety boundary
+
+- Pin `twilio==9.10.9`; the installed SDK confirms that `Calls.create` has no
+  native idempotency key.
+- Store routing rollback snapshots and outbound intents in the protected,
+  `synchronous=FULL` telephony ledger before any external mutation.
+- Never retry an ambiguous outbound create. Correlate by the durable intent in
+  the status-callback path and bind only a unique reconciliation candidate.
+- Require an expected public base for signature validation; forwarded headers
+  are accepted only from configured proxies and must reconstruct that origin.

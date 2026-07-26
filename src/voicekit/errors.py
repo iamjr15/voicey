@@ -150,6 +150,63 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="A final tool observation could not be persisted.",
         fix="Stop accepting calls and restore protected observation storage before retrying.",
     ),
+    "VK-TEL-001": ErrorDefinition(
+        code="VK-TEL-001",
+        cause="The requested telephony adapter or its optional dependency is unavailable.",
+        fix='Install the exact carrier extra, for example `uv pip install "voicekit[twilio]"`.',
+    ),
+    "VK-TEL-002": ErrorDefinition(
+        code="VK-TEL-002",
+        cause="A telephony target, credential, number, or adapter setting is invalid.",
+        fix="Correct the reported carrier setting and run `voicekit doctor` before retrying.",
+    ),
+    "VK-TEL-003": ErrorDefinition(
+        code="VK-TEL-003",
+        cause="A carrier phone number lookup returned no unique result.",
+        fix="List owned numbers, select one exact E.164 number, and retry.",
+    ),
+    "VK-TEL-004": ErrorDefinition(
+        code="VK-TEL-004",
+        cause="The carrier definitively rejected an operation.",
+        fix="Resolve the safe carrier status/code reported by doctor, then retry explicitly.",
+    ),
+    "VK-TEL-005": ErrorDefinition(
+        code="VK-TEL-005",
+        cause="A durable telephony routing snapshot or outbound intent could not be stored.",
+        fix="Stop carrier mutations and restore the protected telephony ledger.",
+    ),
+    "VK-TEL-006": ErrorDefinition(
+        code="VK-TEL-006",
+        cause="Carrier routing changed after voicekit applied its temporary target.",
+        fix=(
+            "Review the current carrier route; restore manually or retry with an explicit snapshot."
+        ),
+    ),
+    "VK-TEL-007": ErrorDefinition(
+        code="VK-TEL-007",
+        cause="An outbound carrier operation has an ambiguous outcome and was not retried.",
+        fix="Reconcile the reported intent id before deciding whether to place another call.",
+    ),
+    "VK-TEL-008": ErrorDefinition(
+        code="VK-TEL-008",
+        cause="A signed carrier callback has an unknown or incomplete event shape.",
+        fix="Inspect safe callback metadata and update the carrier mapping before accepting calls.",
+    ),
+    "VK-TEL-009": ErrorDefinition(
+        code="VK-TEL-009",
+        cause="An authenticated carrier recording could not be downloaded safely.",
+        fix="Check the recording SID, account credentials, size limit, and carrier availability.",
+    ),
+    "VK-TEL-010": ErrorDefinition(
+        code="VK-TEL-010",
+        cause="A carrier media frame violates the certified codec or stream protocol.",
+        fix="Reject the frame and inspect the carrier media-stream configuration.",
+    ),
+    "VK-TEL-011": ErrorDefinition(
+        code="VK-TEL-011",
+        cause="The carrier API is unavailable or returned an indeterminate infrastructure error.",
+        fix="Check carrier status and connectivity; reconcile mutations before any explicit retry.",
+    ),
 }
 
 

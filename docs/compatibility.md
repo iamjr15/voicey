@@ -9,6 +9,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Pipecat Flows | core `pipecat.flows` from `pipecat-ai==1.6.0` | `FlowManager` and `NodeConfig` import from core; `pipecat-ai-flows` is not installed |
 | LiveKit Agents | `livekit-agents==1.6.7` | Installed from PyPI on 2026-07-26; latest resolver candidate was unchanged |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
+| Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
 | Pipecat client JS | `@pipecat-ai/client-js==1.13.0` | npm registry checked 2026-07-26 |
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
 | Pipecat SmallWebRTC | `@pipecat-ai/small-webrtc-transport==1.10.6` | npm registry checked 2026-07-26 |
@@ -24,6 +25,8 @@ This table records versions empirically installed and inspected during P0. Runti
 - Twilio serializer: `TwilioFrameSerializer(..., base_url=..., params=TwilioFrameSerializer.InputParams(...))`.
 - LiveKit worker: `AgentServer`, `@server.rtc_session`, `setup_fnc`, `AgentSession(turn_handling=TurnHandlingOptions(...))`.
 - LiveKit SIP: current trunk/rule methods are `create_inbound_trunk` and `create_dispatch_rule`; their `create_sip_*` aliases are deprecated. `create_sip_participant` and `transfer_sip_participant` remain current.
+- Twilio request validation: `RequestValidator.validate(uri, params, signature)`; JSON body hashing is selected by the signed `bodySHA256` query parameter.
+- Twilio outbound: `CallList.create` has no idempotency-key parameter; async AMD uses `async_amd` plus its callback fields, and call redirects use `CallContext.update(twiml=...)`.
 
 ## Upgrade rule
 

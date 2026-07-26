@@ -23,6 +23,7 @@ Runtime extras are isolated:
 ```bash
 uv sync --extra pipecat
 uv sync --extra livekit
+uv sync --extra twilio
 ```
 
 Do not install the standalone `pipecat-ai-flows` package. Pipecat 1.6.0 provides `pipecat.flows` in core.

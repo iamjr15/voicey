@@ -144,6 +144,18 @@ wheels = [
 ]
 
 [[package]]
+name = "aiohttp-retry"
+version = "2.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9d/61/ebda4d8e3d8cfa1fd3db0fb428db2dd7461d5742cea35178277ad180b033/aiohttp_retry-2.9.1.tar.gz", hash = "sha256:8eb75e904ed4ee5c2ec242fefe85bf04240f685391c4879d8f541d6028ff01f1", size = 13608, upload-time = "2024-11-06T10:44:54.574Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/99/84ba7273339d0f3dfa57901b846489d2e5c2cd731470167757f1935fffbd/aiohttp_retry-2.9.1-py3-none-any.whl", hash = "sha256:66d2759d1921838256a05a3f80ad7e724936f083e35be5abb5e16eed6be6dc54", size = 9981, upload-time = "2024-11-06T10:44:52.917Z" },
+]
+
+[[package]]
 name = "aioice"
 version = "0.10.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3266,6 +3278,21 @@ wheels = [
 ]
 
 [[package]]
+name = "twilio"
+version = "9.10.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "aiohttp-retry" },
+    { name = "pyjwt" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/af/275130be4783c6e2b2122d3b278b63da0007611d1dc073d6414adcc6be03/twilio-9.10.9.tar.gz", hash = "sha256:eb74fc026c85a89372836414f57e262119efaa160b9419cf4d05b59056b8e89d", size = 1762839, upload-time = "2026-05-07T17:34:38.162Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/6b/df08b499d01ba6b9f7f42f9dd51b82aab1eb26c93602f3b89179a520494f/twilio-9.10.9-py2.py3-none-any.whl", hash = "sha256:1c50bfb394b5dbc044bacab24b2e3b550bee0c08da51c4a1fa4816293303e66c", size = 2452983, upload-time = "2026-05-07T17:34:36.459Z" },
+]
+
+[[package]]
 name = "typer"
 version = "0.27.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3422,6 +3449,9 @@ livekit = [
 pipecat = [
     { name = "pipecat-ai", extra = ["webrtc", "websocket"] },
 ]
+twilio = [
+    { name = "twilio" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -3450,11 +3480,12 @@ requires-dist = [
     { name = "questionary", specifier = "==2.1.1" },
     { name = "rich", specifier = ">=15,<16" },
     { name = "structlog", specifier = ">=25.5,<26" },
+    { name = "twilio", marker = "extra == 'twilio'", specifier = "==9.10.9" },
     { name = "typer", specifier = "==0.27.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.40,<1" },
     { name = "watchfiles", specifier = ">=1.1,<2" },
 ]
-provides-extras = ["pipecat", "livekit"]
+provides-extras = ["pipecat", "livekit", "twilio"]
 
 [package.metadata.requires-dev]
 dev = [
