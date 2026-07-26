@@ -130,6 +130,26 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="A callable is not registered as a voicekit tool.",
         fix="Decorate the typed function with @tool before registering it.",
     ),
+    "VK-TOL-002": ErrorDefinition(
+        code="VK-TOL-002",
+        cause="A Python tool declaration cannot produce a safe JSON schema.",
+        fix="Use a valid name, typed non-variadic parameters, and a return annotation.",
+    ),
+    "VK-TOL-003": ErrorDefinition(
+        code="VK-TOL-003",
+        cause="The tool executor configuration is invalid.",
+        fix="Use a positive execution timeout and retry the command.",
+    ),
+    "VK-TOL-004": ErrorDefinition(
+        code="VK-TOL-004",
+        cause="An HTTP tool is misconfigured or its remote request failed.",
+        fix="Check the method, URL parameters, environment credentials, and endpoint.",
+    ),
+    "VK-TOL-005": ErrorDefinition(
+        code="VK-TOL-005",
+        cause="A final tool observation could not be persisted.",
+        fix="Stop accepting calls and restore protected observation storage before retrying.",
+    ),
 }
 
 
