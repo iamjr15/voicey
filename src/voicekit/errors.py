@@ -15,6 +15,21 @@ class ErrorDefinition:
 
 
 ERROR_CATALOG: dict[str, ErrorDefinition] = {
+    "VK-CFG-001": ErrorDefinition(
+        code="VK-CFG-001",
+        cause="The agent configuration is incomplete or incompatible.",
+        fix="Apply every listed configuration fix, then rerun validation.",
+    ),
+    "VK-CFG-002": ErrorDefinition(
+        code="VK-CFG-002",
+        cause="The voicekit.jsonc manifest could not be read or validated.",
+        fix="Correct the reported manifest field or resume voicekit init.",
+    ),
+    "VK-CFG-003": ErrorDefinition(
+        code="VK-CFG-003",
+        cause="The voicekit.jsonc manifest could not be saved atomically.",
+        fix="Check project-directory permissions and available disk space, then retry.",
+    ),
     "VK-SEC-001": ErrorDefinition(
         code="VK-SEC-001",
         cause="A protected local path has unsafe permissions.",
@@ -73,4 +88,5 @@ class VoicekitError(RuntimeError):
         message = f"{code}: {definition.cause}"
         if detail:
             message = f"{message} {detail}"
+        message = f"{message} Fix: {definition.fix}"
         super().__init__(message)
