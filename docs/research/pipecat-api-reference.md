@@ -6,6 +6,8 @@ We're building a production voice-agent toolchain **on top of** Pipecat. This do
 
 > **Single most important finding — a big rename landed in `pipecat-ai` 1.3.0 (late May 2026).** The long-standing `PipelineTask` / `PipelineRunner` API was renamed to **`PipelineWorker` / `WorkerRunner`** as part of a new multi-agent `pipecat.workers` framework. The old names still work as **deprecated aliases** (emit `DeprecationWarning`, slated for removal in **2.0.0**). Almost every tutorial, blog post, and Context7 snippet online still shows the old names. **A new toolchain built now should target the new names.**
 
+> **P0 empirical resolution (2026-07-26):** installed `pipecat-ai==1.6.0` on CPython 3.14.4. Flows imports from core `pipecat.flows`; standalone `pipecat-ai-flows` is not installed. `FastAPIWebsocketParams` and `TransportParams` do not accept `vad_analyzer`; `LLMUserAggregatorParams` does. `TwilioFrameSerializer` includes `base_url`. For a long-lived host, construct `WorkerRunner()` and pass `auto_end=False` to `runner.run()`.
+
 ---
 
 ## 1. Versions, Python support, cadence
@@ -466,7 +468,7 @@ Sources: https://docs.pipecat.ai/api-reference/cli/{overview,init} · https://do
 
 1. **Target the new API surface now** — `PipelineWorker`/`WorkerRunner` (`pipecat.pipeline.worker`, `pipecat.workers.runner`), per-provider transport paths, `LLMContext`+`LLMContextAggregatorPair`, `Service.Settings(...)`, `PipecatClient`. Old names work but are 2.0.0-removal aliases; every online example is stale.
 2. **Adopt the `bot(runner_args)` + `create_transport` shape** so one codebase serves browser (SmallWebRTC), Twilio, and Pipecat Cloud unchanged. Own the `/start` + `/api/offer` contract.
-3. **For a long-lived FastAPI host:** one process, many concurrent `PipelineWorker`s; `WorkerRunner(auto_end=False)`. Cap calls with a manual `asyncio` timer → `EndFrame`; rely on `idle_timeout_secs` for dead-air.
+3. **For a long-lived FastAPI host:** one process, many concurrent `PipelineWorker`s; `WorkerRunner()` then `await runner.run(auto_end=False)`. Cap calls with a manual `asyncio` timer → `EndFrame`; rely on `idle_timeout_secs` for dead-air.
 4. **Observability:** `enable_metrics=enable_usage_metrics=True` + `TranscriptProcessor` (or aggregator turn events) + `TurnTrackingObserver`/`UserBotLatencyObserver`; OTel (`enable_tracing=True`) for per-turn/per-service spans.
 5. **Resilience:** `ServiceSwitcher(strategy_type=ServiceSwitcherStrategyFailover)` for STT/LLM/TTS fallback (validate on your pin); `on_pipeline_error`/`on_pipeline_finished` for cleanup.
 6. **Wire in `pipecat-ai-context-hub` (MCP + `check_deprecation`)** and pin an exact `pipecat-ai` version, diffing against `reference-server.pipecat.ai/en/stable` — the prose docs still contain deleted `transports.network.*` imports.
@@ -475,4 +477,3 @@ Sources: https://docs.pipecat.ai/api-reference/cli/{overview,init} · https://do
 - Exact current `pipecat-ai` (PyPI page showed **1.5.0**; CHANGELOG shows **1.6.0** dated 2026-07-21 — pin and check).
 - `vad_analyzer` on transport params vs `LLMUserAggregatorParams` (§5 conflict).
 - `TwilioFrameSerializer` `base_url`/`resampler_clear_after_secs`; `LLMSwitcher` import path; whether `RTVIClient` JS aliases still ship in 1.13.
-

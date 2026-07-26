@@ -108,8 +108,10 @@ agent = Agent(
     results=Results(
         webhook="https://api.sunrisedental.com/voice-results",
         secret_env="VOICEKIT_WEBHOOK_SECRET",       # never inline secrets
-        include=["transcript", "data", "recording_url", "metrics"],
+        previous_secret_env=None,                   # overlap window during rotation
+        include=["transcript", "data", "recording", "metrics"],
         redact=["phone_number"],                    # field-level redaction before delivery
+        purge_after_days=30,                        # records, artifacts, outbox, and backups
     ),
 
     limits=Limits(
@@ -214,11 +216,11 @@ Per carrier: codec/sample-rate handling (e.g. mulaw 8k ↔ 16k linear resample),
 
 ## 6. Results & webhook contract
 
-The engine's promise: **every call ends in exactly one terminal webhook, or a visible dead-letter — never silence.**
+The engine's promise: **every call has exactly one terminal event persisted once, then delivery is attempted until acknowledged or visibly dead-lettered — never silence.** A delivery outage cannot create a second terminal event.
 
 ### 6.1 Events
 
-`call.started` (optional, off by default), `call.completed` (always), `call.failed` (infra-level failure before/without conversation). Same envelope:
+`call.started` (optional, off by default), `call.completed` (terminal success), `call.failed` (terminal infra-level failure before/without conversation), and `call.recording.ready` (non-terminal artifact update). The terminal event is immutable after it is persisted. When recording is enabled, `call.completed` is emitted immediately with a stable engine-owned recording reference in `pending` state; carrier processing later produces `call.recording.ready` for the same reference. Same envelope:
 
 ```json
 {
@@ -234,16 +236,21 @@ The engine's promise: **every call ends in exactly one terminal webhook, or a vi
   "outcome": "booked",                 // results.set_outcome(); null if unset
   "data": { "name": "…", "slot": "2026-07-30T14:00" },
   "transcript": [ { "role": "user", "text": "…", "t_ms": 4210 }, … ],
-  "recording_url": "https://…",        // null unless phone.record and carrier delivered it
+  "recording": {                       // null unless phone.record
+    "id": "rec_…",                     // stable engine-owned reference
+    "status": "pending",               // pending | ready | failed
+    "url": null                        // engine access URL when ready; never a raw carrier URL
+  },
   "metrics": { "turns": 12, "interruptions": 2, "latency_ms": { "p50": 780, "p95": 1310 } }
 }
 ```
 
 ### 6.2 Delivery
 
-- **Signing:** `X-Voicekit-Signature: t=<unix>,v1=<hmac-sha256(t "." body)>`; receivers verify within a 5-minute window. **Two active secrets supported** for zero-downtime rotation. A `voicekit.verify_webhook()` helper + copy-paste snippets (Python/Node/Go) ship in docs.
-- **Retries:** 3 inline attempts (0s/2s/10s), then durable DLQ (SQLite alongside the process) with exponential backoff to 8 total attempts over ~6h, then dead-lettered. `voicekit calls list --undelivered` and `voicekit calls redeliver <id>` operate the queue. DLQ depth is exported as a metric and surfaced by `doctor`.
+- **Signing:** Standard Webhooks format verbatim. Requests carry `webhook-id`, `webhook-timestamp`, and `webhook-signature`. Each configured secret is serialized as `whsec_<base64-key>`; implementations remove `whsec_`, base64-decode the remainder, then compute `base64(HMAC-SHA256(key, "{id}.{timestamp}.{raw_body}"))`. The signature header contains space-separated `v1,<base64-signature>` values for the current and previous secrets during rotation. Receivers verify the raw body and reject timestamps outside a 5-minute window. `webhook-id` is the stable event id used for consumer deduplication. A `voicekit.verify_webhook()` helper, official-library interoperability vectors, and copy-paste snippets (Python/Node/Go) ship in docs.
+- **Retries:** the single canonical policy is the Standard Webhooks/Svix curve: attempts at 0s, 5s, 5m, 30m, 2h, 5h, 10h, and 10h, with ±20% jitter per delay relative to the preceding failure. After 8 failed attempts the delivery is visibly dead-lettered. Every retry and manual redelivery reuses the event id and immutable raw body, but uses a fresh timestamp/signature. `voicekit calls list --undelivered`, `voicekit calls redeliver <id>`, and replay-since-timestamp operate the queue. DLQ depth is exported as a metric and surfaced by `doctor`.
 - **Pull parity:** everything push-delivered is also pull-readable — `voicekit calls show <id>` (and the local API the playground uses) returns the identical payload. Push-only was a parley design bug; not repeated.
+- **Crash invariant:** a durable call row is created before any externally visible action. One fenced transaction CAS-transitions the call from active to terminal and inserts the immutable terminal envelope plus delivery rows. A partial unique index permits only one terminal event per call. Active owners hold generation/fencing tokens; stale owners cannot complete after takeover. Recovery reconciles provider state before terminalizing a stale call.
 
 ---
 
@@ -366,14 +373,16 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 
 - **Smoke verification** (default on): one real test call post-cutover; reports answer latency, greeting match, webhook delivery; failure offers instant rollback (`numbers restore`).
 - Zero-downtime redeploys documented per target (drain: stop accepting new calls, let active calls finish — engine exposes a drain signal handler).
-- State: engine needs only its SQLite (DLQ/call records) on a persistent volume where the target allows; documented per target.
+- **Storage repository:** lifecycle, call-record, and outbox persistence use one repository contract and one logical schema. Docker/self-host uses SQLite WAL on one local persistent volume; same-host multi-process handover is supported, while network-volume or cross-replica SQLite is rejected. Fly and Railway use platform-managed Postgres. Backend contract tests, startup schema validation, migration locks, and expand/contract migrations ensure overlapping generations share the schema safely.
+- **Cloud-worker relay:** ephemeral Pipecat Cloud and LiveKit Cloud workers use an authenticated results relay backed by the same repository contract. The durable relay must acknowledge `begin_call` before a worker accepts a call, issue a fencing token, accept an ordered idempotent update stream, acknowledge terminal persistence, recover stale calls server-side, rotate credentials, and prevent replay. Workers fail closed when the relay is unreachable. The certified companion is voicekit in results-service mode on user-owned Fly compute, managed Postgres, and object storage; `--relay-url` supports an equivalently validated user-owned relay.
+- **Artifacts:** recordings use an artifact-store contract. Docker/self-host uses a protected local filesystem; Fly/Railway and cloud-relay deployments use durable object storage. The durable side owns authenticated carrier download, access control, `call.recording.ready`, and retention deletion.
 
 ---
 
 ## 12. Observability
 
 - **Structured JSON logs** (call_id-correlated) with a human-pretty dev renderer; levels documented; no PII at info level.
-- **Per-call record** (SQLite): config_hash, timeline, transcript, tool calls, latency series, terminal reason, webhook delivery status.
+- **Per-call record** (repository-backed SQLite or Postgres): config_hash, timeline, transcript, tool calls, latency series, terminal reason, webhook delivery status.
 - **Latency instrumentation** per subsystem per turn (STT partial/final, LLM TTFT, TTS TTFB, mouth-to-ear e2e) — powers playground badges, test budgets, and the smoke report.
 - **Prometheus endpoint** (opt-in): active calls, call rate, error rate by code, DLQ depth, latency histograms.
 - Optional OTLP export (spans per call/turn/tool) — off by default, one config line to enable.
@@ -384,8 +393,8 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 
 - **Inbound:** carrier signature verification mandatory per adapter (negative-tested in certification); playground/local API bound to localhost by default; web client sessions use short-lived tokens minted by the engine (never provider keys in the browser — RTVI/livekit token flow); `web.allowed_origins` enforced.
 - **Outbound:** results webhook HMAC (two-secret rotation, §6.2); HTTPS-only enforcement.
-- **Secrets:** env-only (`_env`-suffixed config fields); never serialized into config JSON, logs, call records, or images; deploy syncs to target secret stores; `doctor` flags secrets found in files.
-- **PII:** `results.redact` field-level redaction pre-delivery; recording on/off per agent; transcript retention window config (`purge_after_days`); a documented data-map (what is stored where) for users' own compliance work.
+- **Secrets:** env-only (`_env`-suffixed config fields); webhook secrets use `whsec_` serialization and support current+previous env names; secrets are never serialized into config JSON, logs, call records, or images; deploy syncs to target secret stores; `doctor` flags secrets found in files.
+- **PII:** `results.redact` field-level redaction pre-delivery; recording on/off per agent; transcript retention window config (`purge_after_days`); purge spans database rows, SQLite WAL, outbox/dead-letters, recordings, and backups on both repository backends and artifact stores; a documented data-map (what is stored where) for users' own compliance work.
 - Dependency and container scanning in CI; a SECURITY.md with a disclosure process from day one.
 
 ---
@@ -394,7 +403,7 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 
 - **Admission control:** `limits.max_concurrent` enforced at answer time with a correct busy behavior per carrier (reject → carrier-native busy handling; documented per adapter).
 - **Graceful shutdown/drain:** SIGTERM → stop accepting, finish active calls (bounded by `max_duration_s`), flush DLQ, then exit; required for zero-downtime deploys.
-- **Crash safety:** call record + results buffer flushed incrementally; a crash mid-call yields a `call.failed` webhook with partial transcript, not silence.
+- **Crash safety:** call record + results buffer flushed incrementally through the assigned repository or results relay; a crash mid-call yields one fenced `call.failed` event with partial transcript, not silence.
 - **Provider outage behavior:** model `fallbacks` where configured; otherwise fast-fail with distinct terminal reasons (`stt_unavailable`, …) so operators can alert on cause.
 - **Idempotency:** outbound `call` placement accepts an idempotency key; webhook events carry stable ids for receiver-side dedup.
 - Chaos tests in CI: kill provider connections mid-call, drop carrier WS, timeout tools — assert terminal-webhook invariant (§6) holds in every case.
@@ -430,11 +439,13 @@ Ship-blocking acceptance criteria, measured in CI or scripted checks:
 | Webhook invariant | Chaos suite: every call terminates in exactly one terminal webhook or visible dead-letter — zero silent losses across all injected failures |
 | CLI | Every command: interactive + flag-twin + `--json` paths tested; error catalog covers 100% of raised codes; doctor detects every setup break we can inject |
 | Deploy | Each target: scripted deploy from scratch → smoke call green; drain/redeploy without dropped calls |
+| Storage | Repository contract + chaos suite green on SQLite and Postgres; invalid target/backend combinations rejected; every target passes persistence preflight and a rolling-generation invariant test |
+| Cloud relay | Both ephemeral cloud runtimes require acknowledged `begin_call`, fenced ordered updates, terminal acknowledgement, replay protection, and server-side stale-call recovery under failure injection |
 | Docs | Quickstarts executed verbatim by CI; zero broken links; API reference generated from source of truth |
 | Reliability | 24h soak at `max_concurrent` with sim callers: zero leaked calls/FDs/memory growth beyond bounds |
 | Security | Signature negative-tests; secret-leak scan of logs/records/images; dependency audit clean |
 
-**CI matrix:** {pipecat, livekit} × {py3.11, 3.12, 3.13} × {unit, integration (carrier/provider mocks), sim-text} on every PR; nightly adds sim-audio, live PSTN loopback per certified carrier, deploy-target e2e, soak (weekly), runtime-range edges.
+**CI matrix:** {pipecat, livekit} × {py3.11, 3.12, 3.13, 3.14} × {unit, integration (carrier/provider mocks), sim-text} on every PR; integration runs on the 3.11/3.14 range edges on PRs and the full Python matrix nightly. Nightly also adds sim-audio, live PSTN loopback per certified carrier, deploy-target e2e, repository-backend equivalence, soak (weekly), and runtime-range edges.
 
 ---
 

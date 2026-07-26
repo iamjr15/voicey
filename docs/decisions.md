@@ -1,0 +1,20 @@
+# Decisions
+
+Decisions are append-only. A superseding decision links the earlier entry and explains the migration impact.
+
+## 2026-07-26 — P0 defaults accepted
+
+- **Product name:** keep `voicekit` in package, CLI, entry-point groups, docs, and examples through the build. Do not publish or register public resources. Prepare `RENAME.md` for the human-selected final name.
+- **Reference latency stack:** Deepgram Nova-3 STT, Anthropic Claude LLM, and Cartesia Sonic 3.5 TTS.
+- **Simulation judge:** local Ollama by default, with an explicit cloud-model override in config.
+- **Vobiz on LiveKit:** run the P3 SIP feasibility spike. If unsupported, expose Vobiz only on the Pipecat path behind the capability registry; do not silently route or downgrade.
+- **Storage topology:** Docker/self-host uses local SQLite + protected local artifacts; Fly/Railway uses managed Postgres + object storage; ephemeral Pipecat/LiveKit Cloud workers use the authenticated user-owned results relay.
+
+These choices apply the documented proposals authorized in the build mandate and close the P0/P1 decision gates without requiring an implementation pause.
+
+## 2026-07-26 — Runtime pins and current APIs
+
+- Pin `pipecat-ai==1.6.0`; use core `pipecat.flows` and do not install standalone `pipecat-ai-flows`.
+- Pin `livekit-agents==1.6.7`.
+- Use only installed current APIs. In particular, call `WorkerRunner.run(auto_end=False)` and use LiveKit `create_inbound_trunk` / `create_dispatch_rule` instead of their deprecated aliases.
+- Maintain Python support at 3.11–3.14.
