@@ -6,6 +6,8 @@ import os
 import stat
 from pathlib import Path
 
+from voicekit.errors import VoicekitError
+
 PRIVATE_DIRECTORY_MODE = 0o700
 PRIVATE_FILE_MODE = 0o600
 
@@ -22,8 +24,7 @@ def ensure_private_file(path: Path) -> Path:
     """Create a private file without following an existing symlink."""
     ensure_private_directory(path.parent)
     if path.is_symlink():
-        msg = f"refusing to open protected symlink: {path}"
-        raise OSError(msg)
+        raise VoicekitError("VK-SEC-002", detail=str(path))
     flags = os.O_CREAT | os.O_APPEND | os.O_WRONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -37,5 +38,5 @@ def ensure_private_file(path: Path) -> Path:
 def _assert_mode(path: Path, expected: int) -> None:
     actual = stat.S_IMODE(path.stat().st_mode)
     if actual != expected:
-        msg = f"protected path {path} has mode {actual:o}; expected {expected:o}"
-        raise PermissionError(msg)
+        detail = f"{path} has mode {actual:o}; expected {expected:o}."
+        raise VoicekitError("VK-SEC-001", detail=detail)

@@ -116,3 +116,6 @@ markers = [
   "live: credentialed or paid external-provider tests",
   "slow: wall-clock intensive tests",
 ]
+
+[tool.coverage.run]
+omit = ["src/voicekit/_p0/*"]

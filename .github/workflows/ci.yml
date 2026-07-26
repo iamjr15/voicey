@@ -24,7 +24,7 @@ jobs:
       - name: Install uv
         run: python -m pip install uv==0.11.7
       - name: Sync locked environment
-        run: uv sync --frozen
+        run: uv sync --frozen --extra pipecat --extra livekit
       - name: Lint
         run: uv run ruff check .
       - name: Format
@@ -51,4 +51,4 @@ jobs:
       - name: Sync locked environment
         run: uv sync --frozen --extra pipecat --extra livekit
       - name: Mocked integration tests
-        run: uv run pytest -m integration
+        run: uv run pytest -m integration --no-cov

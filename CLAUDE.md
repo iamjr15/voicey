@@ -20,6 +20,6 @@ Greenfield open-source product: **the production toolchain around Pipecat and Li
 
 ## Current state
 
-- Phase: **P0 not started** (repo + docs import done 2026-07-26). Next: version pinning, spec-sync commit #1, walking-skeleton spike per runtime — see build plan "Repo bootstrap (Phase 0)".
-- Open user decisions with deadlines: product name (before first publish); reference model set sign-off (P0 exit); sim-judge default (P1 exit).
+- Phase: **P1, unit 1 (`config/`)**. P0 completed 2026-07-26: pins resolved, spec synchronized, package/CI/security bootstrapped, storage matrix recorded, and both runtime walking skeletons green. See `docs/PROGRESS.md`.
+- Open human-only decision: final product name before first publish. Reference model and sim-judge defaults were accepted in the implementation mandate and recorded in `docs/decisions.md`.
 - `.env.parley-backup` holds provider API keys carried over from the predecessor project (uncommitted; for dev convenience).

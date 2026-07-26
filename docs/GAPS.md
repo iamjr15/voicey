@@ -4,7 +4,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 
 | Gate | Status | Exact runbook command | Requirement |
 |---|---|---|---|
-| P0 physical-handset check | not-ready | Added with the P0 walking-skeleton runbook | Physical handset and a provisioned carrier number |
+| Physical-handset check | not-ready (P1 dependency) | Added with the P1 Twilio live certification harness | Physical handset and a provisioned carrier number; P0 intentionally certifies provider-mocked termination only |
 | P1 Twilio nightly certification | not-ready | Added with the P1 certification harness | Twilio live credentials, funded number, PSTN |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
