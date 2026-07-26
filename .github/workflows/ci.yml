@@ -52,3 +52,31 @@ jobs:
         run: uv sync --frozen --extra pipecat --extra livekit
       - name: Mocked integration tests
         run: uv run pytest -m integration --no-cov
+
+  webhook-interop:
+    name: Standard Webhooks interop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+      - name: Install official JavaScript verifier
+        run: npm install --prefix "$RUNNER_TEMP/webhook-node" --ignore-scripts standardwebhooks@1.0.0
+      - name: Verify JavaScript vector
+        run: node tests/interop/verify_node.mjs tests/interop/standard_webhooks_vector.json "$RUNNER_TEMP/webhook-node"
+      - name: Clone pinned official Go verifier
+        run: git clone https://github.com/standard-webhooks/standard-webhooks.git "$RUNNER_TEMP/standard-webhooks"
+      - name: Pin official Go verifier commit
+        run: git -C "$RUNNER_TEMP/standard-webhooks" checkout 01d6eb75702229a0927c07d52fda7223e201c03d
+      - name: Install voicekit vector test
+        run: cp tests/interop/voicekit_vector_test.go "$RUNNER_TEMP/standard-webhooks/libraries/go/"
+      - name: Verify Go vector
+        working-directory: ${{ runner.temp }}/standard-webhooks/libraries/go
+        env:
+          GO111MODULE: "off"
+          VOICEKIT_VECTOR_PATH: ${{ github.workspace }}/tests/interop/standard_webhooks_vector.json
+        run: go test webhook.go voicekit_vector_test.go

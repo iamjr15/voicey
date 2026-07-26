@@ -1,0 +1,7 @@
+{
+  "body": "{\"event\":\"call.completed\",\"id\":\"evt_interop_vector\"}",
+  "event_id": "evt_interop_vector",
+  "secret": "whsec_dm9pY2VraXQtc3RhbmRhcmQtd2ViaG9va3MtdmVjdG9yLWtleQ==",
+  "signature": "v1,uTyKOLGoMUt3cMkbU7HRVjNgw+HfV2yUT5IMJLQ3SNI=",
+  "timestamp": 1785067200
+}

@@ -20,6 +20,6 @@ Greenfield open-source product: **the production toolchain around Pipecat and Li
 
 ## Current state
 
-- Phase: **P1, unit 3 (`results/`)**. P0 completed 2026-07-26. P1.1 shipped configuration; P1.2 shipped PII-safe correlated logging, latency series, and protected SQLite observation records. See `docs/PROGRESS.md`.
+- Phase: **P1, unit 4 (`tools/`)**. P0 completed 2026-07-26. P1.1–P1.3 shipped configuration, observability, and the fenced results/storage reliability contract. See `docs/PROGRESS.md`.
 - Open human-only decision: final product name before first publish. Reference model and sim-judge defaults were accepted in the implementation mandate and recorded in `docs/decisions.md`.
 - `.env.parley-backup` holds provider API keys carried over from the predecessor project (uncommitted; for dev convenience).

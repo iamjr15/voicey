@@ -31,9 +31,9 @@ WebhookStatus: TypeAlias = Literal[
 TranscriptRole: TypeAlias = Literal["user", "assistant", "system", "tool"]
 ToolStatus: TypeAlias = Literal["succeeded", "failed", "timed_out"]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-_SCHEMA = """
+_SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS calls (
     call_id TEXT PRIMARY KEY,
     agent_name TEXT NOT NULL,
@@ -116,6 +116,87 @@ CREATE INDEX IF NOT EXISTS call_latency_call_idx
     ON call_latency(call_id, sequence);
 """
 
+_MIGRATION_V2 = """
+ALTER TABLE calls ADD COLUMN from_number TEXT;
+ALTER TABLE calls ADD COLUMN to_number TEXT;
+ALTER TABLE calls ADD COLUMN owner_id TEXT;
+ALTER TABLE calls ADD COLUMN generation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE calls ADD COLUMN lease_expires_at TEXT;
+ALTER TABLE calls ADD COLUMN delivery_endpoint TEXT;
+ALTER TABLE calls ADD COLUMN include_json TEXT NOT NULL
+    DEFAULT '["transcript","data","recording","metrics"]';
+ALTER TABLE calls ADD COLUMN redact_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE calls ADD COLUMN purge_after_days INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE calls ADD COLUMN recording_id TEXT;
+ALTER TABLE calls ADD COLUMN outcome TEXT;
+ALTER TABLE calls ADD COLUMN results_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE calls ADD COLUMN interruptions INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE calls ADD COLUMN last_provider_state TEXT;
+
+CREATE TABLE call_events (
+    event_id TEXT PRIMARY KEY,
+    call_id TEXT NOT NULL REFERENCES calls(call_id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    is_terminal INTEGER NOT NULL,
+    body BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    CHECK (event_type IN (
+        'call.started',
+        'call.completed',
+        'call.failed',
+        'call.recording.ready'
+    )),
+    CHECK (is_terminal IN (0, 1))
+);
+CREATE UNIQUE INDEX one_terminal_event_per_call
+    ON call_events(call_id) WHERE is_terminal = 1;
+CREATE UNIQUE INDEX one_recording_ready_event_per_call
+    ON call_events(call_id) WHERE event_type = 'call.recording.ready';
+CREATE INDEX call_events_call_idx ON call_events(call_id, created_at);
+
+CREATE TABLE deliveries (
+    event_id TEXT NOT NULL REFERENCES call_events(event_id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL,
+    lease_owner TEXT,
+    lease_expires_at TEXT,
+    last_error TEXT,
+    delivered_at TEXT,
+    PRIMARY KEY(event_id, endpoint),
+    CHECK (status IN ('pending', 'delivering', 'delivered', 'dead_lettered')),
+    CHECK (attempt_count >= 0)
+);
+CREATE INDEX deliveries_claim_idx
+    ON deliveries(status, next_attempt_at, lease_expires_at);
+
+CREATE TABLE recordings (
+    recording_id TEXT PRIMARY KEY,
+    call_id TEXT NOT NULL UNIQUE REFERENCES calls(call_id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    access_url TEXT,
+    storage_key TEXT,
+    created_at TEXT NOT NULL,
+    ready_at TEXT,
+    CHECK (status IN ('pending', 'ready', 'failed'))
+);
+
+CREATE TABLE backups (
+    backup_id TEXT PRIMARY KEY,
+    storage_key TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
+CREATE TABLE purge_queue (
+    storage_key TEXT PRIMARY KEY,
+    artifact_kind TEXT NOT NULL,
+    queued_at TEXT NOT NULL,
+    CHECK (artifact_kind IN ('recording', 'backup'))
+);
+"""
+
 
 class ObservationModel(BaseModel):
     """Strict base for data persisted in the protected call record."""
@@ -133,6 +214,8 @@ class NewCall(ObservationModel):
     direction: Direction
     provider: str | None = None
     provider_call_id: str | None = None
+    from_number: str | None = None
+    to_number: str | None = None
     config_hash: str
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -259,6 +342,8 @@ class CallRecord(ObservationModel):
     direction: Direction
     provider: str | None
     provider_call_id: str | None
+    from_number: str | None
+    to_number: str | None
     config_hash: str
     status: CallStatus
     webhook_status: WebhookStatus
@@ -303,18 +388,22 @@ class SQLiteCallRecordStore:
             await database.execute("PRAGMA busy_timeout = 5000")
             await database.execute("PRAGMA journal_mode = WAL")
             await database.execute("PRAGMA synchronous = FULL")
+            await database.execute("PRAGMA secure_delete = ON")
             cursor = await database.execute("PRAGMA user_version")
             row = await cursor.fetchone()
             await cursor.close()
             version = int(row[0]) if row is not None else 0
-            if version not in {0, SCHEMA_VERSION}:
+            if version not in {0, 1, SCHEMA_VERSION}:
                 await database.close()
                 raise VoicekitError(
                     "VK-OBS-004",
                     detail=f"found schema {version}; supported schema is {SCHEMA_VERSION}.",
                 )
             if version == 0:
-                await database.executescript(_SCHEMA)
+                await database.executescript(_SCHEMA_V1)
+                version = 1
+            if version == 1:
+                await database.executescript(_MIGRATION_V2)
                 await database.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 await database.commit()
             self._db = database
@@ -354,8 +443,9 @@ class SQLiteCallRecordStore:
             """
             INSERT INTO calls (
                 call_id, agent_name, runtime, channel, direction, provider,
-                provider_call_id, config_hash, started_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                provider_call_id, from_number, to_number, config_hash,
+                started_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 call.call_id,
@@ -365,6 +455,8 @@ class SQLiteCallRecordStore:
                 call.direction,
                 call.provider,
                 call.provider_call_id,
+                call.from_number,
+                call.to_number,
                 call.config_hash,
                 started_at,
                 started_at,
@@ -537,6 +629,8 @@ class SQLiteCallRecordStore:
                 "direction": row["direction"],
                 "provider": row["provider"],
                 "provider_call_id": row["provider_call_id"],
+                "from_number": row["from_number"],
+                "to_number": row["to_number"],
                 "config_hash": row["config_hash"],
                 "status": row["status"],
                 "webhook_status": row["webhook_status"],

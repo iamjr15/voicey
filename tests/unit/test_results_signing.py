@@ -1,6 +1,10 @@
 import base64
+import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+from standardwebhooks import Webhook
 
 from voicekit.errors import VoicekitError
 from voicekit.results.signing import WebhookSigner, encode_secret
@@ -81,3 +85,28 @@ def test_secret_serialization_is_decode_before_hmac() -> None:
 
     assert serialized.startswith("whsec_")
     assert base64.b64decode(serialized.removeprefix("whsec_")) == CURRENT_KEY
+
+
+def test_signature_interoperates_with_official_standard_webhooks_library() -> None:
+    now = datetime.now(UTC)
+    signer = WebhookSigner(encode_secret(CURRENT_KEY))
+    signed = signer.sign("evt_interop", BODY, timestamp=int(now.timestamp()))
+
+    Webhook(encode_secret(CURRENT_KEY)).verify(
+        signed.body,
+        dict(signed.headers),
+        json_parse=False,
+    )
+
+
+def test_checked_in_vector_matches_python_official_library() -> None:
+    vector_path = Path(__file__).parents[1] / "interop" / "standard_webhooks_vector.json"
+    vector = json.loads(vector_path.read_text(encoding="utf-8"))
+
+    signature = Webhook(vector["secret"]).sign(
+        vector["event_id"],
+        datetime.fromtimestamp(vector["timestamp"], tz=UTC),
+        vector["body"],
+    )
+
+    assert signature == vector["signature"]

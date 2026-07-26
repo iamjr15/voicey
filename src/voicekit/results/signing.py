@@ -93,6 +93,24 @@ class WebhookSigner:
             raise VoicekitError("VK-RES-004")
 
 
+def verify_webhook(
+    headers: Mapping[str, str],
+    body: bytes,
+    *,
+    current_secret: str,
+    previous_secret: str | None = None,
+    now: int | None = None,
+    tolerance_seconds: int = DEFAULT_TOLERANCE_SECONDS,
+) -> None:
+    """Verify a received voicekit webhook against current/previous secrets."""
+    WebhookSigner(current_secret, previous_secret).verify(
+        headers,
+        body,
+        now=now,
+        tolerance_seconds=tolerance_seconds,
+    )
+
+
 def _decode_secret(secret: str) -> bytes:
     if not secret.startswith(SECRET_PREFIX):
         raise VoicekitError("VK-RES-001", detail="Missing whsec_ prefix.")

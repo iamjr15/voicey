@@ -90,6 +90,41 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="results.set() was called outside an active call context.",
         fix="Call results.set() only from flow or tool code running for an active call.",
     ),
+    "VK-RES-006": ErrorDefinition(
+        code="VK-RES-006",
+        cause="The call owner no longer holds the current fencing generation.",
+        fix="Stop the stale worker; only the current lease owner may mutate the call.",
+    ),
+    "VK-RES-007": ErrorDefinition(
+        code="VK-RES-007",
+        cause="The call is terminal but its immutable terminal event is missing.",
+        fix="Stop accepting calls and restore the repository from a consistent backup.",
+    ),
+    "VK-RES-008": ErrorDefinition(
+        code="VK-RES-008",
+        cause="A lifecycle, outbox, or retention transaction failed.",
+        fix="Resolve the reported storage condition before accepting more calls.",
+    ),
+    "VK-RES-009": ErrorDefinition(
+        code="VK-RES-009",
+        cause="The requested immutable result event does not exist.",
+        fix="Run `voicekit calls list` and retry with an existing call or event id.",
+    ),
+    "VK-RES-010": ErrorDefinition(
+        code="VK-RES-010",
+        cause="A recording update is missing, premature, or not engine-owned.",
+        fix="Retry after terminal persistence with the stable engine recording id.",
+    ),
+    "VK-ART-001": ErrorDefinition(
+        code="VK-ART-001",
+        cause="An artifact key escapes protected storage or targets a symbolic link.",
+        fix="Use a relative recordings/ or backups/ key with no parent traversal.",
+    ),
+    "VK-ART-002": ErrorDefinition(
+        code="VK-ART-002",
+        cause="A protected artifact could not be written, read, or deleted.",
+        fix="Check artifact-store permissions and disk health, then retry.",
+    ),
     "VK-TOL-001": ErrorDefinition(
         code="VK-TOL-001",
         cause="A callable is not registered as a voicekit tool.",
