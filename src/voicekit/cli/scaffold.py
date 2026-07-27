@@ -23,6 +23,8 @@ class ScratchScaffold:
     phone_provider: str | None
     phone_number: str | None
     web_enabled: bool
+    recipe_name: str = "scratch"
+    recipe_version: str = "1.0.0"
 
 
 class ScaffoldWriter:
@@ -90,6 +92,9 @@ class ScaffoldWriter:
 
 
 def _render(scaffold: ScratchScaffold) -> dict[str, str]:
+    from voicekit.recipes.source import recipe_files
+
+    is_recipe = scaffold.recipe_name != "scratch"
     phone = "None"
     if scaffold.phone_provider is not None and scaffold.phone_number is not None:
         phone = (
@@ -107,9 +112,19 @@ def _render(scaffold: ScratchScaffold) -> dict[str, str]:
         else "Web()"
     )
     description = scaffold.description.strip()
+    behavior_import = ", Behavior" if is_recipe else ""
+    environment_import = "from os import environ\n\n" if is_recipe else ""
+    behavior = (
+        "    behavior=Behavior(\n"
+        '        voicemail="leave_message",\n'
+        '        transfer_number=environ.get("VOICEKIT_TRANSFER_NUMBER"),\n'
+        "    ),\n"
+        if is_recipe
+        else ""
+    )
     agent = f'''"""Generated voicekit agent. Customize the TODO-marked integration points."""
 
-from voicekit import Agent, Models, Phone, Results, Web
+{environment_import}from voicekit import Agent{behavior_import}, Models, Phone, Results, Web
 
 agent = Agent(
     name={scaffold.project_name!r},
@@ -124,7 +139,7 @@ agent = Agent(
     tools="tools",
     phone={phone},
     web={web},
-    results=Results(
+{behavior}    results=Results(
         webhook="https://example.invalid/voicekit-results",  # TODO: receiver
         secret_env="VOICEKIT_WEBHOOK_SECRET",
     ),
@@ -202,6 +217,8 @@ testpaths = ["tests"]
     }
     if scaffold.phone_provider == "twilio":
         env_names.update({"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"})
+    if is_recipe:
+        env_names.add("VOICEKIT_TRANSFER_NUMBER")
     env_example = "\n".join(f"{name}=" for name in sorted(env_names)) + "\n"
     readme = f"""# {scaffold.project_name}
 
@@ -210,7 +227,7 @@ testpaths = ["tests"]
 Generated as native Pipecat Flows code. Start with `voicekit doctor`, then run
 `voicekit dev`. Search for `TODO` before connecting production systems.
 """
-    return {
+    rendered = {
         "agent.py": agent,
         "flow.py": flow,
         "tools.py": tools,
@@ -222,6 +239,18 @@ Generated as native Pipecat Flows code. Start with `voicekit doctor`, then run
         ".gitignore": ".env*\n!.env.example\n__pycache__/\n.venv/\n.voicekit/\n",
         "README.md": readme,
     }
+    if is_recipe:
+        for generated_only in (
+            "flow.py",
+            "tools.py",
+            "prompts/system.md",
+            "tests/test_agent.py",
+            "tests/test_scenario.py",
+            "README.md",
+        ):
+            rendered.pop(generated_only)
+        rendered.update(recipe_files(scaffold.recipe_name, "pipecat"))
+    return rendered
 
 
 def _provider_key(model_id: str) -> str:

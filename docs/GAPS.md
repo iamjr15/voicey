@@ -7,10 +7,12 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 Twilio carrier/API certification | ready-to-run, pending credentials/PSTN | Commands below | Twilio test/live credentials, funded number, public target, PSTN |
 | P1 cloudflared public WebSocket edge | ready-to-run, pending edge DNS/network | Command below | `cloudflared`, outbound Cloudflare access, generated quick-tunnel DNS |
 | P1 physical-handset outbound check | ready-to-run, pending credentials/human | Paid PSTN command below | Physical handset, answering person, provisioned carrier numbers |
-| P1 inbound audio/transcript loopback | not-ready (P1.10 dependency) | Added to the same harness after the recipe endpoint lands | Running Pipecat pipeline, physical handset and provisioned number |
+| P1 inbound audio/transcript loopback | ready-to-run, pending credentials/human | Commands below | Running appointment recipe, physical handset, and provisioned number |
 | P1 full guided-wizard usability | ready-to-run, pending human/credentials | Command below | Interactive terminal, a human, provider keys |
 | P1 doctor on deliberately broken project | ready-to-run, pending human observation | Commands below | Interactive terminal; disposable fixture only |
 | P1 playground real microphone/provider call | ready-to-run, pending human/credentials | Command below | Valid reference-provider keys, browser microphone grant, a person speaking |
+| P1 appointment text Evals | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia keys and local Ollama `gemma2:9b` |
+| P1 appointment audio Evals | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys plus one-time Kokoro/Moonshine downloads |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
@@ -78,8 +80,19 @@ failed and cleaned up every child process, so this edge gate remains pending.
     tests/live/test_twilio_live.py::test_twilio_live_paid_pstn_dtmf_recording_and_cold_transfer
   ```
 
-The inbound Pipecat runtime path now exists; the handset/audio-transcript
-loopback joins this suite with the P1.10 recipe endpoint and Evals harness.
+The inbound Pipecat runtime path and appointment recipe now exist. Run a
+credentialed recipe project through `voicekit dev --phone`, call its owned
+number from a physical handset, book and then change an appointment, and inspect
+the durable transcript:
+
+```bash
+VOICEKIT_TRANSFER_NUMBER=+14155550199 voicekit dev --phone
+voicekit calls list
+voicekit calls show <call-id>
+```
+
+This remains pending until a person completes the inbound call; the local Evals
+below do not count as physical-handset evidence.
 Mocked carrier protocol and local codec/tone-loopback evidence is green
 independently; it is not represented as live carrier evidence.
 
@@ -156,3 +169,47 @@ end the session, and verify transcript, latency, events, and the terminal-event
 preview. Also confirm browser network URLs contain no bearer token. This gate
 remains pending until that physical input and credentialed provider path run
 green.
+
+## P1 appointment recipe Evals
+
+The complete native Pipecat text and audio manifests are packaged with every
+appointment project. This environment currently has no `ANTHROPIC_API_KEY` and
+no `ollama` executable, so neither credentialed suite is claimed green.
+
+After injecting the reference-provider credentials into the process, create a
+disposable recipe project from the repository root:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_EVAL_PARENT="$(mktemp -d)"
+VOICEKIT_EVAL_PROJECT="$VOICEKIT_EVAL_PARENT/appointment-evals"
+uv run voicekit init "$VOICEKIT_EVAL_PROJECT" \
+  --name appointment-evals \
+  --recipe appointment-booking \
+  --channels web \
+  --runtime pipecat \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+ollama pull gemma2:9b
+```
+
+Run the fast behavior suite:
+
+```bash
+(cd "$VOICEKIT_EVAL_PROJECT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/pipecat" eval suite evals/text-suite.yaml)
+```
+
+Then run the real STT→LLM→TTS audio path and retain recordings for manual
+review:
+
+```bash
+(cd "$VOICEKIT_EVAL_PROJECT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/pipecat" eval suite evals/audio-suite.yaml -a)
+```
+
+Both commands use Pipecat's installed suite runner and return 1 on any failed
+scenario. The first audio run may download Kokoro/Moonshine model data. These
+gates remain `pending credentials/local judge` until the exact commands truly
+return 0.

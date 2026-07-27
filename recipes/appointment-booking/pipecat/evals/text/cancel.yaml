@@ -1,0 +1,20 @@
+name: appointment_cancel
+judge: !include ../judge-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "opens the appointment conversation"
+  - user: "Cancel appointment APT-ABCDEF1234. The email is lee@example.com."
+    expect:
+      - event: function_call
+        calls:
+          - name: find_appointment
+      - event: response
+        eval: "asks for explicit confirmation before the destructive cancellation"
+  - user: "Yes, cancel it."
+    expect:
+      - event: function_call
+        calls:
+          - name: cancel_appointment
+      - event: response
+        eval: "confirms cancellation only after the tool succeeds"

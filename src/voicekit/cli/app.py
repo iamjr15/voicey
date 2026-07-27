@@ -30,9 +30,11 @@ from voicekit.cli.keys import ProviderKeyValidator, mask_value, required_entries
 from voicekit.cli.prompts import PromptChoice, QuestionaryPromptIO
 from voicekit.cli.wizard import InitOptions, InitWizard
 from voicekit.config.catalog import DEFAULT_PROVIDER_CATALOG, ProviderCatalogEntry
+from voicekit.config.manifest import ManifestStore, RecipeSelection
 from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 from voicekit.obs.logging import scrub_secrets
 from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
+from voicekit.recipes.source import install_recipe
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony.models import PipecatTarget, RollbackToken
 from voicekit.tunnel import TunnelPreference
@@ -435,7 +437,7 @@ def recipes_list(
             rows,
             columns=("name", "version", "available", "description"),
             json_output=json_output,
-            next_command="voicekit init --recipe scratch",
+            next_command="voicekit init --recipe appointment-booking",
         )
 
     _guard(operation, json_output=json_output)
@@ -448,12 +450,21 @@ def recipes_add(
     """Copy the runtime-matching native recipe without overwriting project code."""
 
     def operation() -> None:
-        manifest = require_manifest(_context())
-        DEFAULT_RECIPE_REGISTRY.require(name, manifest.runtime)
-        raise VoicekitError(
-            "VK-CLI-005",
-            detail=f"recipe {name!r} copy support is not packaged in this build.",
+        context = _context()
+        manifest = require_manifest(context)
+        recipe = DEFAULT_RECIPE_REGISTRY.require(name, manifest.runtime)
+        written = install_recipe(context.root, name=name, runtime=manifest.runtime)
+        updated = manifest.model_copy(
+            update={"recipe": RecipeSelection(name=name, version=recipe.version)}
         )
+        try:
+            ManifestStore(context.root / "voicekit.jsonc").save(updated)
+        except Exception:
+            for path in reversed(written):
+                path.unlink(missing_ok=True)
+            raise
+        console.print(f"Added {name}@{recipe.version} ({len(written)} files).")
+        console.print("Next: voicekit doctor")
 
     _guard(operation)
 

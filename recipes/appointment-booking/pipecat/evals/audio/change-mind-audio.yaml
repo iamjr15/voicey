@@ -1,0 +1,15 @@
+name: appointment_change_mind_audio
+user: !include ../user-audio.yaml
+judge: !include ../judge-audio-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "opens the appointment conversation"
+  - user: "Move appointment A P T one two three four five A B C for sam at example dot com to nine A M."
+    expect:
+      - event: response
+        eval: "understands this as a reschedule request or asks only for missing details"
+  - user: "Actually make that three P M."
+    expect:
+      - event: response
+        eval: "uses three P M as the newest time and does not retain nine A M"

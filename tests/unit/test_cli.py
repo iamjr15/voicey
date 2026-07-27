@@ -409,7 +409,7 @@ def test_mutating_phone_commands_execute_only_with_yes(
     ]
 
 
-def test_keys_add_uses_injected_value_and_recipe_add_is_gated(
+def test_keys_add_uses_injected_value_and_recipe_add_copies_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -424,8 +424,10 @@ def test_keys_add_uses_injected_value_and_recipe_add_is_gated(
 
     assert added.exit_code == 0
     assert "validated" in added.stdout
-    assert recipe.exit_code == 1
-    assert "VK-CLI-005" in recipe.stderr
+    assert recipe.exit_code == 0
+    assert "Next:" in recipe.stdout
+    assert (tmp_path / "flow.py").is_file()
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().recipe.name == ("appointment-booking")
     assert unknown.exit_code == 1
     assert "unknown provider" in unknown.stderr
 

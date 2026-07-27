@@ -59,3 +59,14 @@ These choices apply the documented proposals authorized in the build mandate and
 - Serve the embedded SPA with FastAPI 0.140's verified `app.frontend()` API.
   The hatch build hook is the source of wheel assets; its skip variable is for
   verified prebuilt artifacts only.
+
+## 2026-07-27 — Pipecat Evals dependency compatibility
+
+- Install the official `pipecat-ai[evals]==1.6.0` extra as part of
+  `voicekit[pipecat]`; the P1 harness uses the installed `pipecat eval`
+  commands and eval transport rather than a voicekit-owned simulator.
+- Accept Rich `>=13.9.4,<16` instead of requiring Rich 15. Pipecat 1.6.0's
+  `cli` dependency (included by `evals`) pins Rich below 14, and voicekit uses
+  only APIs present in both supported ranges. The CLI's behavior and output
+  contracts are unchanged and remain regression-tested at the resolver-selected
+  Rich 13.9.4.

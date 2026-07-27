@@ -1,0 +1,17 @@
+name: appointment_book_audio
+user: !include ../user-audio.yaml
+judge: !include ../judge-audio-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "greets the caller and offers appointment help"
+  - user: "Please book August fifth twenty twenty six in America New York."
+    expect:
+      - event: user_started_speaking
+      - event: user_transcription
+      - event: function_call
+        calls:
+          - name: search_available_slots
+      - event: response
+        within_ms: 12000
+        eval: "offers calendar-returned appointment times in understandable speech"

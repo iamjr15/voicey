@@ -145,8 +145,7 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
             kind="recipe",
             id="appointment-booking",
             description="Book, reschedule, and cancel appointments through a calendar stub.",
-            enabled=False,
-            unavailable_reason="the production recipe and Evals suite land in P1.10",
+            enabled=True,
         ),
         Capability(
             kind="deploy",

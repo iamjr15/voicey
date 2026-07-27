@@ -1,0 +1,10 @@
+name: appointment_voicemail
+judge: !include ../judge-local.yaml
+turns:
+  - user: "This is voicemail. Leave your message after the beep."
+    send_after:
+      event: llm_started
+      delay_ms: 100
+    expect:
+      - event: response
+        eval: "leaves one concise callback message with no name, date, time, email, purpose, or appointment reference"

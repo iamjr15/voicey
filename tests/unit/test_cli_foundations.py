@@ -76,9 +76,11 @@ def test_capabilities_and_recipes_refuse_unimplemented_choices() -> None:
         DEFAULT_CAPABILITIES.require("runtime", "livekit")
     assert caught.value.code == "VK-CLI-005"
 
-    assert DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False) == ()
+    available = DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False)
+    assert [recipe.name for recipe in available] == ["appointment-booking"]
+    assert DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "pipecat") == available[0]
     with pytest.raises(VoicekitError) as recipe_error:
-        DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "pipecat")
+        DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "livekit")
     assert recipe_error.value.code == "VK-CLI-005"
 
 

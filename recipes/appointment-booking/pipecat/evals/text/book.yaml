@@ -1,0 +1,29 @@
+name: appointment_book
+judge: !include ../judge-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "greets the caller and offers booking, rescheduling, cancellation, or human help"
+  - user: "Book an appointment on August 5 2026 in America/New_York."
+    expect:
+      - event: llm_started
+        within_ms: 1500
+      - event: function_call
+        calls:
+          - name: search_available_slots
+            args:
+              day: "2026-08-05"
+              timezone: America/New_York
+      - event: response
+        eval: "offers only calendar-returned times and asks the caller to choose"
+  - user: "Choose 11:30 AM. I am Alex Rivera, alex@example.com, for a consultation."
+    expect:
+      - event: response
+        eval: "reads back the exact booking details and asks for confirmation before booking"
+  - user: "Yes, confirm it."
+    expect:
+      - event: function_call
+        calls:
+          - name: book_appointment
+      - event: response
+        eval: "clearly confirms success and gives the APT confirmation reference"

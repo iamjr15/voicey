@@ -1,0 +1,13 @@
+name: appointment_calendar_failure
+judge: !include ../judge-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "opens the appointment conversation"
+  - user: "Search the calendar for date 2026-13-40 in America/New_York."
+    expect:
+      - event: function_call
+        calls:
+          - name: search_available_slots
+      - event: response
+        eval: "does not claim success, explains the appointment is unchanged, and offers a safe next step without internal error details"

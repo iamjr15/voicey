@@ -1,0 +1,13 @@
+concurrency: 1
+runs_dir: eval-runs/audio
+bots_dir: ..
+scenarios_dir: audio
+base_port: 7960
+timeout: 45
+spawn: "{python} {bot} -t eval --port {port}"
+suite:
+  - bot: eval_bot.py
+    scenarios:
+      - book-audio
+      - change-mind-audio
+      - barge-in-audio

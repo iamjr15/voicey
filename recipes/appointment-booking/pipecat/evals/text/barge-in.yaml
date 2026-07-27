@@ -1,0 +1,15 @@
+name: appointment_barge_in
+judge: !include ../judge-local.yaml
+turns:
+  - user: "Stop. I do not want to book; I need to cancel APT-ABCD1234 for jo@example.com."
+    send_after:
+      event: llm_started
+      delay_ms: 150
+    expect:
+      - event: user_transcription
+        text_contains: "need to cancel"
+      - event: function_call
+        calls:
+          - name: find_appointment
+      - event: response
+        eval: "follows the interruption and handles cancellation rather than continuing a booking speech"

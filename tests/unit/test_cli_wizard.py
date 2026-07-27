@@ -11,7 +11,7 @@ from voicekit.cli.keys import KeyCheck
 from voicekit.cli.prompts import PromptChoice
 from voicekit.cli.wizard import InitOptions, InitWizard
 from voicekit.config.catalog import ProviderKind
-from voicekit.config.manifest import ManifestStore
+from voicekit.config.manifest import ManifestStore, RecipeSelection
 from voicekit.errors import VoicekitError
 
 
@@ -32,6 +32,7 @@ class ScriptedPrompt:
         self._interactive = interactive
         self.notices: list[str] = []
         self.choice_sets: list[tuple[PromptChoice, ...]] = []
+        self.text_calls: list[str] = []
 
     @property
     def interactive(self) -> bool:
@@ -59,7 +60,7 @@ class ScriptedPrompt:
         return self._multiselections.pop(0)
 
     def text(self, message: str) -> str:
-        del message
+        self.text_calls.append(message)
         if not self._texts:
             raise VoicekitError("VK-CLI-001", detail="missing text flag")
         return self._texts.pop(0)
@@ -187,6 +188,42 @@ async def test_flag_only_web_wizard_produces_working_scaffold(tmp_path: Path) ->
     assert "car-key" not in env_payload
     assert ManifestStore(result.project_dir / "voicekit.jsonc").load() == result.manifest
     assert len(validator.calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_flag_only_appointment_recipe_copies_authored_native_source(
+    tmp_path: Path,
+) -> None:
+    prompt = ScriptedPrompt(interactive=False)
+    wizard = InitWizard(
+        prompt=prompt,
+        key_validator=AcceptingKeyValidator(),
+        environment=REFERENCE_ENV,
+    )
+
+    result = await wizard.run(
+        tmp_path / "appointments",
+        InitOptions(
+            project_name="appointments",
+            recipe="appointment-booking",
+            channels=("web",),
+            runtime="pipecat",
+            models=REFERENCE_MODELS,
+            draft_prompts=False,
+        ),
+    )
+
+    assert result.manifest.recipe == RecipeSelection(
+        name="appointment-booking",
+        version="1.0.0",
+    )
+    assert "appointment-intake" in (result.project_dir / "flow.py").read_text(encoding="utf-8")
+    assert (result.project_dir / "eval_bot.py").is_file()
+    assert (result.project_dir / "evals" / "text-suite.yaml").is_file()
+    assert "VOICEKIT_TRANSFER_NUMBER=" in (result.project_dir / ".env.example").read_text(
+        encoding="utf-8"
+    )
+    assert prompt.text_calls == []
 
 
 @pytest.mark.asyncio

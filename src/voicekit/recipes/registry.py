@@ -76,9 +76,9 @@ DEFAULT_RECIPE_REGISTRY = RecipeRegistry(
             name="appointment-booking",
             version="1.0.0",
             description="Book, reschedule, and cancel appointments through a calendar stub.",
-            runtimes=frozenset({"pipecat", "livekit"}),
+            runtimes=frozenset({"pipecat"}),
             min_engine="0.1.0",
-            source_available=False,
+            source_available=True,
         ),
     )
 )

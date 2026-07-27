@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P1 — engine spine, Pipecat, Twilio, CLI/playground, recipe #1, Docker
-- **Current unit:** P1.10 appointment-booking recipe + Pipecat Evals
-- **Next task:** implement the native pipecat-flows appointment recipe, text/audio Pipecat Evals suites, local-Ollama judge path, latency assertions, and cold-transfer scenario
-- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI; P1.9 wheel-embedded playground, two-listener security boundary, scoped web sessions, safe hot reload, and protected live/durable diagnostic surfaces
+- **Current unit:** P1.11 Docker deployment
+- **Next task:** implement `deploy docker`, persistence/secrets preflight, drain behavior, smoke-call flow, container scanning, and rolling-generation invariant tests
+- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI; P1.9 wheel-embedded playground; P1.10 wheel-packaged native appointment recipe and direct Pipecat text/audio Evals harness
 
 ## Gate status
 
@@ -33,6 +33,8 @@ Last updated: 2026-07-27
 | P1.8 doctor broken-machine usability | pending-live | Safe disposable broken-project harness and exact commands in `docs/GAPS.md`; requires human observation |
 | P1.9 playground implementation/local verification | green | Two-listener public/admin isolation, pre-token durable reservation, scoped one-use session tokens, failed-offer terminalization, Origin/Host/proxy validation, abuse limits, exact durable payload reads, safe two-tier reload, FastAPI `app.frontend()`, wheel build, React/RTVI UI, axe scan, desktop/mobile browser QA, and npm/pip audits green; `uv run pytest` → 334 passed, 5 honest live skips, 90.32% branch coverage |
 | P1.9 real microphone/provider browser call | pending-live | Exact disposable-project command in `docs/GAPS.md`; requires reference-provider credentials, a human microphone grant, and speech |
-| Physical handset/manual gates | pending-live | Outbound handset command is ready; inbound pipeline is implemented and joins the live recipe harness in P1.10 |
+| P1.10 appointment recipe/local Evals contract | green | Native wheel-packaged recipe; `init`/no-overwrite copy; production-session `EvalTransport`; 7 text + 3 audio scenarios parse on Pipecat 1.6.0; installed CLI 0/1 contract runs in CI; `uv run pytest` → 343 passed, 5 honest live skips, 90.05% branch coverage; wheel and dependency audits green |
+| P1.10 credentialed text/audio Evals | pending-live | Exact disposable-project commands in `docs/GAPS.md`; current environment lacks Anthropic credentials and local Ollama |
+| Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

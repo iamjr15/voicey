@@ -1,0 +1,12 @@
+name: appointment_human_transfer
+judge: !include ../judge-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "opens the appointment conversation"
+  - user: "I want to speak with a person now."
+    expect:
+      - event: function_call
+        within_ms: 5000
+        calls:
+          - name: transfer_to_human

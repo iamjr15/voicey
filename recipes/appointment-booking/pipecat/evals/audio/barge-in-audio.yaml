@@ -1,0 +1,14 @@
+name: appointment_barge_in_audio
+user: !include ../user-audio.yaml
+judge: !include ../judge-audio-local.yaml
+turns:
+  - user: "Stop. I need a person."
+    send_after:
+      event: llm_started
+      delay_ms: 200
+    expect:
+      - event: user_started_speaking
+      - event: user_transcription
+      - event: function_call
+        calls:
+          - name: transfer_to_human

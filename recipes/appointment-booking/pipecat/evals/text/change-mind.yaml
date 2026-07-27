@@ -1,0 +1,24 @@
+name: appointment_change_mind
+judge: !include ../judge-local.yaml
+turns:
+  - expect:
+      - event: response
+        eval: "opens the appointment conversation"
+  - user: "I need to move APT-12345ABC for sam@example.com to August 6 2026 at 9 AM America/New_York."
+    expect:
+      - event: function_call
+        calls:
+          - name: find_appointment
+      - event: response
+        eval: "summarizes the proposed move and asks for confirmation"
+  - user: "Actually, change that to 3 PM instead."
+    expect:
+      - event: response
+        eval: "uses 3 PM as the newest value, discards 9 AM, and asks for confirmation"
+  - user: "Yes, move it to 3 PM."
+    expect:
+      - event: function_call
+        calls:
+          - name: reschedule_appointment
+      - event: response
+        eval: "confirms the appointment was rescheduled to 3 PM, not 9 AM"

@@ -96,18 +96,19 @@ class InitWizard:
         checkpoint = self._start_or_resume(project_dir, options, checkpoint_store)
 
         recipe = self._answer_recipe(checkpoint, options, checkpoint_store)
-        if recipe != "scratch":
-            raise VoicekitError(
-                "VK-CLI-005",
-                detail=f"recipe {recipe!r} is not packaged yet; choose scratch in this build.",
+        if recipe == "scratch":
+            description = self._answer_text(
+                checkpoint,
+                checkpoint_store,
+                key="description",
+                supplied=options.description,
+                prompt="Describe in a sentence or two what your agent should do.",
             )
-        description = self._answer_text(
-            checkpoint,
-            checkpoint_store,
-            key="description",
-            supplied=options.description,
-            prompt="Describe in a sentence or two what your agent should do.",
-        )
+        else:
+            definition = self._recipes.get(recipe)
+            if definition is None:
+                raise VoicekitError("VK-CLI-005", detail=f"recipe {recipe!r} is unknown.")
+            description = options.description or definition.description
         channels = self._answer_channels(checkpoint, options, checkpoint_store)
         carrier: str | None = None
         phone_number: str | None = None
@@ -115,6 +116,7 @@ class InitWizard:
             carrier = self._answer_carrier(checkpoint, options, checkpoint_store)
             phone_number = self._answer_phone(checkpoint, options, carrier, checkpoint_store)
         runtime = self._answer_runtime(checkpoint, options, checkpoint_store)
+        recipe_definition = None if recipe == "scratch" else self._recipes.require(recipe, runtime)
         models = self._answer_models(checkpoint, options, runtime, checkpoint_store)
         self._require_installed_extras(runtime, carrier)
 
@@ -134,7 +136,16 @@ class InitWizard:
             env_store.update({"VOICEKIT_WEBHOOK_SECRET": webhook_secret})
             all_values["VOICEKIT_WEBHOOK_SECRET"] = webhook_secret
 
-        draft_prompts = self._answer_drafting(checkpoint, options, checkpoint_store)
+        if recipe != "scratch" and options.draft_prompts:
+            raise VoicekitError(
+                "VK-CLI-001",
+                detail="--draft-prompts applies only to the scratch recipe.",
+            )
+        draft_prompts = (
+            self._answer_drafting(checkpoint, options, checkpoint_store)
+            if recipe == "scratch"
+            else False
+        )
         prompt_text = description
         if draft_prompts:
             prompt_text = await self._drafter.draft(models["llm"], description, all_values)
@@ -142,7 +153,10 @@ class InitWizard:
         manifest = ProjectManifest(
             project_name=checkpoint.project_name,
             runtime=runtime,
-            recipe=RecipeSelection(name="scratch", version="1.0.0"),
+            recipe=RecipeSelection(
+                name=recipe,
+                version=("1.0.0" if recipe_definition is None else recipe_definition.version),
+            ),
             channels=frozenset(cast("tuple[ChannelName, ...]", channels)),
             models=cast("dict[ModelAxis, str]", models),
             carriers=[] if carrier is None else [carrier],
@@ -169,6 +183,8 @@ class InitWizard:
             phone_provider=carrier,
             phone_number=phone_number,
             web_enabled="web" in channels,
+            recipe_name=recipe,
+            recipe_version=("1.0.0" if recipe_definition is None else recipe_definition.version),
         )
         written = self._scaffold_writer.write(project_dir, scaffold, manifest)
         return InitResult(

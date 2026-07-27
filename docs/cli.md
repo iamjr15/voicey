@@ -17,7 +17,7 @@ The wizard asks at most five product questions, with no selected answer or
 "recommended" badge:
 
 1. recipe, with scratch listed last;
-2. what the agent should do, used as the scratch prompt seed;
+2. what the agent should do, used only as the scratch prompt seed;
 3. channels as an explicit multi-select;
 4. carrier only when phone is selected;
 5. runtime and model axes, using factual price, latency, language, and runtime
@@ -59,10 +59,15 @@ The completed scratch project is native Pipecat Flows Python: `agent.py`,
 `flow.py`, typed `tools.py`, prompts, tests, and a pinned-extra `pyproject.toml`.
 There is no voicekit conversation DSL.
 
-Capabilities come from the installed build. P1.8 enables Pipecat, Twilio, and
-scratch creation. Future runtimes, carriers, deploys, and packaged recipes are
-reported as unavailable until their numbered build units ship; a dead-end
-choice is never silently accepted.
+P1.10 also enables `appointment-booking@1.0.0` for Pipecat. Its authored
+prompts, calendar stub, native flow, and direct Pipecat text/audio Evals are
+copied into the project; the scratch-description and prompt-drafting questions
+are skipped because this recipe already owns those sources. See the
+[recipe guide](recipes/appointment-booking.md).
+
+Capabilities come from the installed build. Future runtimes, carriers, deploys,
+and recipe variants are reported as unavailable until their numbered build
+units ship; a dead-end choice is never silently accepted.
 
 ## Development and calls
 
