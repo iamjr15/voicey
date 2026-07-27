@@ -34,6 +34,19 @@ def entrypoint(tools):
 Factories with any other signature and objects that are not native
 `livekit.agents.Agent` instances fail with `VK-RUN-003`.
 
+## Appointment recipe
+
+Create the dual-runtime launch recipe with `--recipe appointment-booking
+--runtime livekit`. Its native intake Agent returns focused booking,
+rescheduling, and cancellation Agents from `@function_tool` handoffs. The
+booking specialist awaits LiveKit 1.6.7's `GetNameTask` and `GetEmailTask` in
+`on_enter`; the other specialists use `GetEmailTask` before identity lookup.
+Shared calendar and transfer tools survive each handoff.
+
+This is ordinary LiveKit workflow source copied into the generated project.
+See the [appointment recipe guide](../recipes/appointment-booking.md) for the
+customization and verification contract.
+
 ## Runtime contract
 
 `LiveKitHost` registers an `AgentServer` `rtc_session` handler using the

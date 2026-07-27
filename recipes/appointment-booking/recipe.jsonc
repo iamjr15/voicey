@@ -3,7 +3,7 @@
   "name": "appointment-booking",
   "version": "1.0.0",
   "min_engine": "0.1.0",
-  "runtimes": ["pipecat"],
+  "runtimes": ["pipecat", "livekit"],
   "summary": "Book, reschedule, and cancel appointments through a calendar stub.",
   "integration_points": [
     "tools.py:TodoCalendarGateway",

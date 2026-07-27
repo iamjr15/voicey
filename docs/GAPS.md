@@ -18,6 +18,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P2 Twilio–LiveKit automated provisioning | ready-to-run, pending credentials/account mutation | Commands below | LiveKit project, owned Twilio number, Elastic SIP domain, explicit mutation acknowledgement |
 | P2 Twilio–LiveKit PSTN certification | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded LiveKit/Twilio accounts, deployed agent, two physical endpoints |
 | P2 LiveKit playground real microphone/provider call | ready-to-run, pending credentials/human | Command below | LiveKit project, reference-provider keys, browser microphone grant, a person speaking |
+| P2 appointment LiveKit conversation | ready-to-run, pending credentials/human | Command and checklist below | LiveKit project, reference-provider keys, browser microphone grant, a person exercising all handoffs |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
@@ -68,6 +69,50 @@ In browser network inspection, confirm the voicekit bearer appears only in the
 room credential may appear only inside the official LiveKit client's native
 signaling exchange. This gate remains pending until the credentialed media call
 and human speech genuinely pass.
+
+## P2 appointment LiveKit conversation gate
+
+Normal CI loads the copied recipe through the production native-flow loader,
+invokes each Agent-return handoff, verifies shared-tool preservation, and
+exercises the installed `GetNameTask`/`GetEmailTask` boundary with deterministic
+results. It cannot prove the real speech-driven task conversations without a
+LiveKit project, reference-provider credentials, microphone access, and a human.
+
+With those values exported, create and run the actual recipe:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_RECIPE_PARENT="$(mktemp -d)"
+VOICEKIT_RECIPE_PROJECT="$VOICEKIT_RECIPE_PARENT/livekit-appointments"
+uv run voicekit init "$VOICEKIT_RECIPE_PROJECT" \
+  --name livekit-appointments \
+  --recipe appointment-booking \
+  --channels web \
+  --runtime livekit \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+(cd "$VOICEKIT_RECIPE_PROJECT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" dev --port 7860)
+```
+
+Open `http://127.0.0.1:7861`, grant microphone access, and verify:
+
+1. Booking asks for and confirms name and email before calendar search, accepts
+   an “actually” correction, confirms all final fields, then reports success
+   only after `book_appointment`.
+2. Rescheduling and cancellation each confirm email, require an `APT-`
+   reference, call `find_appointment`, and request explicit mutation
+   confirmation.
+3. A changed intent returns to intake without losing shared calendar tools.
+4. A calendar failure states that no change occurred and offers one safe retry
+   followed by human escalation when `VOICEKIT_TRANSFER_NUMBER` is configured.
+5. Ending the session produces exactly one terminal event with the expected
+   appointment outcome and native tool observations.
+
+The environment still lacks LiveKit and Anthropic credentials, so this command
+has not been represented as green.
 
 ## P2 Twilio–LiveKit SIP certification
 

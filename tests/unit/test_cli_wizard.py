@@ -264,6 +264,44 @@ async def test_flag_only_appointment_recipe_copies_authored_native_source(
 
 
 @pytest.mark.asyncio
+async def test_flag_only_livekit_appointment_recipe_copies_native_handoffs(
+    tmp_path: Path,
+) -> None:
+    prompt = ScriptedPrompt(interactive=False)
+    wizard = InitWizard(
+        prompt=prompt,
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=AcceptingLiveKitValidator(),
+        environment=LIVEKIT_ENV,
+    )
+
+    result = await wizard.run(
+        tmp_path / "appointments-livekit",
+        InitOptions(
+            project_name="appointments-livekit",
+            recipe="appointment-booking",
+            channels=("web",),
+            runtime="livekit",
+            models=REFERENCE_MODELS,
+            draft_prompts=False,
+        ),
+    )
+
+    assert result.manifest.recipe == RecipeSelection(
+        name="appointment-booking",
+        version="1.0.0",
+    )
+    assert result.manifest.runtime == "livekit"
+    flow_source = (result.project_dir / "flow.py").read_text(encoding="utf-8")
+    assert "class AppointmentIntakeAgent" in flow_source
+    assert "GetNameTask" in flow_source
+    assert "GetEmailTask" in flow_source
+    assert not (result.project_dir / "eval_bot.py").exists()
+    assert (result.project_dir / "tests" / "test_recipe.py").is_file()
+    assert prompt.text_calls == []
+
+
+@pytest.mark.asyncio
 async def test_interactive_wizard_pastes_validates_and_drafts(tmp_path: Path) -> None:
     prompt = ScriptedPrompt(
         selections=[

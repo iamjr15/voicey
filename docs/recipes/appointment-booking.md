@@ -1,8 +1,8 @@
 # Appointment-booking recipe
 
-`appointment-booking@1.0.0` is the first certified first-party conversation
-design. P1 ships its Pipecat variant; the native LiveKit variant lands in P2
-before the launch recipe is considered dual-runtime complete.
+`appointment-booking@1.0.0` is the first dual-runtime first-party conversation
+design. Select Pipecat for a native `NodeConfig`, or LiveKit for native
+Agent-returning handoffs and prebuilt contact-capture tasks.
 
 Create a project:
 
@@ -11,17 +11,32 @@ voicekit init ./appointments \
   --name appointments \
   --recipe appointment-booking \
   --channels web \
-  --runtime pipecat \
+  --runtime livekit \
   --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
   --no-draft-prompts \
   --yes
 ```
 
-The command still collects and validates missing provider keys in-flow. The
-result contains ordinary source files: `flow.py` is a native
-`pipecat.flows.NodeConfig`, `tools.py` contains plain typed Python functions,
-and `prompts/` contains the authored conversation policy. There is no recipe
-runtime, hidden DSL, or network registry.
+Use `--runtime pipecat` for the other native variant. The command collects and
+validates missing provider and runtime keys in-flow. The result contains
+ordinary source files: `flow.py` is either a native `pipecat.flows.NodeConfig`
+entry or native LiveKit `Agent` classes; `tools.py` contains plain typed Python
+functions; and `prompts/` contains the authored conversation policy. There is
+no recipe runtime, hidden DSL, or network registry.
+
+## Native LiveKit workflow
+
+The intake Agent hands off by returning a booking, rescheduling, or cancellation
+Agent from a native `@function_tool`. Shared calendar and transfer tools are
+carried into every specialist. The booking specialist awaits the installed
+LiveKit `GetNameTask` and `GetEmailTask`; rescheduling and cancellation use
+`GetEmailTask`. These tasks run only from `on_enter`, as required by the pinned
+LiveKit 1.6.7 task contract.
+
+The contact tasks require explicit asking and spoken confirmation. Their output
+is reintroduced as untrusted caller data, never prompt instructions. Calendar
+mutation rules remain in the shared prompt and tools, so both runtimes preserve
+the same confirmation and success contract.
 
 ## Production customization map
 
@@ -64,5 +79,9 @@ See [Pipecat Evals](../testing/pipecat-evals.md) for the text/audio suites,
 20-turn reference latency gate, local-Ollama default, cloud override shape,
 exit contract, and exact commands.
 
-Next: run the text suite after every prompt or tool change and the audio suite
-before deployment.
+The native LiveKit factory, three handoffs, tool preservation, pinned contact
+tasks, and copied-project import path run in normal CI. The unified cross-runtime
+scenario command lands in P2.4.
+
+Next: run the Pipecat text suite after every prompt or tool change and the audio
+suite before deployment.

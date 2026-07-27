@@ -144,3 +144,18 @@ These choices apply the documented proposals authorized in the build mandate and
 - Validate LiveKit project credentials during `init`, `keys`, and `doctor`
   through `LiveKitAPI.room.list_rooms(ListRoomsRequest())`, an authenticated
   read-only request verified against installed `livekit-api==1.2.0`.
+
+## 2026-07-27 — Appointment recipe LiveKit workflow shape
+
+- Use LiveKit's native Agent-return handoff contract: intake function tools
+  return booking, rescheduling, or cancellation `Agent` instances. Preserve the
+  shared calendar and transfer tools on each specialist and preserve chat
+  context through the handoff.
+- Use the installed beta `GetNameTask` and `GetEmailTask` only from
+  `on_enter`, where pinned `livekit-agents==1.6.7` permits awaited
+  `AgentTask`s. The installed export is `GetEmailTask`, not older
+  `GetEmailAddressTask` examples.
+- Require explicit ask and confirmation for captured contact fields, and inject
+  completed values back into the workflow as untrusted caller data. Keep
+  calendar operations in shared typed tools; do not introduce recipe state,
+  a flow DSL, or a second tool protocol.

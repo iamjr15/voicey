@@ -3,11 +3,14 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from livekit.agents import Agent as NativeLiveKitAgent
+from livekit.agents import function_tool, llm
 from pipecat.evals.scenario import EvalScenario
 from pipecat.evals.suite import EvalManifest
 from pipecat.evals.transport import EvalTransportParams
@@ -35,7 +38,7 @@ def _agent(*, runtime: str = "pipecat") -> Agent:
             tts="cartesia/sonic-3.5",
         ),
         persona="Help callers manage appointments.",
-        flow="flow:entry",
+        flow="flow:entrypoint" if runtime == "livekit" else "flow:entry",
         tools="tools",
         phone=Phone(
             provider="twilio",
@@ -66,14 +69,31 @@ def _load_recipe_tools() -> ModuleType:
     return module
 
 
+def _load_recipe_module(relative: str, name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, RECIPE / relative)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_recipe_source_selects_native_variant_and_never_overwrites(tmp_path: Path) -> None:
     files = recipe_files("appointment-booking", "pipecat")
+    livekit_files = recipe_files("appointment-booking", "livekit")
 
     assert "flow.py" in files
     assert "eval_bot.py" in files
     assert "pipecat.flows" in files["flow.py"]
     assert all(not path.startswith("pipecat/") for path in files)
     assert "livekit" not in files
+    assert "flow.py" in livekit_files
+    assert "eval_bot.py" not in livekit_files
+    assert "GetNameTask" in livekit_files["flow.py"]
+    assert "GetEmailTask" in livekit_files["flow.py"]
+    assert "start_booking" in livekit_files["flow.py"]
+    assert all(not path.startswith("livekit/") for path in livekit_files)
 
     written = install_recipe(tmp_path, name="appointment-booking", runtime="pipecat")
     assert written
@@ -85,8 +105,13 @@ def test_recipe_source_selects_native_variant_and_never_overwrites(tmp_path: Pat
     assert conflict.value.code == "VK-CLI-003"
     assert (tmp_path / "flow.py").read_text(encoding="utf-8") == "# user-owned\n"
 
-    with pytest.raises(VoicekitError, match="livekit"):
-        recipe_files("appointment-booking", "livekit")
+    with pytest.raises(VoicekitError) as missing_recipe:
+        recipe_files("missing-recipe", "pipecat")
+    assert missing_recipe.value.code == "VK-CLI-005"
+
+    with pytest.raises(VoicekitError) as missing_runtime:
+        recipe_files("appointment-booking", cast(Any, "missing-runtime"))
+    assert missing_runtime.value.code == "VK-CLI-005"
 
 
 def test_recipe_scaffold_is_complete_native_and_manifested(tmp_path: Path) -> None:
@@ -121,6 +146,141 @@ def test_recipe_scaffold_is_complete_native_and_manifested(tmp_path: Path) -> No
     assert "Behavior(" in (tmp_path / "agent.py").read_text(encoding="utf-8")
     assert "VOICEKIT_TRANSFER_NUMBER=" in (tmp_path / ".env.example").read_text(encoding="utf-8")
     assert ManifestStore(tmp_path / "voicekit.jsonc").load().recipe.name == ("appointment-booking")
+
+
+def test_livekit_recipe_scaffold_is_native_and_runtime_selected(tmp_path: Path) -> None:
+    manifest = ProjectManifest(
+        project_name="appointment-agent",
+        runtime="livekit",
+        recipe=RecipeSelection(name="appointment-booking", version="1.0.0"),
+        channels=frozenset({"web"}),
+        models={
+            "stt": "deepgram/nova-3",
+            "llm": "anthropic/claude-sonnet-5",
+            "tts": "cartesia/sonic-3.5",
+        },
+    )
+    scaffold = ScratchScaffold(
+        project_name="appointment-agent",
+        description="Book, reschedule, and cancel appointments.",
+        stt="deepgram/nova-3",
+        llm="anthropic/claude-sonnet-5",
+        tts="cartesia/sonic-3.5",
+        phone_provider=None,
+        phone_number=None,
+        web_enabled=True,
+        runtime="livekit",
+        recipe_name="appointment-booking",
+    )
+
+    written = ScaffoldWriter().write(tmp_path, scaffold, manifest)
+
+    assert len(written) >= 12
+    for relative in ("agent.py", "flow.py", "tools.py", "tests/test_recipe.py"):
+        compile((tmp_path / relative).read_text(encoding="utf-8"), relative, "exec")
+    agent_source = (tmp_path / "agent.py").read_text(encoding="utf-8")
+    flow_source = (tmp_path / "flow.py").read_text(encoding="utf-8")
+    assert "runtime='livekit'" in agent_source
+    assert "flow='flow:entrypoint'" in agent_source
+    assert "class AppointmentIntakeAgent" in flow_source
+    assert "GetNameTask" in flow_source
+    assert not (tmp_path / "eval_bot.py").exists()
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().runtime == "livekit"
+
+
+def _native_function(
+    agent: NativeLiveKitAgent,
+    name: str,
+) -> Callable[[], Awaitable[NativeLiveKitAgent]]:
+    for native_tool in agent.tools:
+        if isinstance(native_tool, llm.FunctionTool) and native_tool.info.name == name:
+            return cast("Callable[[], Awaitable[NativeLiveKitAgent]]", native_tool)
+    raise AssertionError(f"missing native function {name}")
+
+
+@pytest.mark.asyncio
+async def test_livekit_recipe_uses_native_handoffs_and_preserves_shared_tools() -> None:
+    flow = _load_recipe_module(
+        "livekit/flow.py",
+        "voicekit_test_appointment_livekit_flow",
+    )
+
+    async def shared_lookup() -> str:
+        """Return a deterministic shared-tool value."""
+        return "ok"
+
+    shared = function_tool(shared_lookup)
+    intake = cast(NativeLiveKitAgent, flow.entrypoint([shared]))
+    booking = await _native_function(intake, "start_booking")()
+    cancellation = await _native_function(intake, "start_cancellation")()
+    returned = await _native_function(booking, "return_to_intake")()
+
+    assert isinstance(intake, NativeLiveKitAgent)
+    assert isinstance(booking, NativeLiveKitAgent)
+    assert isinstance(cancellation, NativeLiveKitAgent)
+    assert isinstance(returned, NativeLiveKitAgent)
+    assert intake.id == "appointment_intake_agent"
+    assert booking.id == "booking_agent"
+    assert cancellation.id == "cancellation_agent"
+    assert returned.id == "appointment_intake_agent"
+    assert shared in intake.tools
+    assert shared in booking.tools
+    assert shared in cancellation.tools
+    assert {tool.info.name for tool in intake.tools if isinstance(tool, llm.FunctionTool)} >= {
+        "start_booking",
+        "start_rescheduling",
+        "start_cancellation",
+        "shared_lookup",
+    }
+
+
+@pytest.mark.asyncio
+async def test_livekit_booking_awaits_pinned_prebuilt_contact_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    flow = _load_recipe_module(
+        "livekit/flow.py",
+        "voicekit_test_appointment_livekit_contact_flow",
+    )
+    calls: list[tuple[str, dict[str, object]]] = []
+    replies: list[str] = []
+
+    def completed(result: object) -> Awaitable[object]:
+        async def wait() -> object:
+            return result
+
+        return wait()
+
+    def fake_name(**kwargs: object) -> Awaitable[object]:
+        calls.append(("name", kwargs))
+        return completed(SimpleNamespace(first_name="Alex", middle_name=None, last_name="Rivera"))
+
+    def fake_email(**kwargs: object) -> Awaitable[object]:
+        calls.append(("email", kwargs))
+        return completed(SimpleNamespace(email_address="alex@example.com"))
+
+    class FakeSession:
+        def generate_reply(self, *, instructions: str) -> None:
+            replies.append(instructions)
+
+    fake_session = FakeSession()
+    monkeypatch.setattr(flow, "GetNameTask", fake_name)
+    monkeypatch.setattr(flow, "GetEmailTask", fake_email)
+    monkeypatch.setattr(
+        flow.BookingAgent,
+        "session",
+        property(lambda _agent: fake_session),
+    )
+    booking = cast(NativeLiveKitAgent, flow.BookingAgent(tools=[]))
+
+    await cast(Any, booking).on_enter()
+
+    assert [name for name, _kwargs in calls] == ["name", "email"]
+    assert all(kwargs["require_confirmation"] is True for _name, kwargs in calls)
+    assert all(kwargs["require_explicit_ask"] is True for _name, kwargs in calls)
+    assert "Alex Rivera" in replies[-1]
+    assert "alex@example.com" in replies[-1]
+    assert "untrusted caller-data" in replies[-1]
 
 
 def test_calendar_stub_is_typed_deterministic_and_records_outcomes() -> None:

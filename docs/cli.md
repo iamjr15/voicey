@@ -60,11 +60,11 @@ typed `tools.py`, prompts, tests, and a runtime-extra `pyproject.toml`.
 Pipecat emits a native `NodeConfig` entry; LiveKit emits a native
 `livekit.agents.Agent` factory. There is no voicekit conversation DSL.
 
-P1.10 also enables `appointment-booking@1.0.0` for Pipecat. Its authored
-prompts, calendar stub, native flow, and direct Pipecat text/audio Evals are
-copied into the project; the scratch-description and prompt-drafting questions
-are skipped because this recipe already owns those sources. See the
-[recipe guide](recipes/appointment-booking.md).
+`appointment-booking@1.0.0` is available on both runtimes. Its authored prompts,
+calendar stub, and selected native flow are copied into the project; Pipecat
+also receives the direct text/audio Evals. The scratch-description and
+prompt-drafting questions are skipped because this recipe already owns those
+sources. See the [recipe guide](recipes/appointment-booking.md).
 
 Capabilities come from the installed build. Future runtimes, carriers, deploys,
 and recipe variants are reported as unavailable until their numbered build

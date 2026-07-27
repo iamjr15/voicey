@@ -82,9 +82,8 @@ def test_capabilities_and_recipes_report_runtime_and_recipe_availability() -> No
     available = DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False)
     assert [recipe.name for recipe in available] == ["appointment-booking"]
     assert DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "pipecat") == available[0]
-    with pytest.raises(VoicekitError) as recipe_error:
-        DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "livekit")
-    assert recipe_error.value.code == "VK-CLI-005"
+    assert DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "livekit") == available[0]
+    assert available[0].runtimes == frozenset({"pipecat", "livekit"})
 
 
 @pytest.mark.asyncio

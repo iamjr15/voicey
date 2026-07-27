@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P2 — LiveKit parity, unified testing, Telnyx
-- **Current unit:** P2.3 appointment-booking LiveKit recipe variant
-- **Next task:** author the native LiveKit appointment workflow and its runtime-specific tests while preserving the existing recipe contract
-- **Completed:** all P0 and P1 units plus P2.1–P2.2. The production LiveKit runtime, browser client/token path, three-process local supervisor, native scratch quickstart, current provider/fallback mapping, fenced incremental lifecycle, actual-SIGKILL recovery, and Twilio Elastic SIP provisioning/controls/recording reconciliation are green. Credentialed/PSTN/microphone P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
+- **Current unit:** P2.4 unified testing and `voicekit test`
+- **Next task:** implement the shared scenario/profile schema and compile it to installed Pipecat Evals plus native LiveKit `session.run()` assertions before adding the JUnit/CLI surface
+- **Completed:** all P0 and P1 units plus P2.1–P2.3. The production LiveKit runtime, browser client/token path, three-process local supervisor, native scratch quickstart, native appointment Agent handoffs/contact tasks, current provider/fallback mapping, fenced incremental lifecycle, actual-SIGKILL recovery, and Twilio Elastic SIP provisioning/controls/recording reconciliation are green. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -44,6 +44,8 @@ Last updated: 2026-07-27
 | P2.1 Twilio–LiveKit account/PSTN certification | pending-live | Three guarded account/PSTN commands plus the physical inbound/outbound, DTMF, hangup, recording, transfer, terminal-delivery, and rollback checklist are ready in `docs/GAPS.md`; no required account variables exist locally |
 | P2.2 LiveKit playground + quickstart | green | Pinned native client, Authorization-only one-use voicekit token exchange, durable pre-token reservation, least-privilege room credential, remote audio/mic/transcription/state mapping, failure terminalization, three-process `dev`, in-flow read-only credential validation, exact managed SIP resource inspection, native scratch scaffold import, desktop/mobile browser QA; frontend 11 tests/build/audit green; full Python suite 466 passed, 8 honest live skips, 90.01% branch coverage |
 | P2.2 real LiveKit microphone/provider browser call | pending-live | Exact disposable-project command in `docs/GAPS.md`; requires a LiveKit project, reference-provider credentials, browser microphone permission, and human speech |
+| P2.3 appointment recipe LiveKit variant | green | Native intake→booking/reschedule/cancel Agent returns, return-to-intake, shared tool/context preservation, installed `GetNameTask`/`GetEmailTask`, both-runtime metadata/wizard copy, copied-project production-loader import, and wheel contents green; full suite 471 passed, 8 honest live skips, 90.03% branch coverage; strict ruff/format/pyright green |
+| P2.3 credentialed spoken appointment conversation | pending-live | Exact disposable recipe command and all-handoffs behavior checklist in `docs/GAPS.md`; requires a LiveKit project, reference providers, microphone permission, and human speech |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

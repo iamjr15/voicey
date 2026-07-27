@@ -1,9 +1,11 @@
 # Appointment booking
 
 A production conversation design for booking, rescheduling, and canceling
-appointments. The Pipecat variant is native `pipecat.flows` source: voicekit
-loads its `NodeConfig` and registers the plain typed functions in `tools.py` as
-native Flows functions.
+appointments on both runtimes. The Pipecat variant is native
+`pipecat.flows` source. The LiveKit variant is a native intake `Agent` that
+hands off to booking, rescheduling, and cancellation `Agent` specialists; it
+uses LiveKit's pinned `GetNameTask` and `GetEmailTask` for confirmed contact
+capture. Both variants consume the plain typed functions in `tools.py`.
 
 ## Customize before production
 
@@ -11,7 +13,7 @@ native Flows functions.
    typed tool functions and their return shapes stable, or update the evals with
    the contract change.
 2. Inject an E.164 human destination as `VOICEKIT_TRANSFER_NUMBER` in the
-   runtime environment. The Pipecat runtime exposes `transfer_to_human` only
+   runtime environment. Each runtime exposes its native transfer function only
    when that destination exists.
 3. Replace the placeholder results receiver through your deployment
    configuration.
@@ -31,6 +33,19 @@ voicekit dev
 
 Next: open the printed local playground URL and try booking, changing, then
 canceling an appointment.
+
+## Runtime-native workflow
+
+`flow.py` is selected when the recipe is copied:
+
+- Pipecat receives one native `NodeConfig` entry and Pipecat Flows functions.
+- LiveKit receives native `Agent` handoff tools. The booking specialist awaits
+  `GetNameTask` and `GetEmailTask`; reschedule and cancellation await
+  `GetEmailTask`. Confirmed values remain caller data, not instructions.
+
+The specialists preserve the engine-injected calendar and transfer tools across
+every handoff. `return_to_intake` is a native Agent-returning function tool, not
+a recipe state machine.
 
 ## Pipecat Evals
 
