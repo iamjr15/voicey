@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from livekit.api import LiveKitAPI
 
     from voicekit.telephony.ledger import TelephonyLedger
+    from voicekit.telephony.plivo import PlivoAdapter
     from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.vobiz import VobizAdapter
 
@@ -92,7 +93,7 @@ async def run_dev(
             return
         tunnel_handle = None
         rollback: RollbackToken | None = None
-        adapter: TwilioAdapter | TelnyxAdapter | VobizAdapter | None = None
+        adapter: TwilioAdapter | TelnyxAdapter | VobizAdapter | PlivoAdapter | None = None
         try:
             external_base = "https://localhost.invalid"
             public_origin = f"http://127.0.0.1:{port}"
@@ -137,6 +138,15 @@ async def run_dev(
                         ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
                         expected_public_base=external_base,
                     )
+                elif selected_provider == "plivo":
+                    from voicekit.telephony.plivo import PlivoAdapter
+
+                    adapter = PlivoAdapter(
+                        auth_id=context.environment.get("PLIVO_AUTH_ID"),
+                        auth_token=context.environment.get("PLIVO_AUTH_TOKEN"),
+                        ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+                        expected_public_base=external_base,
+                    )
                 secret = context.environment.get(agent.results.secret_env, "")
                 previous_secret = (
                     None
@@ -162,6 +172,9 @@ async def run_dev(
                         ),
                         vobiz=(
                             cast("VobizAdapter", adapter) if selected_provider == "vobiz" else None
+                        ),
+                        plivo=(
+                            cast("PlivoAdapter", adapter) if selected_provider == "plivo" else None
                         ),
                     )
                     if agent.phone is not None and agent.phone.record
@@ -217,6 +230,9 @@ async def run_dev(
                         ),
                         vobiz=(
                             cast("VobizAdapter", adapter) if selected_provider == "vobiz" else None
+                        ),
+                        plivo=(
+                            cast("PlivoAdapter", adapter) if selected_provider == "plivo" else None
                         ),
                         web_sessions=security,
                         recording_handler=recording_handler,
@@ -527,11 +543,14 @@ async def _provision_livekit_phone(
     if (
         manifest.phone_number is None
         or agent.phone is None
-        or agent.phone.provider not in {"twilio", "telnyx", "vobiz"}
+        or agent.phone.provider not in {"twilio", "telnyx", "vobiz", "plivo", "sip"}
     ):
         raise VoicekitError(
             "VK-CLI-007",
-            detail="LiveKit --phone requires one configured Twilio, Telnyx, or Vobiz number.",
+            detail=(
+                "LiveKit --phone requires one configured Twilio, Telnyx, Vobiz, "
+                "Plivo, or generic SIP number."
+            ),
         )
     livekit_client = livekit_api.LiveKitAPI(server_url, api_key, api_secret)
     ledger = TelephonyLedger(context.root / ".voicekit" / "telephony.sqlite3")
@@ -612,7 +631,7 @@ async def _provision_livekit_phone(
                 )
             )
             provisioner = telnyx_provisioner
-        else:
+        elif agent.phone.provider == "vobiz":
             from voicekit.runtimes.livekit.vobiz import (
                 VobizLiveKitSipConfig,
                 VobizLiveKitSipProvisioner,
@@ -657,6 +676,99 @@ async def _provision_livekit_phone(
                 )
             )
             provisioner = vobiz_provisioner
+        elif agent.phone.provider == "plivo":
+            from voicekit.runtimes.livekit.plivo import (
+                PlivoLiveKitSipConfig,
+                PlivoLiveKitSipProvisioner,
+                PlivoSipHTTPBackend,
+            )
+
+            plivo_provisioner = PlivoLiveKitSipProvisioner(
+                livekit=livekit_client.sip,
+                plivo=PlivoSipHTTPBackend(
+                    auth_id=_required_environment(
+                        context.environment,
+                        "PLIVO_AUTH_ID",
+                    ),
+                    auth_token=_required_environment(
+                        context.environment,
+                        "PLIVO_AUTH_TOKEN",
+                    ),
+                ),
+                ledger=ledger,
+            )
+            result = await plivo_provisioner.provision(
+                PlivoLiveKitSipConfig(
+                    number=manifest.phone_number,
+                    agent_name=agent.name,
+                    livekit_sip_uri=_required_environment(
+                        context.environment,
+                        "VOICEKIT_LIVEKIT_SIP_URI",
+                    ),
+                    auth_username=_required_environment(
+                        context.environment,
+                        "VOICEKIT_PLIVO_SIP_USERNAME",
+                    ),
+                    auth_password=_required_environment(
+                        context.environment,
+                        "VOICEKIT_PLIVO_SIP_PASSWORD",
+                    ),
+                )
+            )
+            provisioner = plivo_provisioner
+        else:
+            from voicekit.runtimes.livekit.generic_sip import (
+                GenericSipConfig,
+                GenericSipProvisioner,
+                SipMediaEncryption,
+                SipTransport,
+            )
+
+            generic_provisioner = GenericSipProvisioner(
+                livekit=livekit_client.sip,
+                ledger=ledger,
+            )
+            allowed = tuple(
+                value.strip()
+                for value in context.environment.get("VOICEKIT_SIP_ALLOWED_ADDRESSES", "").split(
+                    ","
+                )
+                if value.strip()
+            )
+            result = await generic_provisioner.provision(
+                GenericSipConfig(
+                    number=manifest.phone_number,
+                    agent_name=agent.name,
+                    outbound_address=_required_environment(
+                        context.environment,
+                        "VOICEKIT_SIP_ADDRESS",
+                    ),
+                    auth_username=_required_environment(
+                        context.environment,
+                        "VOICEKIT_SIP_USERNAME",
+                    ),
+                    auth_password=_required_environment(
+                        context.environment,
+                        "VOICEKIT_SIP_PASSWORD",
+                    ),
+                    allowed_addresses=allowed,
+                    transport=cast(
+                        "SipTransport",
+                        _required_environment(
+                            context.environment,
+                            "VOICEKIT_SIP_TRANSPORT",
+                        ).casefold(),
+                    ),
+                    media_encryption=cast(
+                        "SipMediaEncryption",
+                        _required_environment(
+                            context.environment,
+                            "VOICEKIT_SIP_MEDIA_ENCRYPTION",
+                        ).casefold(),
+                    ),
+                )
+            )
+            provisioner = generic_provisioner
     except Exception:
         await livekit_client.aclose()
         ledger.close()

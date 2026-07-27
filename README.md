@@ -2,7 +2,7 @@
 
 voicekit is a production-grade open-source toolchain around Pipecat and LiveKit. Projects keep their conversation logic in native framework code; voicekit supplies typed configuration, guided setup, telephony, browser development, testing, deployment, durable call results, and operational tooling.
 
-The product is under active construction and is not published. See [the product specification](docs/product-spec.md), [build plan](docs/build-plan.md), [runtime parity contract](docs/runtime-parity.md), [recipe quality contract](docs/recipes/quality-checklist.md), [tool contract](docs/tools.md), [Twilio guide](docs/carriers/twilio.md), [Telnyx guide](docs/carriers/telnyx.md), [Vobiz guide](docs/carriers/vobiz.md), and [live progress checkpoint](docs/PROGRESS.md).
+The product is under active construction and is not published. See [the product specification](docs/product-spec.md), [build plan](docs/build-plan.md), [runtime parity contract](docs/runtime-parity.md), [recipe quality contract](docs/recipes/quality-checklist.md), [tool contract](docs/tools.md), [Twilio guide](docs/carriers/twilio.md), [Telnyx guide](docs/carriers/telnyx.md), [Vobiz guide](docs/carriers/vobiz.md), [Plivo guide](docs/carriers/plivo.md), [generic SIP guide](docs/carriers/generic-sip.md), and [live progress checkpoint](docs/PROGRESS.md).
 
 ## Development
 

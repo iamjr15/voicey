@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P3 — recipes, additional carriers, live tier, cloud deploys, relay, warm transfer
-- **Current unit:** P3.3 Plivo + generic SIP beta
-- **Next task:** implement the Plivo carrier adapter and its Pipecat media/callback path, add the explicit LiveKit generic-SIP beta provisioner, wire capability/reporting/CLI/deploy surfaces, and ship exact beta and live runbooks
-- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.2. Vobiz now has signed, fenced Pipecat Voice API/media handling and deterministic LiveKit UDP SIP provisioning after a positive feasibility result. The full suite is 728 passed, 20 honest live skips, 90.02% branch coverage. Credentialed/PSTN/microphone/conversation gates remain pending with exact commands in `docs/GAPS.md`
+- **Current unit:** P3.4 Tier-3 live PSTN loopback
+- **Next task:** implement the fixed-pattern Pipecat live caller and native LiveKit agent-simulator loopback, require explicit paid-call acknowledgements, add nightly scheduling/reporting, and preserve carrier/path evidence without promoting skipped gates
+- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.3. Plivo now has signed, fenced Pipecat Voice API/media handling and deterministic LiveKit Zentrunk provisioning; generic SIP is a LiveKit-only, operator-managed Beta path with explicit transport/media policy. The full suite is 807 passed, 28 honest live skips, 90.03% branch coverage. Credentialed/PSTN/microphone/conversation gates remain pending with exact commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -57,6 +57,10 @@ Last updated: 2026-07-27
 | P3.1 reference-provider recipe conversations | pending-live | Exact six-project text/audio/JUnit loop and behavior checklist in `docs/GAPS.md`; requires Deepgram/Anthropic/Cartesia credentials, Ollama, and live warm-transfer infrastructure |
 | P3.2 Vobiz dual-path local certification | green | Vobiz Voice API/VobizXML, V3/V2 HMAC + replay defense, route/intent fences, PCMU/8 kHz Pipecat media, authoritative terminal callback, recording ingestion, positive LiveKit SIP feasibility, deterministic UDP trunk/dispatch/number provisioning, drift rejection, reverse rollback, CLI/doctor/scaffold/Docker wiring; full suite 728 passed, 20 honest live skips, 90.02% branch coverage; strict static gates and release build green |
 | P3.2 Vobiz account/PSTN certification | pending-live | Exact guarded Pipecat and LiveKit commands plus physical both-path checklist in `docs/GAPS.md`; requires funded Vobiz/LiveKit accounts, a public target, existing SIP credential, and physical endpoints |
+| P3.3 Plivo dual-path local certification | green | Installed `plivo==4.61.0` V3 signature contract, replay defense, route/intent fencing, PCMU/8 kHz native media, authoritative terminal callbacks, recording ingestion, current inbound-TCP/secure-outbound Zentrunk topology, secret-bound adoption, drift rejection, reverse rollback, and full CLI/runtime wiring; full suite 807 passed, 28 honest live skips, 90.03% branch coverage |
+| P3.3 Plivo account/PSTN certification | pending-live | Exact guarded Pipecat and LiveKit commands plus physical both-path checklist in `docs/GAPS.md`; requires funded Plivo/LiveKit accounts, public target, Zentrunk credentials, and physical endpoints |
+| P3.3 generic SIP local certification | green | LiveKit-only explicit address/CIDR/auth/transport/media mapping, deterministic reuse, duplicate/drift rejection, write-ahead ledger, reverse rollback, local key/config/scaffold/doctor/dev coverage, and operator-ownership boundary are green |
+| P3.3 generic SIP external loopback | pending-live | Exact guarded provision/reuse/rollback and paid-call command plus external PBX/carrier checklist in `docs/GAPS.md`; requires operator-owned route and physical endpoints |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

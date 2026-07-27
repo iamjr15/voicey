@@ -271,3 +271,30 @@ These choices apply the documented proposals authorized in the build mandate and
   socket does not end or duplicate-terminalize the call. Callback HMAC
   verification, nonce replay protection, durable route/intent fences, bounded
   recording ingestion, and reverse SIP rollback are required on every path.
+
+## 2026-07-27 — Plivo and generic-SIP Beta boundaries
+
+- Pin `plivo==4.61.0`. Installed introspection supersedes the stale SDK summary:
+  `validate_v3_signature(method, uri, nonce, auth_token, signature, params)`
+  is the six-argument helper used for POST form canonicalization. Every
+  callback still requires an HTTPS expected origin and one-use nonce.
+- Follow the current official LiveKit Plivo procedure literally. Inbound uses
+  a Plivo URI `<livekit-sip-host>;transport=tcp`, a Plivo inbound trunk, number
+  `app_id` binding, and a LiveKit inbound trunk with media encryption disabled.
+  Outbound uses a Plivo credential and `secure=true` trunk plus a LiveKit
+  `SIP_TRANSPORT_TLS` trunk with `SIP_MEDIA_ENCRYPT_REQUIRE`. Do not relabel
+  the documented inbound leg as TLS/SRTP.
+- Put a truncated SHA-256 of the write-only Plivo SIP password in the
+  deterministic credential resource name. This binds adoption to secret
+  equality without storing or logging the password. All other desired state
+  remains in secret-safe provisioning metadata.
+- Keep Plivo at Beta even though the local adapter and both runtime paths are
+  complete. Account mutation, paid calls, recordings, regional behavior, and
+  both-path physical endpoints remain pending until the guarded runbook
+  actually passes.
+- Define generic SIP as LiveKit-only and operator-managed. Voicekit owns only
+  the LiveKit inbound trunk, dispatch rule, outbound trunk, ledger, and reverse
+  rollback; it never invents an external provider control plane.
+- Require explicit `udp|tcp|tls` and `disable|allow|require` values and optional
+  exact gateway CIDRs. Reject TLS with disabled media encryption. A blank CIDR
+  list is allowed only as a visible operator risk, not as a security claim.

@@ -125,6 +125,7 @@ class InitWizard:
             carrier = self._answer_carrier(checkpoint, options, checkpoint_store)
             phone_number = self._answer_phone(checkpoint, options, carrier, checkpoint_store)
         runtime = self._answer_runtime(checkpoint, options, checkpoint_store)
+        self._require_carrier_runtime(runtime, carrier)
         recipe_definition = None if recipe == "scratch" else self._recipes.require(recipe, runtime)
         models = self._answer_models(checkpoint, options, runtime, checkpoint_store)
         self._require_installed_extras(runtime, carrier)
@@ -625,7 +626,7 @@ class InitWizard:
     def _require_installed_extras(self, runtime: str, carrier: str | None) -> None:
         requirements = [(runtime, runtime)]
         if carrier is not None:
-            requirements.append((carrier, carrier))
+            requirements.append(("livekit", "livekit") if carrier == "sip" else (carrier, carrier))
         missing = [
             extra for module, extra in requirements if importlib.util.find_spec(module) is None
         ]
@@ -634,6 +635,21 @@ class InitWizard:
             raise VoicekitError(
                 "VK-CLI-005",
                 detail=f'Install with `uv pip install "voicekit[{extras}]"`, then resume init.',
+            )
+
+    def _require_carrier_runtime(self, runtime: str, carrier: str | None) -> None:
+        if carrier is None:
+            return
+        entry = self._catalog.get("carrier", carrier)
+        if entry is None:
+            raise VoicekitError("VK-CLI-005", detail=f"carrier {carrier!r} is absent.")
+        if runtime not in entry.runtimes:
+            raise VoicekitError(
+                "VK-CLI-005",
+                detail=(
+                    f"carrier {carrier!r} does not support runtime {runtime!r}; "
+                    "generic SIP requires LiveKit."
+                ),
             )
 
 

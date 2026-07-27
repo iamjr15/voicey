@@ -79,10 +79,12 @@ voicekit call +14155550199 --url https://public.example.test --yes
 ```
 
 `dev` starts the selected production runtime. Pipecat phone mode probes the
-public tunnel before temporarily changing the selected Twilio route. LiveKit
-supervises its native worker and, with `--phone`, temporarily provisions the
-Twilio↔LiveKit SIP chain. Exit and interruption restore the prior route/SIP
-resources and environment/import state.
+public tunnel before temporarily changing the selected Twilio, Telnyx, Vobiz,
+or Plivo route. LiveKit supervises its native worker and, with `--phone`,
+temporarily provisions the selected carrier's SIP chain. Generic SIP
+provisions only the LiveKit side and leaves the external PBX/carrier route
+operator-managed. Exit and interruption restore the voicekit-managed prior
+route/SIP resources and environment/import state.
 The public runtime/signaling listener binds to `127.0.0.1:<port>` and the
 playground/admin listener binds separately to `127.0.0.1:<port + 1>`. For the
 default `--port 7860`, open `http://127.0.0.1:7861`. A tunnel receives only the

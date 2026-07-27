@@ -109,6 +109,8 @@ class ProviderKeyValidator:
                 detail=f"{', '.join(missing)} is missing.",
                 fix=f"Run `voicekit keys add {provider}`.",
             )
+        if identifier == "sip":
+            return _validate_generic_sip(values, entry)
         url, headers = _request(entry, values)
         if self._client is None:
             async with httpx.AsyncClient(follow_redirects=False) as client:
@@ -288,6 +290,47 @@ def mask_value(value: str) -> str:
     if len(value) <= 4:
         return "••••"
     return f"••••{value[-4:]}"
+
+
+def _validate_generic_sip(
+    values: Mapping[str, str],
+    entry: ProviderCatalogEntry,
+) -> KeyCheck:
+    address = values["VOICEKIT_SIP_ADDRESS"].casefold()
+    username = values["VOICEKIT_SIP_USERNAME"]
+    password = values["VOICEKIT_SIP_PASSWORD"]
+    transport = values["VOICEKIT_SIP_TRANSPORT"].casefold()
+    encryption = values["VOICEKIT_SIP_MEDIA_ENCRYPTION"].casefold()
+    valid_address = bool(
+        re.fullmatch(
+            r"(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:]+\])(?::[0-9]{1,5})?",
+            address,
+        )
+    ) and not address.startswith(("sip:", "sips:"))
+    valid = (
+        valid_address
+        and 1 <= len(username) <= 128
+        and 8 <= len(password) <= 128
+        and transport in {"udp", "tcp", "tls"}
+        and encryption in {"disable", "allow", "require"}
+        and not (transport == "tls" and encryption == "disable")
+    )
+    return KeyCheck(
+        provider="sip",
+        env_names=entry.key_env_vars,
+        status="valid" if valid else "invalid",
+        detail=(
+            "Generic SIP address, credentials, transport, and media policy are well-formed."
+            if valid
+            else "Generic SIP connection values are malformed or insecure."
+        ),
+        fix=(
+            "No action required."
+            if valid
+            else "Run `voicekit keys add sip`; use host[:port], udp/tcp/tls, and "
+            "disable/allow/require (TLS cannot disable media encryption)."
+        ),
+    )
 
 
 def _request(

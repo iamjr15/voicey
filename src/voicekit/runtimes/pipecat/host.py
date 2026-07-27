@@ -115,6 +115,24 @@ class VobizRuntimeAdapter(Protocol):
     def hangup(self, call_uuid: str) -> None: ...
 
 
+class PlivoRuntimeAdapter(Protocol):
+    """Plivo operations consumed by the host without forcing its extra."""
+
+    def verify_request(self, request: TelephonyRequest) -> bool: ...
+
+    def answer_response(self, target: RuntimeTarget) -> str: ...
+
+    def transfer_response(self, to_number: str, *, caller_id: str | None = None) -> str: ...
+
+    def parse_event(self, request: TelephonyRequest) -> CallEvent: ...
+
+    def start_recording(self, call_uuid: str, target: RuntimeTarget) -> str: ...
+
+    def cold_transfer(self, call_uuid: str, to_number: str) -> None: ...
+
+    def hangup(self, call_uuid: str) -> None: ...
+
+
 class RecordingHandler(Protocol):
     """Verified callback ingestion plus protected artifact reads."""
 
@@ -123,6 +141,8 @@ class RecordingHandler(Protocol):
     async def handle_telnyx(self, event: CallEvent) -> None: ...
 
     async def handle_vobiz(self, event: CallEvent) -> None: ...
+
+    async def handle_plivo(self, event: CallEvent) -> None: ...
 
     async def read(self, recording_id: str, authorization: str | None) -> bytes: ...
 
@@ -165,6 +185,7 @@ class PipecatHostSettings:
     telnyx_api_key: str = field(default="", repr=False)
     telnyx_sample_rate: int = 8000
     vobiz_sample_rate: int = 8000
+    plivo_sample_rate: int = 8000
     allow_insecure_web_sessions_for_tests: bool = False
     storage_ready: bool = True
 
@@ -193,6 +214,7 @@ class PipecatHostSettings:
             or self.twilio_sample_rate != 8000
             or self.telnyx_sample_rate != 8000
             or self.vobiz_sample_rate != 8000
+            or self.plivo_sample_rate != 8000
         ):
             raise VoicekitError(
                 "VK-RUN-002",
@@ -242,6 +264,14 @@ class _VobizTransfer(TransferHandler):
         await asyncio.to_thread(self._adapter.cold_transfer, call_id, number)
 
 
+class _PlivoTransfer(TransferHandler):
+    def __init__(self, adapter: PlivoRuntimeAdapter) -> None:
+        self._adapter = adapter
+
+    async def __call__(self, call_id: str, number: str) -> None:
+        await asyncio.to_thread(self._adapter.cold_transfer, call_id, number)
+
+
 class LongLivedRunner:
     """Own a WorkerRunner whose zero-worker state never ends the process."""
 
@@ -282,6 +312,7 @@ class PipecatHost:
         twilio: TwilioRuntimeAdapter | None = None,
         telnyx: TelnyxRuntimeAdapter | None = None,
         vobiz: VobizRuntimeAdapter | None = None,
+        plivo: PlivoRuntimeAdapter | None = None,
         runner: WorkerRunner | None = None,
         request_handler: SmallWebRTCRequestHandler | None = None,
         session_builder: PipecatSessionBuilder | None = None,
@@ -305,6 +336,11 @@ class PipecatHost:
                 "VK-RUN-001",
                 detail="Vobiz phone config requires the voicekit[vobiz] adapter.",
             )
+        if agent.phone is not None and agent.phone.provider == "plivo" and plivo is None:
+            raise VoicekitError(
+                "VK-RUN-001",
+                detail="Plivo phone config requires the voicekit[plivo] adapter.",
+            )
         if (
             agent.web.enabled
             and web_sessions is None
@@ -320,6 +356,7 @@ class PipecatHost:
         self.twilio = twilio
         self.telnyx = telnyx
         self.vobiz = vobiz
+        self.plivo = plivo
         self.twilio_target = PipecatTarget(https_base=settings.public_base)
         self.telnyx_target = PipecatTarget(
             https_base=settings.public_base,
@@ -337,11 +374,21 @@ class PipecatHost:
             recording_path="/vobiz/recordings",
             amd_path="/vobiz/amd",
         )
+        self.plivo_target = PipecatTarget(
+            https_base=settings.public_base,
+            ws_path="/plivo/media",
+            answer_path="/plivo/answer",
+            event_path="/plivo/events",
+            recording_path="/plivo/recordings",
+            amd_path="/plivo/amd",
+        )
         provider = None if agent.phone is None else agent.phone.provider
         if provider == "telnyx":
             self.target = self.telnyx_target
         elif provider == "vobiz":
             self.target = self.vobiz_target
+        elif provider == "plivo":
+            self.target = self.plivo_target
         else:
             self.target = self.twilio_target
         self.admission = AdmissionController(agent.limits.max_concurrent)
@@ -353,6 +400,8 @@ class PipecatHost:
             transfer_handler = _TelnyxTransfer(telnyx)
         elif provider == "vobiz" and vobiz is not None:
             transfer_handler = _VobizTransfer(vobiz)
+        elif provider == "plivo" and plivo is not None:
+            transfer_handler = _PlivoTransfer(plivo)
         elif twilio is not None:
             transfer_handler = _TwilioTransfer(twilio)
         self.session_builder = session_builder or PipecatSessionBuilder(
@@ -1151,6 +1200,189 @@ class PipecatHost:
                         self._active.pop(pending.call.call_id, None)
                     self._mark_idle_if_empty()
 
+        @app.post("/plivo/answer")
+        @app.post("/plivo/answer/{intent_id}")
+        async def plivo_answer(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            intent_id: str | None = None,
+        ) -> Response:
+            adapter = self._require_plivo()
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                route_params={} if intent_id is None else {"intent_id": intent_id},
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            event = adapter.parse_event(telephony)
+            try:
+                pending = await self.reserve_call(
+                    PipecatCall(
+                        call_id=event.provider_call_id,
+                        channel="phone",
+                        direction=event.direction
+                        or ("outbound" if intent_id is not None else "inbound"),
+                        provider="plivo",
+                        provider_call_id=event.provider_call_id,
+                        from_number=event.from_number,
+                        to_number=event.to_number,
+                    )
+                )
+            except VoicekitError as exc:
+                if exc.code not in {"VK-RUN-004", "VK-RUN-008"}:
+                    raise
+                return Response(
+                    content="<Response><Hangup /></Response>",
+                    status_code=200,
+                    media_type="application/xml",
+                )
+            target = replace(
+                self.plivo_target,
+                ws_path=f"{self.plivo_target.ws_path}/{pending.admission.token}",
+            )
+            if self.agent.phone is not None and self.agent.phone.record:
+                try:
+                    await asyncio.to_thread(
+                        adapter.start_recording,
+                        event.provider_call_id,
+                        target,
+                    )
+                except Exception:
+                    await self._fail_pending_setup(pending)
+                    raise
+            return Response(
+                content=adapter.answer_response(target),
+                media_type="application/xml",
+            )
+
+        @app.post("/plivo/events")
+        @app.post("/plivo/events/{intent_id}")
+        @app.post("/plivo/recordings")
+        @app.post("/plivo/amd")
+        @app.post("/plivo/amd/{intent_id}")
+        async def plivo_events(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            intent_id: str | None = None,
+        ) -> Response:
+            adapter = self._require_plivo()
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                route_params={} if intent_id is None else {"intent_id": intent_id},
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            event = adapter.parse_event(telephony)
+            if event.type in {"recording_ready", "recording_failed"}:
+                if self.recording_handler is None:
+                    return _error_response("VK-TEL-009", 503)
+                try:
+                    await self.recording_handler.handle_plivo(event)
+                except VoicekitError as exc:
+                    if exc.code == "VK-RES-010":
+                        return _error_response(exc.code, 503)
+                    raise
+                return Response(status_code=204)
+            if event.type == "initiated":
+                try:
+                    await self.reserve_call(
+                        PipecatCall(
+                            call_id=event.provider_call_id,
+                            channel="phone",
+                            direction=event.direction
+                            or ("outbound" if intent_id is not None else "inbound"),
+                            provider="plivo",
+                            provider_call_id=event.provider_call_id,
+                            from_number=event.from_number,
+                            to_number=event.to_number,
+                        )
+                    )
+                except VoicekitError as exc:
+                    if exc.code not in {"VK-RUN-004", "VK-RUN-008"}:
+                        raise
+                    await asyncio.to_thread(adapter.hangup, event.provider_call_id)
+                    return Response(status_code=204)
+            elif (
+                event.type == "amd"
+                and event.answered_by == "machine"
+                and self.agent.behavior.voicemail != "leave_message"
+            ):
+                await asyncio.to_thread(adapter.hangup, event.provider_call_id)
+                await self._finish_pending(event.provider_call_id, "voicemail")
+            if event.ended_reason is not None:
+                await self._end_from_provider(event)
+            return Response(status_code=204)
+
+        @app.post("/plivo/transfer/{number}")
+        async def plivo_transfer(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            number: str,
+        ) -> Response:
+            adapter = self._require_plivo()
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                route_params={"number": number},
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            caller_id = None if self.agent.phone is None else self.agent.phone.number
+            return Response(
+                content=adapter.transfer_response(number, caller_id=caller_id),
+                media_type="application/xml",
+            )
+
+        @app.websocket("/plivo/media/{token}")
+        async def plivo_media(  # pyright: ignore[reportUnusedFunction]
+            websocket: WebSocket,
+            token: str,
+        ) -> None:
+            await websocket.accept()
+            pending: _PendingCall | None = None
+            try:
+                first_frame = await websocket.receive_text()
+                call_id, stream_id = _plivo_handshake(first_frame)
+                pending = await self._claim_pending_token(token)
+                if call_id != pending.call.provider_call_id:
+                    raise VoicekitError(
+                        "VK-RUN-005",
+                        detail="Plivo start frame does not match the reserved call.",
+                    )
+                transport = FastAPIWebsocketTransport(
+                    websocket=websocket,
+                    params=plivo_transport_params(
+                        settings=self.settings,
+                        call_id=call_id,
+                        stream_id=stream_id,
+                        max_duration_s=self.agent.limits.max_duration_s,
+                    ),
+                )
+                session = self.session_builder.build(
+                    agent=self.agent,
+                    call=pending.call,
+                    lifecycle=pending.lifecycle,
+                    transport=transport,
+                    sample_rate=self.settings.plivo_sample_rate,
+                )
+                session.provider_terminal_required = True
+                async with self._state_lock:
+                    self._active[pending.call.call_id] = session
+                await session.start(self.runner_host.runner)
+                await session.wait()
+            except Exception:
+                if pending is not None and pending.lifecycle.terminal_event is None:
+                    await pending.lifecycle.fail_setup()
+                with suppress(RuntimeError):
+                    await websocket.close(code=1011, reason="VK-RUN-006")
+            finally:
+                if pending is not None:
+                    async with self._state_lock:
+                        self._active.pop(pending.call.call_id, None)
+                    self._mark_idle_if_empty()
+
         @app.post("/api/offer")
         async def web_offer(  # pyright: ignore[reportUnusedFunction]
             request: Request,
@@ -1376,6 +1608,11 @@ class PipecatHost:
             raise VoicekitError("VK-RUN-001", detail="Vobiz adapter is not configured.")
         return self.vobiz
 
+    def _require_plivo(self) -> PlivoRuntimeAdapter:
+        if self.plivo is None:
+            raise VoicekitError("VK-RUN-001", detail="Plivo adapter is not configured.")
+        return self.plivo
+
 
 async def _no_new_connection(_connection: Any) -> None:
     return None
@@ -1482,6 +1719,35 @@ def vobiz_transport_params(
     )
 
 
+def plivo_transport_params(
+    *,
+    settings: PipecatHostSettings,
+    call_id: str,
+    stream_id: str,
+    max_duration_s: int,
+) -> FastAPIWebsocketParams:
+    """Build Plivo's pinned PCMU/8 kHz transport without opaque REST side effects."""
+    serializer = PlivoFrameSerializer(
+        stream_id=stream_id,
+        call_id=call_id,
+        params=PlivoFrameSerializer.InputParams(
+            plivo_sample_rate=8000,
+            sample_rate=8000,
+            auto_hang_up=False,
+        ),
+    )
+    return FastAPIWebsocketParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+        audio_in_sample_rate=settings.plivo_sample_rate,
+        audio_out_sample_rate=settings.plivo_sample_rate,
+        add_wav_header=False,
+        serializer=serializer,
+        session_timeout=max_duration_s + 30,
+        allowed_origins=[],
+    )
+
+
 def _twilio_handshake(call_data: CallData) -> tuple[str, str, str]:
     call_id = call_data.call_id
     stream_id = call_data.stream_id
@@ -1550,6 +1816,45 @@ def _vobiz_handshake(raw_frame: str) -> tuple[str, str]:
         )
     if not call_id or not stream_id:
         raise VoicekitError("VK-RUN-005", detail="Vobiz start frame lacks call or stream data.")
+    return call_id, stream_id
+
+
+def _plivo_handshake(raw_frame: str) -> tuple[str, str]:
+    """Parse exactly Plivo's start frame without consuming a media frame."""
+    try:
+        payload_value: object = json.loads(raw_frame)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise VoicekitError("VK-RUN-005", detail="Plivo start frame is invalid JSON.") from exc
+    if not isinstance(payload_value, dict):
+        raise VoicekitError("VK-RUN-005", detail="Plivo start frame must be an object.")
+    payload = cast("dict[str, object]", payload_value)
+    if payload.get("event") != "start":
+        raise VoicekitError("VK-RUN-005", detail="Plivo media must begin with a start frame.")
+    start_value = payload.get("start")
+    if not isinstance(start_value, dict):
+        raise VoicekitError("VK-RUN-005", detail="Plivo start frame lacks start data.")
+    start = cast("dict[str, object]", start_value)
+    call_id = str(start.get("callId", ""))
+    stream_id = str(start.get("streamId", payload.get("streamId", "")))
+    media_value = start.get("mediaFormat")
+    if not isinstance(media_value, dict):
+        raise VoicekitError("VK-RUN-005", detail="Plivo start frame lacks media format.")
+    media = cast("dict[str, object]", media_value)
+    content_type = str(media.get("contentType", media.get("encoding", ""))).casefold()
+    sample_rate_value = media.get("sampleRate", 0)
+    if not isinstance(sample_rate_value, (str, int)) or isinstance(sample_rate_value, bool):
+        raise VoicekitError("VK-RUN-005", detail="Plivo sample rate is invalid.")
+    try:
+        sample_rate = int(sample_rate_value)
+    except (TypeError, ValueError) as exc:
+        raise VoicekitError("VK-RUN-005", detail="Plivo sample rate is invalid.") from exc
+    if content_type not in {"audio/x-mulaw", "pcmu", "mulaw"} or sample_rate != 8000:
+        raise VoicekitError(
+            "VK-RUN-005",
+            detail=f"Plivo media requires PCMU/8000; received {content_type}/{sample_rate}.",
+        )
+    if not call_id or not stream_id:
+        raise VoicekitError("VK-RUN-005", detail="Plivo start frame lacks call or stream data.")
     return call_id, stream_id
 
 

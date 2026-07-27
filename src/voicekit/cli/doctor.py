@@ -91,9 +91,9 @@ class LiveKitSipInspector:
             if client is not None:
                 await client.aclose()
         missing: list[str] = []
-        if not any(item.name == expected_name for item in inbound.items):
+        if not any(item.name in {expected_name, f"{expected_name}-in"} for item in inbound.items):
             missing.append("inbound trunk")
-        if not any(item.name == expected_name for item in outbound.items):
+        if not any(item.name in {expected_name, f"{expected_name}-out"} for item in outbound.items):
             missing.append("outbound trunk")
         if not any(item.name == expected_name for item in dispatch.items):
             missing.append("dispatch rule")
@@ -291,6 +291,22 @@ class Doctor:
                     "VOICEKIT_VOBIZ_SIP_PASSWORD",
                 )
                 carrier_label = "Vobiz↔LiveKit"
+            elif self.manifest.carriers == ["plivo"]:
+                sip_names = (
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_PLIVO_SIP_USERNAME",
+                    "VOICEKIT_PLIVO_SIP_PASSWORD",
+                )
+                carrier_label = "Plivo↔LiveKit"
+            elif self.manifest.carriers == ["sip"]:
+                sip_names = (
+                    "VOICEKIT_SIP_ADDRESS",
+                    "VOICEKIT_SIP_USERNAME",
+                    "VOICEKIT_SIP_PASSWORD",
+                    "VOICEKIT_SIP_TRANSPORT",
+                    "VOICEKIT_SIP_MEDIA_ENCRYPTION",
+                )
+                carrier_label = "generic SIP↔LiveKit"
             else:
                 sip_names = (
                     "VOICEKIT_LIVEKIT_SIP_URI",
@@ -505,6 +521,10 @@ def _carrier_check(context: ProjectContext, manifest: ProjectManifest) -> Doctor
         return _telnyx_check(context, manifest)
     if manifest.carriers == ["vobiz"]:
         return _vobiz_check(context, manifest)
+    if manifest.carriers == ["plivo"]:
+        return _plivo_check(context, manifest)
+    if manifest.carriers == ["sip"]:
+        return _generic_sip_check(context, manifest)
     return _twilio_check(context, manifest)
 
 
@@ -689,6 +709,93 @@ def _vobiz_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCh
     return _result(
         "carrier",
         "Vobiz account, funding, signatures, and inbound route",
+        issues,
+        advice,
+    )
+
+
+def _plivo_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
+    from voicekit.telephony.plivo import PlivoAdapter
+
+    if manifest.phone_number is None:
+        return _result(
+            "carrier",
+            "Plivo beta account, funding, signatures, and inbound route",
+            ["The Plivo project has no selected number."],
+            ["Resume init and select one owned E.164 number."],
+        )
+    required = ("PLIVO_AUTH_ID", "PLIVO_AUTH_TOKEN")
+    missing = [name for name in required if not context.environment.get(name)]
+    if missing:
+        return _result(
+            "carrier",
+            "Plivo beta account, funding, signatures, and inbound route",
+            [f"Missing Plivo values: {', '.join(missing)}."],
+            ["Run `voicekit keys add plivo`, then rerun `voicekit doctor`."],
+        )
+    issues: list[str] = []
+    advice: list[str] = []
+    adapter = PlivoAdapter(
+        auth_id=context.environment.get("PLIVO_AUTH_ID"),
+        auth_token=context.environment.get("PLIVO_AUTH_TOKEN"),
+        ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+        expected_public_base=context.environment.get("VOICEKIT_PUBLIC_URL"),
+    )
+    try:
+        account = adapter.account_state()
+        try:
+            balance = None if account.balance is None else float(account.balance)
+        except ValueError:
+            balance = None
+        if balance is not None and balance <= 0:
+            issues.append(f"Plivo balance is {account.balance} {account.currency or ''}.".strip())
+            advice.append("Fund the Plivo account before placing a paid call.")
+        selected = [
+            number for number in adapter.list_numbers() if number.number == manifest.phone_number
+        ]
+        if len(selected) != 1:
+            issues.append(f"{manifest.phone_number} is not uniquely owned by this Plivo account.")
+            advice.append("Select an owned E.164 number with `voicekit init --resume`.")
+        elif manifest.runtime == "pipecat":
+            route = adapter.inbound_route(manifest.phone_number)
+            if not route.get("app_id"):
+                issues.append("The selected Plivo number has no inbound application.")
+                advice.append("Run `voicekit dev --phone` for a conflict-safe temporary route.")
+        advice.append(
+            "Plivo remains Beta: run the documented inbound/outbound PSTN checklist "
+            "before production traffic."
+        )
+    finally:
+        adapter.ledger.close()
+    return _result(
+        "carrier",
+        "Plivo beta account, funding, signatures, and inbound route",
+        issues,
+        advice,
+    )
+
+
+def _generic_sip_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
+    required = (
+        "VOICEKIT_SIP_ADDRESS",
+        "VOICEKIT_SIP_USERNAME",
+        "VOICEKIT_SIP_PASSWORD",
+        "VOICEKIT_SIP_TRANSPORT",
+        "VOICEKIT_SIP_MEDIA_ENCRYPTION",
+    )
+    missing = [name for name in required if not context.environment.get(name)]
+    issues = ["Generic SIP is LiveKit-only."] if manifest.runtime != "livekit" else []
+    advice = ["Resume init with the LiveKit runtime."] if manifest.runtime != "livekit" else []
+    if missing:
+        issues.append(f"Missing generic SIP values: {', '.join(missing)}.")
+        advice.append("Run `voicekit keys add sip`, then rerun `voicekit doctor`.")
+    advice.append(
+        "Generic SIP is Beta and operator-managed: point the PBX/carrier at the "
+        "LiveKit SIP endpoint, then complete the documented loopback checklist."
+    )
+    return _result(
+        "carrier",
+        "Generic SIP beta configuration and operator route",
         issues,
         advice,
     )

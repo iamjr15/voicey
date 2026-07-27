@@ -47,6 +47,7 @@ from voicekit.storage.artifacts import LocalArtifactStore
 from voicekit.storage.sqlite import SQLiteRepository
 
 if TYPE_CHECKING:
+    from voicekit.telephony.plivo import PlivoAdapter
     from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.twilio import TwilioAdapter
     from voicekit.telephony.vobiz import VobizAdapter
@@ -182,6 +183,7 @@ async def _serve(
     twilio: TwilioAdapter | None = None
     telnyx: TelnyxAdapter | None = None
     vobiz: VobizAdapter | None = None
+    plivo: PlivoAdapter | None = None
     database_path = preflight.database_path
     async with SQLiteRepository(database_path) as repository:
         if agent.phone is not None:
@@ -237,6 +239,25 @@ async def _serve(
                     ledger_path=settings.data_dir / "telephony.sqlite3",
                     expected_public_base=settings.public_base,
                 )
+            elif agent.phone.provider == "plivo":
+                from voicekit.telephony.plivo import PlivoAdapter
+
+                missing = [
+                    name
+                    for name in ("PLIVO_AUTH_ID", "PLIVO_AUTH_TOKEN")
+                    if not environment.get(name)
+                ]
+                if missing:
+                    raise VoicekitError(
+                        "VK-DEP-003",
+                        detail=f"Plivo deployment is missing {', '.join(missing)}.",
+                    )
+                plivo = PlivoAdapter(
+                    auth_id=environment.get("PLIVO_AUTH_ID"),
+                    auth_token=environment.get("PLIVO_AUTH_TOKEN"),
+                    ledger_path=settings.data_dir / "telephony.sqlite3",
+                    expected_public_base=settings.public_base,
+                )
             else:
                 raise VoicekitError(
                     "VK-DEP-003",
@@ -287,6 +308,7 @@ async def _serve(
                 twilio=twilio,
                 telnyx=telnyx,
                 vobiz=vobiz,
+                plivo=plivo,
             )
             if agent.phone is not None and agent.phone.record
             else None
@@ -304,6 +326,7 @@ async def _serve(
             twilio=twilio,
             telnyx=telnyx,
             vobiz=vobiz,
+            plivo=plivo,
             web_sessions=web_security,
             recording_handler=recording_handler,
         )
@@ -337,6 +360,8 @@ async def _serve(
                 await asyncio.to_thread(telnyx.ledger.close)
             if vobiz is not None:
                 await asyncio.to_thread(vobiz.ledger.close)
+            if plivo is not None:
+                await asyncio.to_thread(plivo.ledger.close)
 
 
 def _admin_app(

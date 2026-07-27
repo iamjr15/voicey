@@ -207,6 +207,22 @@ trunk carries the Twilio termination credentials. Secure trunking uses TLS for
 both the Twilio origination URI and the LiveKit outbound transport. Rollback
 must restore the complete pre-trunk number route.
 
+For Plivo Zentrunk, the current official LiveKit provider contract is also
+asymmetric: inbound Plivo origination targets
+`<livekit-sip-host>;transport=tcp`, while the credentialed outbound Plivo trunk
+is created with `secure=true` and the matching LiveKit outbound trunk requires
+TLS plus media encryption. The LiveKit inbound trunk declares media encryption
+disabled because the published inbound procedure does not specify a secure
+media leg. Credential adoption must bind the write-only password through a
+secret-derived deterministic fingerprint without storing the password.
+
+Generic SIP is an explicit LiveKit-only Beta boundary. Voicekit provisions and
+rolls back the LiveKit inbound trunk, dispatch rule, and outbound trunk; the
+operator owns the external PBX/carrier route, ACL, credentials, transport,
+media policy, and its rollback. The CLI must collect transport and media policy
+explicitly, reject TLS with disabled media encryption, and never claim the
+unmanaged external route was provisioned or certified.
+
 ### 5.2 Carrier matrix at launch
 
 | Carrier | Tier | Pipecat path | LiveKit path | Notes |
@@ -214,8 +230,8 @@ must restore the complete pre-trunk number route.
 | Twilio | **Certified** | Media Streams WS + TwiML | Elastic SIP trunk | Reference implementation |
 | Telnyx | **Certified** | TeXML + streaming | SIP trunk | |
 | Vobiz | **Certified** | VobizXML + bidirectional PCMU WS | API-managed UDP SIP trunks | India wedge; credentialed/PSTN certification remains a release gate |
-| Plivo | Beta | Plivo XML + streams | SIP trunk | |
-| Generic SIP | Beta | — (use LiveKit path) | Direct trunk | Escape hatch for PBX/other carriers |
+| Plivo | Beta | Plivo XML + signed bidirectional PCMU streams | API-managed Zentrunk SIP | Inbound TCP; secure outbound TLS/media |
+| Generic SIP | Beta | — (use LiveKit path) | Operator-managed direct trunk | Voicekit owns only LiveKit resources |
 
 **Certification checklist (required for "Certified"; CI-enforced):** inbound + outbound live tests pass nightly; signature verification implemented and negative-tested; DTMF in/out; hangup semantics (both directions, all terminal reasons mapped); recording completion ingestion (signed callback when the carrier surface supports one, otherwise a documented bounded reconciliation keyed by an authenticated carrier call ID); transfer where capability-flagged; rollback-on-Ctrl-C proven; region/latency notes documented; runbook page for common carrier errors (mapped into the CLI error catalog §7.6).
 

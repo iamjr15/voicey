@@ -1,5 +1,10 @@
 """Production LiveKit Agents runtime adapters."""
 
+from voicekit.runtimes.livekit.generic_sip import (
+    GenericSipConfig,
+    GenericSipProvisioner,
+    GenericSipProvisioningResult,
+)
 from voicekit.runtimes.livekit.host import (
     LiveKitAdmissionGate,
     LiveKitHost,
@@ -9,6 +14,12 @@ from voicekit.runtimes.livekit.lifecycle import (
     LiveKitCall,
     LiveKitCallLifecycle,
     LiveKitLifecycleManager,
+)
+from voicekit.runtimes.livekit.plivo import (
+    PlivoLiveKitSipConfig,
+    PlivoLiveKitSipProvisioner,
+    PlivoSipHTTPBackend,
+    PlivoSipProvisioningResult,
 )
 from voicekit.runtimes.livekit.session import LiveKitSession, LiveKitSessionBuilder
 from voicekit.runtimes.livekit.sip import (
@@ -34,6 +45,9 @@ from voicekit.runtimes.livekit.vobiz import (
 )
 
 __all__ = [
+    "GenericSipConfig",
+    "GenericSipProvisioner",
+    "GenericSipProvisioningResult",
     "LiveKitAdmissionGate",
     "LiveKitCall",
     "LiveKitCallLifecycle",
@@ -45,6 +59,10 @@ __all__ = [
     "LiveKitSipDialer",
     "LiveKitToken",
     "LiveKitTokenIssuer",
+    "PlivoLiveKitSipConfig",
+    "PlivoLiveKitSipProvisioner",
+    "PlivoSipHTTPBackend",
+    "PlivoSipProvisioningResult",
     "SipProvisioningResult",
     "TelnyxLiveKitSipConfig",
     "TelnyxLiveKitSipProvisioner",

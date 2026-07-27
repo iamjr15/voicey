@@ -152,6 +152,8 @@ def test_project_agent_loader_catalogs_import_shape_and_runtime_failures(
 def test_capabilities_and_recipes_report_runtime_and_recipe_availability() -> None:
     assert DEFAULT_CAPABILITIES.require("runtime", "pipecat").enabled
     assert DEFAULT_CAPABILITIES.require("runtime", "livekit").enabled
+    assert DEFAULT_CAPABILITIES.require("carrier", "plivo").install_extra == "plivo"
+    assert DEFAULT_CAPABILITIES.require("carrier", "sip").install_extra == "livekit"
 
     available = DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False)
     assert [recipe.name for recipe in available] == [
@@ -485,6 +487,32 @@ async def test_key_validation_distinguishes_missing_invalid_and_indeterminate() 
 
 
 @pytest.mark.asyncio
+async def test_generic_sip_key_validation_is_local_and_fail_closed() -> None:
+    client = FakeHttpClient()
+    validator = ProviderKeyValidator(client=client)
+    valid = {
+        "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
+        "VOICEKIT_SIP_USERNAME": "voicekit",
+        "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+        "VOICEKIT_SIP_TRANSPORT": "tls",
+        "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+    }
+
+    accepted = await validator.validate("carrier", "sip", valid)
+    rejected = await validator.validate(
+        "carrier",
+        "sip",
+        valid | {"VOICEKIT_SIP_MEDIA_ENCRYPTION": "disable"},
+    )
+    missing = await validator.validate("carrier", "sip", {})
+
+    assert accepted.status == "valid"
+    assert rejected.status == "invalid"
+    assert missing.status == "missing"
+    assert client.requests == []
+
+
+@pytest.mark.asyncio
 async def test_key_validation_catalogs_timeout_unknown_network_and_template_errors() -> None:
     with pytest.raises(VoicekitError) as timeout:
         ProviderKeyValidator(timeout_s=0)
@@ -728,6 +756,74 @@ def test_livekit_vobiz_scaffold_declares_every_control_plane_value(tmp_path: Pat
     assert "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID=" in env
     assert "VOICEKIT_VOBIZ_SIP_USERNAME=" in env
     assert "VOICEKIT_VOBIZ_SIP_PASSWORD=" in env
+
+
+@pytest.mark.parametrize(
+    ("carrier", "expected_extra", "expected_env"),
+    [
+        (
+            "plivo",
+            "voicekit[livekit,plivo]",
+            {
+                "PLIVO_AUTH_ID=",
+                "PLIVO_AUTH_TOKEN=",
+                "VOICEKIT_LIVEKIT_SIP_URI=",
+                "VOICEKIT_PLIVO_SIP_USERNAME=",
+                "VOICEKIT_PLIVO_SIP_PASSWORD=",
+            },
+        ),
+        (
+            "sip",
+            "voicekit[livekit]",
+            {
+                "VOICEKIT_SIP_ADDRESS=",
+                "VOICEKIT_SIP_ALLOWED_ADDRESSES=",
+                "VOICEKIT_SIP_USERNAME=",
+                "VOICEKIT_SIP_PASSWORD=",
+                "VOICEKIT_SIP_TRANSPORT=",
+                "VOICEKIT_SIP_MEDIA_ENCRYPTION=",
+            },
+        ),
+    ],
+)
+def test_livekit_beta_carrier_scaffolds_are_complete(
+    tmp_path: Path,
+    carrier: str,
+    expected_extra: str,
+    expected_env: set[str],
+) -> None:
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    manifest = ProjectManifest(
+        project_name=f"{carrier}-agent",
+        runtime="livekit",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"phone"}),
+        models=models,
+        carriers=[carrier],
+        phone_number="+14155550123",
+    )
+    scaffold = ScratchScaffold(
+        project_name=f"{carrier}-agent",
+        description="Handle calls.",
+        stt="deepgram/nova-3",
+        llm="anthropic/claude-sonnet-5",
+        tts="cartesia/sonic-3.5",
+        phone_provider=carrier,
+        phone_number="+14155550123",
+        web_enabled=False,
+        runtime="livekit",
+    )
+
+    ScaffoldWriter().write(tmp_path, scaffold, manifest)
+
+    project = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    env = set((tmp_path / ".env.example").read_text(encoding="utf-8").splitlines())
+    assert expected_extra in project
+    assert expected_env <= env
 
 
 def test_scaffold_refuses_to_overwrite_user_content(tmp_path: Path) -> None:

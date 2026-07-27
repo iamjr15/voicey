@@ -54,7 +54,14 @@ class DockerDeploymentGenerator:
 
     def generate(self, *, engine_wheel: Path | None = None) -> DockerArtifacts:
         manifest = ManifestStore(self.project_root / "voicekit.jsonc").load()
-        extras = ",".join(dict.fromkeys((manifest.runtime, *manifest.carriers)))
+        extras = ",".join(
+            dict.fromkeys(
+                (
+                    manifest.runtime,
+                    *("livekit" if carrier == "sip" else carrier for carrier in manifest.carriers),
+                )
+            )
+        )
         package_spec = f"voicekit[{extras}]=={__version__}"
         wheel_destination = self._copy_wheel(engine_wheel)
         artifacts = DockerArtifacts(

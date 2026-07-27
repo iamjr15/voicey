@@ -252,6 +252,26 @@ def test_catalog_validation_reports_unknown_models_missing_carrier_keys_and_bad_
     assert all(issue.fix for issue in issues)
 
 
+def test_generic_sip_is_livekit_only_in_config_validation() -> None:
+    pipecat = _agent(phone=Phone(provider="sip", number="+14155550123"))
+    livekit = pipecat.model_copy(update={"runtime": "livekit"})
+    environment = _valid_environment() | {
+        "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
+        "VOICEKIT_SIP_USERNAME": "voicekit",
+        "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+        "VOICEKIT_SIP_TRANSPORT": "tls",
+        "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+    }
+
+    pipecat_issues = collect_config_issues(pipecat, environ=environment)
+    livekit_issues = collect_config_issues(livekit, environ=environment)
+
+    assert any(
+        issue.code == "VK-CFG-102" and issue.path == "phone.provider" for issue in pipecat_issues
+    )
+    assert not any(issue.code == "VK-CFG-102" for issue in livekit_issues)
+
+
 def test_catalog_validation_checks_runtime_and_language() -> None:
     constrained = ProviderCatalog(
         (

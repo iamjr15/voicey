@@ -12,6 +12,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | LiveKit Agents | `livekit-agents==1.6.7` | Installed from PyPI on 2026-07-26; latest resolver candidate was unchanged |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
+| Plivo Python | `plivo==4.61.0` | Installed on 2026-07-27; Voice/number/recording calls and the six-argument V3 signature helper were introspected and exercised |
 | ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |
 | cloudflared CLI | `2026.3.0` observed locally | Quick-tunnel URL emission and bounded process cleanup ran; public hostname DNS remained unavailable, so external WS evidence is pending |
 | websockets Python | `>=13.1,<17` (`15.0.1` selected with both runtime extras) | Pipecat uses APIs present across the range; LiveKit 1.6.7's OpenAI plugin requires `<16` |
@@ -43,6 +44,17 @@ This table records versions empirically installed and inspected during P0. Runti
 - Twilio↔LiveKit SIP: Twilio-originated traffic cannot use username/password auth, so the number-scoped LiveKit inbound trunk is unauthenticated; Twilio termination credentials are configured on the LiveKit outbound trunk. A secure Twilio trunk uses `;transport=tls` for its origination URI and `SIP_TRANSPORT_TLS` outbound. This is the current documented provider contract, not an SDK inference.
 - Twilio Elastic SIP automatic recording: the trunk resource exposes only `RecordingContext.fetch()` / `update(mode, trim)` and no status-callback field. LiveKit supplies the authenticated carrier correlation as participant attribute `sip.twilio.callSid`; voicekit queries Core Recordings by that CA SID, requires exactly one completed item with source `Trunking`, and then reuses the authenticated media downloader.
 - Twilio request validation: `RequestValidator.validate(uri, params, signature)`; JSON body hashing is selected by the signed `bodySHA256` query parameter.
+- Plivo request validation: installed
+  `validate_v3_signature(method, uri, nonce, auth_token, signature, params)`
+  canonicalizes the POST form; V3 signature and nonce headers are both
+  mandatory and voicekit adds replay rejection.
+- Pipecat Plivo media: `PlivoFrameSerializer` consumes and emits the documented
+  PCMU/8 kHz media envelope. Voicekit sets `auto_hang_up=False` so carrier
+  control remains in the fenced adapter.
+- Plivo↔LiveKit SIP: the current provider guide uses
+  `<livekit-sip-host>;transport=tcp` inbound. The Plivo outbound trunk uses
+  `secure=true`; the LiveKit outbound trunk uses TLS with required media
+  encryption. The documented inbound LiveKit trunk does not claim encryption.
 - Twilio outbound: `CallList.create` has no idempotency-key parameter; async AMD uses `async_amd` plus its callback fields, and call redirects use `CallContext.update(twiml=...)`.
 - ngrok Python: synchronous `forward()` returns a listener; `Listener.close()` is awaitable. HTTP endpoints carry WebSocket upgrades without a second endpoint.
 - Cloudflared quick tunnels emit their public URL on stderr before edge DNS is necessarily ready; the WebSocket probe retries within one bounded deadline.

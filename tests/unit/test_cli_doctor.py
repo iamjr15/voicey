@@ -21,8 +21,11 @@ from voicekit.cli.doctor import (
     Doctor,
     DoctorCheck,
     LiveKitSipInspector,
+    _carrier_check,
     _disk_check,
     _env_check,
+    _generic_sip_check,
+    _plivo_check,
     _port_check,
     _python_check,
     _results_endpoint,
@@ -471,6 +474,98 @@ def test_vobiz_doctor_checks_funding_ownership_and_inbound_route(
     assert any("balance" in issue for issue in check.issues)
     assert any("no inbound" in issue for issue in check.issues)
     assert any("KYC" in advice for advice in check.advice)
+
+
+def test_plivo_doctor_checks_funding_ownership_and_inbound_route(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class FakePlivoCarrier(FakeCarrier):
+        def account_state(self) -> CarrierAccountState:
+            return CarrierAccountState(
+                provider="plivo",
+                status="active",
+                account_type="standard",
+                balance="0",
+                currency="USD",
+            )
+
+        def inbound_route(self, _number: str) -> dict[str, str | None]:
+            return {"app_id": None}
+
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    manifest = ProjectManifest(
+        project_name="plivo-doctor",
+        runtime="pipecat",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"phone"}),
+        models=models,
+        carriers=["plivo"],
+        phone_number="+919876543210",
+    )
+    context = ProjectContext(
+        tmp_path,
+        manifest,
+        False,
+        {
+            "PLIVO_AUTH_ID": "MA" + "2" * 18,
+            "PLIVO_AUTH_TOKEN": "token",  # pragma: allowlist secret
+        },
+    )
+    monkeypatch.setattr("voicekit.telephony.plivo.PlivoAdapter", FakePlivoCarrier)
+
+    check = _carrier_check(context, manifest)
+
+    assert not check.ok
+    assert any("balance" in issue for issue in check.issues)
+    assert any("no inbound" in issue for issue in check.issues)
+    assert any("Beta" in advice for advice in check.advice)
+
+    missing = _plivo_check(ProjectContext(tmp_path, manifest, False, {}), manifest)
+    assert not missing.ok
+    assert "PLIVO_AUTH_ID" in missing.issues[0]
+
+
+def test_generic_sip_doctor_enforces_livekit_and_operator_boundary(tmp_path: Path) -> None:
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    pipecat_manifest = ProjectManifest(
+        project_name="sip-doctor",
+        runtime="pipecat",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"phone"}),
+        models=models,
+        carriers=["sip"],
+        phone_number="+14155550123",
+    )
+    environment = {
+        "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
+        "VOICEKIT_SIP_USERNAME": "voicekit",
+        "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+        "VOICEKIT_SIP_TRANSPORT": "tls",
+        "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+    }
+    pipecat = _generic_sip_check(
+        ProjectContext(tmp_path, pipecat_manifest, False, environment),
+        pipecat_manifest,
+    )
+    livekit_manifest = pipecat_manifest.model_copy(update={"runtime": "livekit"})
+    livekit = _carrier_check(
+        ProjectContext(tmp_path, livekit_manifest, False, environment),
+        livekit_manifest,
+    )
+
+    assert not pipecat.ok
+    assert "LiveKit-only" in pipecat.issues[0]
+    assert livekit.ok
+    assert any("operator-managed" in advice for advice in livekit.advice)
 
 
 def _free_port() -> int:

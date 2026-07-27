@@ -240,6 +240,7 @@ class _RecordingHandler:
         self.twilio: list[CallEvent] = []
         self.telnyx: list[CallEvent] = []
         self.vobiz: list[CallEvent] = []
+        self.plivo: list[CallEvent] = []
 
     async def handle_twilio(self, event: CallEvent) -> None:
         self.twilio.append(event)
@@ -249,6 +250,9 @@ class _RecordingHandler:
 
     async def handle_vobiz(self, event: CallEvent) -> None:
         self.vobiz.append(event)
+
+    async def handle_plivo(self, event: CallEvent) -> None:
+        self.plivo.append(event)
 
     async def read(self, recording_id: str, authorization: str | None) -> bytes:
         if authorization != "Bearer whsec-test":
@@ -726,6 +730,10 @@ async def test_recording_callback_retry_and_signature_failures_are_visible(
             raise VoicekitError("VK-RES-010", detail="terminal pending")
 
         async def handle_telnyx(self, event: CallEvent) -> None:
+            del event
+            raise VoicekitError("VK-RES-010", detail="terminal pending")
+
+        async def handle_plivo(self, event: CallEvent) -> None:
             del event
             raise VoicekitError("VK-RES-010", detail="terminal pending")
 

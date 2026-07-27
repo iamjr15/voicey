@@ -23,6 +23,8 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P2 unified appointment audio suite, both runtimes | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys, Ollama, Kokoro/Moonshine downloads; both generated projects |
 | P2 Telnyx certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Telnyx/LiveKit accounts, both carrier paths, public target, PSTN |
 | P3 Vobiz certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Vobiz/LiveKit accounts, Vobiz SIP credential, public Pipecat target, PSTN |
+| P3 Plivo Beta certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Plivo/LiveKit accounts, public Pipecat target, Zentrunk credentials, PSTN |
+| P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
@@ -684,6 +686,138 @@ Then perform the physical both-path checklist:
 This row stays pending until both commands return zero and the physical
 checklist is recorded. A passing offline suite or provider dashboard screenshot
 is not a substitute.
+
+## P3 Plivo Beta certification on Pipecat and LiveKit
+
+Offline certification covers installed-SDK V3 signature canonicalization,
+nonce replay rejection, Plivo XML, PCMU/8 kHz bidirectional media, interruption
+clear, provider-authoritative terminalization, route and outbound-intent
+fencing, bounded recording ingestion, current Zentrunk request shapes,
+deterministic adoption, drift rejection, ambiguity fencing, and reverse
+rollback. It does not prove a funded Plivo account, provider region, or PSTN
+conversation.
+
+Export the Plivo account, owned number, public deployment, and paid-call
+values:
+
+```bash
+export PLIVO_AUTH_ID='MA...'
+export PLIVO_AUTH_TOKEN='...'
+export VOICEKIT_PLIVO_LIVE_FROM='+1415...'
+export VOICEKIT_PLIVO_LIVE_TO='+1415...'
+export VOICEKIT_PLIVO_TRANSFER_TO='+1415...'
+export VOICEKIT_LIVE_PUBLIC_BASE='https://voice.example.com'
+export VOICEKIT_PLIVO_LIVE_RECORDING_URL='https://provider-url-from-a-verified-callback'
+export VOICEKIT_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
+export VOICEKIT_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
+```
+
+Run the account/ownership, temporary-route rollback, paid AMD/DTMF/cold
+transfer, and recording-ingestion gates:
+
+```bash
+uv run pytest -q --no-cov -m live tests/live/test_plivo_live.py
+```
+
+The route test restores in `finally`. The recording URL must come from a
+callback whose V3 signature the deployed host verified; an arbitrary Plivo or
+third-party URL is invalid evidence.
+
+For the LiveKit path, export the project, Zentrunk credential, deployed native
+agent, and certification room:
+
+```bash
+export LIVEKIT_URL='wss://project.livekit.cloud'
+export LIVEKIT_API_KEY='...'
+export LIVEKIT_API_SECRET='...'
+export VOICEKIT_LIVEKIT_AGENT_NAME='appointment-booking'
+export VOICEKIT_LIVEKIT_SIP_URI='sip:project-id.sip.livekit.cloud'
+export VOICEKIT_PLIVO_SIP_USERNAME='voicekituser'
+export VOICEKIT_PLIVO_SIP_PASSWORD='strong-special-value' # pragma: allowlist secret
+export LIVEKIT_SIP_OUTBOUND_TRUNK='ST_...'
+export VOICEKIT_LIVEKIT_CERT_ROOM='voicekit-plivo-cert'
+```
+
+Run provision→reuse→reverse rollback and the paid outbound SIP call:
+
+```bash
+uv run pytest -q --no-cov -m live tests/live/test_plivo_livekit_live.py
+```
+
+Then perform the physical both-path checklist:
+
+1. Call the Plivo number through the Pipecat route; verify the greeting,
+   two-way speech, interruption clear, incoming/outgoing DTMF, caller and agent
+   hangup, and exactly one acknowledged terminal result.
+2. Place the guarded Pipecat outbound call; verify async AMD, configured
+   digits, cold transfer to a second physical endpoint, signed recording
+   callback, authenticated engine artifact, and route restoration.
+3. Provision the LiveKit route twice and confirm the second operation creates
+   zero resources. Exercise inbound and outbound speech, DTMF, hangup, result
+   delivery, and reverse rollback.
+4. Inspect the interconnect: inbound Plivo origination is
+   `<livekit-sip-host>;transport=tcp`; the LiveKit inbound trunk does not claim
+   encrypted media; outbound Plivo `secure=true` agrees with LiveKit TLS and
+   required media encryption.
+5. For India destinations, pin the LiveKit region required by the provider
+   guide and record it with the latency evidence.
+6. Retain call, stream, recording, event, and provisioning ids plus timestamps
+   and zero-exit output, without retaining credentials or raw caller PII.
+
+Plivo stays Beta after these rows pass. Promotion to Certified is a separate
+spec decision and requires nightly evidence, not just a dashboard screenshot.
+
+## P3 generic SIP Beta loopback
+
+The local suite proves only the LiveKit side: exact transport/media mapping,
+optional CIDR restrictions, deterministic adoption, drift rejection,
+write-ahead provisioning records, reverse rollback, and ambiguous-write
+fencing. The external PBX/carrier route is deliberately operator-owned.
+
+Export the LiveKit project and the exact external trunk values:
+
+```bash
+export LIVEKIT_URL='wss://project.livekit.cloud'
+export LIVEKIT_API_KEY='...'
+export LIVEKIT_API_SECRET='...'
+export VOICEKIT_LIVEKIT_AGENT_NAME='appointment-booking'
+export VOICEKIT_SIP_LIVE_FROM='+1415...'
+export VOICEKIT_SIP_LIVE_TO='+1415...'
+export VOICEKIT_SIP_ADDRESS='trunk.provider.example:5061'
+export VOICEKIT_SIP_USERNAME='voicekit'
+export VOICEKIT_SIP_PASSWORD='...'
+export VOICEKIT_SIP_TRANSPORT='tls'
+export VOICEKIT_SIP_MEDIA_ENCRYPTION='require'
+export VOICEKIT_SIP_ALLOWED_ADDRESSES='203.0.113.0/24'
+export LIVEKIT_SIP_OUTBOUND_TRUNK='ST_...'
+export VOICEKIT_LIVEKIT_CERT_ROOM='voicekit-generic-sip-cert'
+export VOICEKIT_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
+export VOICEKIT_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
+```
+
+Run the guarded LiveKit provision/reuse/rollback and paid loopback:
+
+```bash
+uv run pytest -q --no-cov -m live tests/live/test_generic_sip_live.py
+```
+
+Operator checklist:
+
+1. Point the external trunk's inbound destination at the LiveKit SIP endpoint
+   and configure its reverse route to `VOICEKIT_SIP_ADDRESS`.
+2. Confirm username/password, source CIDRs, signaling transport, and media
+   policy match exactly on both systems. Never use TLS with disabled media
+   encryption.
+3. Call inbound and outbound between physical endpoints; verify two-way audio,
+   interruption, DTMF, both hangup directions, one terminal event, and the
+   expected caller ID.
+4. Run provisioning twice and verify zero new resources on the second pass.
+   Roll back and confirm every voicekit-created LiveKit resource is removed.
+5. Restore the external route manually and retain its audit evidence because
+   voicekit does not own that control plane.
+
+This row remains pending until the command and every external-route check pass.
+It does not turn generic SIP into a Certified carrier.
 
 ## P3 first-party recipe provider conversations
 

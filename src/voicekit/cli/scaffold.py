@@ -235,7 +235,9 @@ def test_example_conversation_goal() -> None:
 '''
     extras = [scaffold.runtime]
     if scaffold.phone_provider is not None:
-        extras.append(scaffold.phone_provider)
+        carrier_extra = "livekit" if scaffold.phone_provider == "sip" else scaffold.phone_provider
+        if carrier_extra not in extras:
+            extras.append(carrier_extra)
     extra_list = ",".join(extras)
     pyproject = f"""[project]
 name = {scaffold.project_name!r}
@@ -266,6 +268,19 @@ testpaths = ["tests"]
         )
     elif scaffold.phone_provider == "vobiz":
         env_names.update({"VOBIZ_AUTH_ID", "VOBIZ_AUTH_TOKEN"})
+    elif scaffold.phone_provider == "plivo":
+        env_names.update({"PLIVO_AUTH_ID", "PLIVO_AUTH_TOKEN"})
+    elif scaffold.phone_provider == "sip":
+        env_names.update(
+            {
+                "VOICEKIT_SIP_ADDRESS",
+                "VOICEKIT_SIP_ALLOWED_ADDRESSES",
+                "VOICEKIT_SIP_MEDIA_ENCRYPTION",
+                "VOICEKIT_SIP_PASSWORD",
+                "VOICEKIT_SIP_TRANSPORT",
+                "VOICEKIT_SIP_USERNAME",
+            }
+        )
     if scaffold.runtime == "livekit":
         env_names.update({"LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"})
         if scaffold.phone_provider == "twilio":
@@ -292,6 +307,14 @@ testpaths = ["tests"]
                     "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID",
                     "VOICEKIT_VOBIZ_SIP_PASSWORD",
                     "VOICEKIT_VOBIZ_SIP_USERNAME",
+                }
+            )
+        elif scaffold.phone_provider == "plivo":
+            env_names.update(
+                {
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_PLIVO_SIP_PASSWORD",
+                    "VOICEKIT_PLIVO_SIP_USERNAME",
                 }
             )
     if is_recipe:

@@ -46,6 +46,17 @@ class VobizRecordingAdapter(Protocol):
     ) -> str: ...
 
 
+class PlivoRecordingAdapter(Protocol):
+    async def download_recording(
+        self,
+        recording_url: str,
+        *,
+        artifact_store: ArtifactStore,
+        storage_key: str,
+        max_bytes: int = 100 * 1024 * 1024,
+    ) -> str: ...
+
+
 class PipecatRecordingHandler:
     """Normalize verified carrier callbacks into one engine-owned artifact."""
 
@@ -60,6 +71,7 @@ class PipecatRecordingHandler:
         twilio: TwilioRecordingAdapter | None = None,
         telnyx: TelnyxRecordingAdapter | None = None,
         vobiz: VobizRecordingAdapter | None = None,
+        plivo: PlivoRecordingAdapter | None = None,
     ) -> None:
         parsed = urlsplit(access_base.rstrip("/"))
         if (
@@ -87,6 +99,7 @@ class PipecatRecordingHandler:
         self.twilio = twilio
         self.telnyx = telnyx
         self.vobiz = vobiz
+        self.plivo = plivo
 
     async def handle_twilio(self, event: CallEvent) -> None:
         if event.type == "recording_failed":
@@ -147,6 +160,29 @@ class PipecatRecordingHandler:
             return
         recording_id, storage_key = pending
         await self.vobiz.download_recording(
+            event.recording_url,
+            artifact_store=self.artifact_store,
+            storage_key=storage_key,
+        )
+        await self._mark_ready(recording_id, storage_key)
+
+    async def handle_plivo(self, event: CallEvent) -> None:
+        if event.type == "recording_failed":
+            await self.repository.mark_recording_failed(event.provider_call_id)
+            return
+        if (
+            event.type != "recording_ready"
+            or event.recording_sid is None
+            or event.recording_url is None
+        ):
+            raise VoicekitError("VK-TEL-009", detail="invalid Plivo recording callback.")
+        if self.plivo is None:
+            raise VoicekitError("VK-TEL-009", detail="Plivo recording adapter is unavailable.")
+        pending = await self._pending(event.provider_call_id)
+        if pending is None:
+            return
+        recording_id, storage_key = pending
+        await self.plivo.download_recording(
             event.recording_url,
             artifact_store=self.artifact_store,
             storage_key=storage_key,

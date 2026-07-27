@@ -51,6 +51,7 @@ from voicekit.testing.runner import run_project_tests
 from voicekit.tunnel import TunnelPreference
 
 if TYPE_CHECKING:
+    from voicekit.telephony.plivo import PlivoAdapter
     from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.twilio import TwilioAdapter
     from voicekit.telephony.vobiz import VobizAdapter
@@ -982,7 +983,7 @@ def _carrier(
     context: ProjectContext,
     *,
     expected_public_base: str | None = None,
-) -> TwilioAdapter | TelnyxAdapter | VobizAdapter:
+) -> TwilioAdapter | TelnyxAdapter | VobizAdapter | PlivoAdapter:
     from voicekit.telephony.telnyx import TelnyxAdapter
 
     manifest = require_manifest(context)
@@ -1004,9 +1005,21 @@ def _carrier(
             ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
             expected_public_base=expected_public_base,
         )
+    if manifest.carriers == ["plivo"]:
+        from voicekit.telephony.plivo import PlivoAdapter
+
+        return PlivoAdapter(
+            auth_id=context.environment.get("PLIVO_AUTH_ID"),
+            auth_token=context.environment.get("PLIVO_AUTH_TOKEN"),
+            ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+            expected_public_base=expected_public_base,
+        )
     raise VoicekitError(
         "VK-CLI-005",
-        detail="this command requires an enabled Twilio, Telnyx, or Vobiz carrier.",
+        detail=(
+            "this command requires Twilio, Telnyx, Vobiz, or Plivo; "
+            "generic SIP routing is operator-managed."
+        ),
     )
 
 
@@ -1046,10 +1059,22 @@ def _carrier_target(context: ProjectContext, public_base: str) -> PipecatTarget:
             recording_path="/vobiz/recordings",
             amd_path="/vobiz/amd",
         )
+    if manifest.carriers == ["plivo"]:
+        return PipecatTarget(
+            public_base,
+            ws_path="/plivo/media",
+            answer_path="/plivo/answer",
+            event_path="/plivo/events",
+            recording_path="/plivo/recordings",
+            amd_path="/plivo/amd",
+        )
     if manifest.carriers != ["twilio"]:
         raise VoicekitError(
             "VK-CLI-005",
-            detail="this command requires an enabled Twilio, Telnyx, or Vobiz carrier.",
+            detail=(
+                "this command requires Twilio, Telnyx, Vobiz, or Plivo; "
+                "generic SIP has no Pipecat target."
+            ),
         )
     return PipecatTarget(public_base)
 
