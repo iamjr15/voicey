@@ -61,11 +61,11 @@ class TwilioAdapter:
         amd=True,
         dtmf_receive=True,
         dtmf_send=True,
-        transfer_modes=frozenset({"cold"}),
+        transfer_modes=frozenset({"cold", "warm"}),
         recording=True,
         regions=("US1", "IE1", "AU1"),
         native_outbound_idempotency=False,
-        livekit_sip=False,
+        livekit_sip=True,
     )
 
     def __init__(
@@ -736,7 +736,7 @@ def _pipecat_target(target: RuntimeTarget) -> PipecatTarget:
     if isinstance(target, LiveKitTarget):
         raise VoicekitError(
             "VK-TEL-002",
-            detail="Twilio LiveKit SIP provisioning lands in P2 and is not capability-enabled.",
+            detail="LiveKit targets must use the ledgered TwilioLiveKitSipProvisioner.",
         )
     return target
 

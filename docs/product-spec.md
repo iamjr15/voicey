@@ -155,13 +155,17 @@ A tool is a plain typed Python function:
 ```python
 from voicekit import tool
 
-@tool(say_while_running="Let me check that for you…")   # optional filler line
+@tool(
+    say_while_running="Let me check that for you…",      # optional filler line
+    mutating=False,                                      # set True for writes
+)
 def check_slots(date: str, party_size: int = 1) -> list[str]:
     """Return open appointment slots for a date."""     # docstring → tool description
     return clinic_api.free_slots(date, party_size)
 ```
 
 - Signature + docstring → JSON schema; bootstrap registers natively (Pipecat flow function / LiveKit function tool). Sync and async supported; sync runs in a worker thread.
+- Tools that create, update, delete, transfer, purchase, or otherwise commit an external side effect declare `mutating=True`. Runtime adapters let read tools be interrupted but make a started mutating tool uninterruptible through the native framework mechanism; retry/idempotency remains the tool owner's responsibility.
 - **HTTP tools** for remote APIs: `tool.http(name=…, url=…, method=…, headers_env=…, timeout_s=8)` — engine handles auth header injection from env, timeout, retry (idempotent GET only), and error mapping.
 - **Failure semantics (fixed, documented):** timeout/exception → the LLM receives a structured tool-error result (never a stack trace, never a hang); default timeout 8s; the `say_while_running` line covers slow calls. Tool calls + results + latency are recorded per call.
 
@@ -196,6 +200,13 @@ class TelephonyAdapter(Protocol):
 
 `RuntimeTarget` is per-runtime: `PipecatTarget(https_base, ws_path)` — adapter points the number's voice webhook at it and templates the stream URL into answer XML; `LiveKitTarget(project, sip_uri)` — adapter provisions the carrier-side SIP trunk/origination toward LiveKit and ensures LiveKit-side inbound trunk + dispatch rule exist (idempotent).
 
+For Twilio Elastic SIP, the idempotent LiveKit target is asymmetric by carrier
+contract: the number-scoped LiveKit inbound trunk has no username/password
+because Twilio cannot authenticate calls it originates; the LiveKit outbound
+trunk carries the Twilio termination credentials. Secure trunking uses TLS for
+both the Twilio origination URI and the LiveKit outbound transport. Rollback
+must restore the complete pre-trunk number route.
+
 ### 5.2 Carrier matrix at launch
 
 | Carrier | Tier | Pipecat path | LiveKit path | Notes |
@@ -206,7 +217,7 @@ class TelephonyAdapter(Protocol):
 | Plivo | Beta | Plivo XML + streams | SIP trunk | |
 | Generic SIP | Beta | — (use LiveKit path) | Direct trunk | Escape hatch for PBX/other carriers |
 
-**Certification checklist (required for "Certified"; CI-enforced):** inbound + outbound live tests pass nightly; signature verification implemented and negative-tested; DTMF in/out; hangup semantics (both directions, all terminal reasons mapped); recording callback; transfer where capability-flagged; rollback-on-Ctrl-C proven; region/latency notes documented; runbook page for common carrier errors (mapped into the CLI error catalog §7.6).
+**Certification checklist (required for "Certified"; CI-enforced):** inbound + outbound live tests pass nightly; signature verification implemented and negative-tested; DTMF in/out; hangup semantics (both directions, all terminal reasons mapped); recording completion ingestion (signed callback when the carrier surface supports one, otherwise a documented bounded reconciliation keyed by an authenticated carrier call ID); transfer where capability-flagged; rollback-on-Ctrl-C proven; region/latency notes documented; runbook page for common carrier errors (mapped into the CLI error catalog §7.6).
 
 ### 5.3 Audio/media correctness (Pipecat path)
 

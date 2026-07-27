@@ -12,7 +12,7 @@ from typing import Protocol, cast
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from voicekit import results
-from voicekit.config.models import Agent
+from voicekit.config.models import Agent, RuntimeName
 from voicekit.errors import VoicekitError
 from voicekit.obs.latency import LatencySample
 from voicekit.obs.records import (
@@ -194,10 +194,12 @@ class PipecatLifecycleManager:
         *,
         owner_id: str | None = None,
         lease_ttl: timedelta = timedelta(seconds=30),
+        runtime: RuntimeName = "pipecat",
     ) -> None:
         self.repository = repository
         self.admission = admission
-        self.owner_id = owner_id or f"pipecat_{uuid.uuid4().hex}"
+        self.runtime: RuntimeName = runtime
+        self.owner_id = owner_id or f"{runtime}_{uuid.uuid4().hex}"
         self.lease_ttl = lease_ttl
 
     async def begin(
@@ -218,7 +220,7 @@ class PipecatLifecycleManager:
                 NewCall(
                     call_id=call.call_id,
                     agent_name=agent.name,
-                    runtime="pipecat",
+                    runtime=self.runtime,
                     channel=call.channel,
                     direction=call.direction,
                     provider=call.provider,

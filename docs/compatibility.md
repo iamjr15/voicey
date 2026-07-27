@@ -14,7 +14,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
 | ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |
 | cloudflared CLI | `2026.3.0` observed locally | Quick-tunnel URL emission and bounded process cleanup ran; public hostname DNS remained unavailable, so external WS evidence is pending |
-| websockets Python | `>=16,<17` (`16.1.1` tested) | Current asyncio `connect()` context manager exercised by local and guarded public probes |
+| websockets Python | `>=13.1,<17` (`15.0.1` selected with both runtime extras) | Pipecat uses APIs present across the range; LiveKit 1.6.7's OpenAI plugin requires `<16` |
 | Pipecat client JS | `@pipecat-ai/client-js==1.13.0` | npm registry checked 2026-07-26 |
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
 | Pipecat SmallWebRTC | `@pipecat-ai/small-webrtc-transport==1.10.6` | npm registry checked 2026-07-26 |
@@ -32,7 +32,11 @@ This table records versions empirically installed and inspected during P0. Runti
 - Pipecat transports: per-provider websocket and SmallWebRTC paths; `FastAPIWebsocketParams` and base `TransportParams` do not accept `vad_analyzer`.
 - Twilio serializer: `TwilioFrameSerializer(..., base_url=..., params=TwilioFrameSerializer.InputParams(...))`.
 - LiveKit worker: `AgentServer`, `@server.rtc_session`, `setup_fnc`, `AgentSession(turn_handling=TurnHandlingOptions(...))`.
+- LiveKit turn detection: the installed 1.6.7 `livekit.plugins.turn_detector` path is deprecated; use `livekit.agents.inference.TurnDetector(version="v1-mini")` locally.
+- LiveKit's 1.6.7 OpenAI plugin requires `websockets<16`; the shared supported range is `>=13.1,<17`, with the lock selecting 15.x when all runtime extras are installed. Voicekit uses APIs present throughout that range and tests both runtime extras together.
 - LiveKit SIP: current trunk/rule methods are `create_inbound_trunk` and `create_dispatch_rule`; their `create_sip_*` aliases are deprecated. `create_sip_participant` and `transfer_sip_participant` remain current.
+- Twilio↔LiveKit SIP: Twilio-originated traffic cannot use username/password auth, so the number-scoped LiveKit inbound trunk is unauthenticated; Twilio termination credentials are configured on the LiveKit outbound trunk. A secure Twilio trunk uses `;transport=tls` for its origination URI and `SIP_TRANSPORT_TLS` outbound. This is the current documented provider contract, not an SDK inference.
+- Twilio Elastic SIP automatic recording: the trunk resource exposes only `RecordingContext.fetch()` / `update(mode, trim)` and no status-callback field. LiveKit supplies the authenticated carrier correlation as participant attribute `sip.twilio.callSid`; voicekit queries Core Recordings by that CA SID, requires exactly one completed item with source `Trunking`, and then reuses the authenticated media downloader.
 - Twilio request validation: `RequestValidator.validate(uri, params, signature)`; JSON body hashing is selected by the signed `bodySHA256` query parameter.
 - Twilio outbound: `CallList.create` has no idempotency-key parameter; async AMD uses `async_amd` plus its callback fields, and call redirects use `CallContext.update(twiml=...)`.
 - ngrok Python: synchronous `forward()` returns a listener; `Listener.close()` is awaitable. HTTP endpoints carry WebSocket upgrades without a second endpoint.

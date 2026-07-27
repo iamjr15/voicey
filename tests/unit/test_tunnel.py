@@ -309,7 +309,7 @@ async def test_probe_client_completes_real_local_websocket_round_trip() -> None:
         await websocket.send(await websocket.recv())
 
     async with serve(echo, "127.0.0.1", 0) as server:
-        socket = server.sockets[0]
+        socket = next(iter(server.sockets))
         port = cast("tuple[str, int]", socket.getsockname())[-1]
         await TunnelProbe(path="/probe", token="round-trip").verify(
             f"http://127.0.0.1:{port}",
@@ -323,7 +323,7 @@ async def test_probe_wrong_response_and_invalid_origin_are_cataloged() -> None:
         await websocket.send("wrong")
 
     async with serve(wrong, "127.0.0.1", 0) as server:
-        socket = server.sockets[0]
+        socket = next(iter(server.sockets))
         port = cast("tuple[str, int]", socket.getsockname())[-1]
         with pytest.raises(VoicekitError, match="VK-TUN-004"):
             await TunnelProbe(token="expected").verify(

@@ -15,7 +15,8 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 appointment audio Evals | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys plus one-time Kokoro/Moonshine downloads |
 | P1 reference audio latency | ready-to-run, pending credentials | Command below | Deepgram, Anthropic, and Cartesia keys; p50 ≤ 800 ms and p95 ≤ 1500 ms |
 | P1 Docker public deployment + paid smoke | ready-to-run, pending public ingress/credentials/PSTN | Commands below | Public HTTPS ingress, live Twilio credentials, owned number, paid destination |
-| P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
+| P2 Twilio–LiveKit automated provisioning | ready-to-run, pending credentials/account mutation | Commands below | LiveKit project, owned Twilio number, Elastic SIP domain, explicit mutation acknowledgement |
+| P2 Twilio–LiveKit PSTN certification | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded LiveKit/Twilio accounts, deployed agent, two physical endpoints |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
@@ -25,6 +26,86 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+## P2 Twilio–LiveKit SIP certification
+
+The local suite covers current SDK request shapes, the required asymmetric
+authentication boundary, TLS signaling, encrypted-media policy, idempotent
+provisioning, reverse rollback, ambiguous-outcome fencing, durable outbound
+intent mapping, native DTMF and transfer tools, recording policy, close-reason
+mapping, incremental observations, and actual `SIGKILL` recovery:
+
+```bash
+uv run pytest --no-cov \
+  tests/unit/test_livekit_runtime.py \
+  tests/integration/test_livekit_sigkill.py \
+  tests/certification/test_twilio_livekit_sip.py
+```
+
+For the live no-call provisioning gate, export the LiveKit project credentials,
+Twilio credentials, an owned number, the LiveKit SIP URI, a unique Twilio SIP
+domain, the configured LiveKit agent name, and randomly generated SIP
+credentials. The test provisions twice, verifies reuse, then rolls back:
+
+```bash
+VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+  uv run pytest -m live --no-cov \
+  tests/live/test_twilio_livekit_live.py::test_live_twilio_livekit_provision_reuse_and_rollback
+```
+
+Required variables: `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
+`LIVEKIT_API_SECRET`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+`VOICEKIT_TWILIO_LIVE_FROM`, `VOICEKIT_LIVEKIT_AGENT_NAME`,
+`VOICEKIT_LIVEKIT_SIP_URI`, `VOICEKIT_TWILIO_SIP_DOMAIN`,
+`VOICEKIT_TWILIO_SIP_USERNAME`, and `VOICEKIT_TWILIO_SIP_PASSWORD`.
+
+For the paid outbound gate, retain the provisioned outbound trunk, set its id
+as `LIVEKIT_SIP_OUTBOUND_TRUNK`, identify the certification room and
+destination, then explicitly acknowledge charges:
+
+```bash
+VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+  uv run pytest -m live --no-cov \
+  tests/live/test_twilio_livekit_live.py::test_live_twilio_livekit_paid_outbound_and_sip_status_mapping
+```
+
+After either live call completes, copy LiveKit's documented
+`sip.twilio.callSid` participant attribute into
+`VOICEKIT_TWILIO_LIVE_CALL_SID` and verify that Core Recordings exposes exactly
+one completed `Trunking` recording:
+
+```bash
+uv run pytest -m live --no-cov \
+  tests/live/test_twilio_livekit_live.py::test_live_twilio_livekit_completed_trunk_recording_correlation
+```
+
+The full physical certification uses a deployed appointment agent with
+`behavior.dtmf=true`, `phone.record=true`, and a configured transfer
+destination. Run one inbound call and one outbound call. During the calls:
+
+1. verify greeting and two-way audio;
+2. send and receive `12#` and confirm the durable
+   `runtime.dtmf_received` timeline;
+3. hang up once from the caller and once from the agent, then confirm
+   `caller_hangup` and `agent_hangup`;
+4. complete one cold transfer and one native warm transfer;
+5. verify Twilio created a dual-channel recording and voicekit emitted the
+   stable recording reference plus `call.recording.ready`;
+6. verify exactly one terminal event and one acknowledged or visibly
+   dead-lettered delivery for every call;
+7. roll back the provisioning token and confirm the original number route.
+
+Inspect the durable evidence after each call:
+
+```bash
+voicekit calls list
+voicekit calls show <call-id>
+```
+
+This gate is not green until both guarded pytest commands and the physical
+checklist genuinely pass. This workspace has neither the account variables nor
+the required PSTN endpoints, so the tests skip and the handset checklist
+remains pending.
 ## P1 cloudflared public WebSocket edge
 
 The harness starts a loopback FastAPI listener, installs an ephemeral

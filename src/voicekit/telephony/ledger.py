@@ -33,6 +33,16 @@ IntentState: TypeAlias = Literal[
     "terminal",
     "conflict",
 ]
+ProvisionState: TypeAlias = Literal[
+    "prepared",
+    "applying",
+    "applied",
+    "rolling_back",
+    "rolled_back",
+    "ambiguous",
+    "conflict",
+    "failed",
+]
 RouteSettings: TypeAlias = dict[str, str | None]
 
 
@@ -63,10 +73,25 @@ class OutboundIntent:
     last_status: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ProvisioningRecord:
+    """Crash-safe multi-provider SIP provisioning operation."""
+
+    operation_id: str
+    provider: str
+    number: str
+    snapshot: dict[str, object]
+    planned: dict[str, object]
+    resources: tuple[dict[str, object], ...]
+    state: ProvisionState
+    created_at: datetime
+    updated_at: datetime
+
+
 class TelephonyLedger:
     """Crash-reopenable carrier state with serialized immediate transactions."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -317,6 +342,138 @@ class TelephonyLedger:
         )
         return tuple(_intent_record(row) for row in rows)
 
+    def prepare_provisioning(
+        self,
+        *,
+        provider: str,
+        number: str,
+        snapshot: dict[str, object],
+        planned: dict[str, object],
+        now: datetime | None = None,
+    ) -> ProvisioningRecord:
+        """Persist the complete rollback snapshot before any SIP mutation."""
+        operation_id = f"provision_{uuid.uuid4().hex}"
+        timestamp = _utc(now)
+        with self._transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO telephony_provisioning(
+                    operation_id, provider, number, snapshot_json, planned_json,
+                    resources_json, state, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, '[]', 'prepared', ?, ?)
+                """,
+                (
+                    operation_id,
+                    provider,
+                    number,
+                    _json(snapshot),
+                    _json(planned),
+                    _iso(timestamp),
+                    _iso(timestamp),
+                ),
+            )
+        return self.get_provisioning(operation_id)
+
+    def append_provisioned_resource(
+        self,
+        operation_id: str,
+        *,
+        resource: dict[str, object],
+        expected: tuple[ProvisionState, ...] = ("prepared", "applying"),
+        now: datetime | None = None,
+    ) -> ProvisioningRecord:
+        """Record each external resource immediately after confirmed creation."""
+        current = self.get_provisioning(operation_id)
+        if current.state not in expected:
+            raise VoicekitError(
+                "VK-TEL-006",
+                detail=f"provisioning operation {operation_id!r} changed concurrently.",
+            )
+        resources = [*current.resources, resource]
+        placeholders = ",".join("?" for _ in expected)
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE telephony_provisioning
+                SET resources_json = ?, state = 'applying', updated_at = ?
+                WHERE operation_id = ? AND state IN ({placeholders})
+                """,
+                (
+                    _json(resources),
+                    _iso(_utc(now)),
+                    operation_id,
+                    *expected,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise VoicekitError(
+                    "VK-TEL-006",
+                    detail=f"provisioning operation {operation_id!r} lost its fence.",
+                )
+        return self.get_provisioning(operation_id)
+
+    def transition_provisioning(
+        self,
+        operation_id: str,
+        *,
+        expected: tuple[ProvisionState, ...],
+        state: ProvisionState,
+        now: datetime | None = None,
+    ) -> ProvisioningRecord:
+        """CAS a provisioning state for exclusive recovery/rollback ownership."""
+        placeholders = ",".join("?" for _ in expected)
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE telephony_provisioning
+                SET state = ?, updated_at = ?
+                WHERE operation_id = ? AND state IN ({placeholders})
+                """,
+                (state, _iso(_utc(now)), operation_id, *expected),
+            )
+            if cursor.rowcount != 1:
+                raise VoicekitError(
+                    "VK-TEL-006",
+                    detail=f"provisioning operation {operation_id!r} changed concurrently.",
+                )
+        return self.get_provisioning(operation_id)
+
+    def get_provisioning(self, operation_id: str) -> ProvisioningRecord:
+        row = self._fetchone(
+            "SELECT * FROM telephony_provisioning WHERE operation_id = ?",
+            (operation_id,),
+        )
+        if row is None:
+            raise VoicekitError(
+                "VK-TEL-006",
+                detail=f"unknown provisioning operation {operation_id!r}.",
+            )
+        return _provisioning_record(row)
+
+    def open_provisioning(self, *, provider: str) -> tuple[ProvisioningRecord, ...]:
+        rows = self._fetchall(
+            """
+            SELECT * FROM telephony_provisioning
+            WHERE provider = ?
+              AND state IN ('prepared', 'applying', 'rolling_back', 'ambiguous')
+            ORDER BY created_at
+            """,
+            (provider,),
+        )
+        return tuple(_provisioning_record(row) for row in rows)
+
+    def provisioning_records(self, *, provider: str) -> tuple[ProvisioningRecord, ...]:
+        """List immutable provisioning evidence, including completed rollbacks."""
+        rows = self._fetchall(
+            """
+            SELECT * FROM telephony_provisioning
+            WHERE provider = ?
+            ORDER BY created_at
+            """,
+            (provider,),
+        )
+        return tuple(_provisioning_record(row) for row in rows)
+
     def _initialize_schema(self) -> None:
         current = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
         if current > self.SCHEMA_VERSION:
@@ -328,8 +485,9 @@ class TelephonyLedger:
             return
         with self._lock:
             try:
-                self._connection.executescript(
-                    f"""
+                if current == 0:
+                    self._connection.executescript(
+                        """
                 BEGIN IMMEDIATE;
                 CREATE TABLE telephony_routes (
                     token TEXT PRIMARY KEY,
@@ -372,10 +530,36 @@ class TelephonyLedger:
                     WHERE provider_call_id IS NOT NULL;
                 CREATE INDEX telephony_intents_unresolved_idx
                     ON telephony_intents(provider, state, created_at);
+                COMMIT;
+                """
+                    )
+                    current = 1
+                if current == 1:
+                    self._connection.executescript(
+                        f"""
+                BEGIN IMMEDIATE;
+                CREATE TABLE telephony_provisioning (
+                    operation_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    number TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    planned_json TEXT NOT NULL,
+                    resources_json TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK (
+                        state IN (
+                            'prepared', 'applying', 'applied', 'rolling_back',
+                            'rolled_back', 'ambiguous', 'conflict', 'failed'
+                        )
+                    ),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX telephony_provisioning_open_idx
+                    ON telephony_provisioning(provider, state, created_at);
                 PRAGMA user_version={self.SCHEMA_VERSION};
                 COMMIT;
                 """
-                )
+                    )
             except sqlite3.Error as exc:
                 self._connection.rollback()
                 raise VoicekitError(
@@ -467,6 +651,21 @@ def _intent_record(row: sqlite3.Row) -> OutboundIntent:
         created_at=_parse(str(row["created_at"])),
         updated_at=_parse(str(row["updated_at"])),
         last_status=None if row["last_status"] is None else str(row["last_status"]),
+    )
+
+
+def _provisioning_record(row: sqlite3.Row) -> ProvisioningRecord:
+    resources = cast("list[dict[str, object]]", json.loads(str(row["resources_json"])))
+    return ProvisioningRecord(
+        operation_id=str(row["operation_id"]),
+        provider=str(row["provider"]),
+        number=str(row["number"]),
+        snapshot=cast("dict[str, object]", json.loads(str(row["snapshot_json"]))),
+        planned=cast("dict[str, object]", json.loads(str(row["planned_json"]))),
+        resources=tuple(resources),
+        state=cast("ProvisionState", str(row["state"])),
+        created_at=_parse(str(row["created_at"])),
+        updated_at=_parse(str(row["updated_at"])),
     )
 
 

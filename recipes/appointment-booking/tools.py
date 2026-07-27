@@ -94,7 +94,7 @@ def search_available_slots(day: str, timezone: str) -> dict[str, object]:
     }
 
 
-@tool(say_while_running="I'm booking that now.")
+@tool(say_while_running="I'm booking that now.", mutating=True)
 def book_appointment(
     start_iso: str,
     timezone: str,
@@ -127,7 +127,7 @@ def find_appointment(reference: str, email: str) -> dict[str, str]:
     }
 
 
-@tool(say_while_running="I'm moving that appointment now.")
+@tool(say_while_running="I'm moving that appointment now.", mutating=True)
 def reschedule_appointment(
     reference: str,
     new_start_iso: str,
@@ -146,7 +146,7 @@ def reschedule_appointment(
     return result
 
 
-@tool(say_while_running="I'm cancelling that appointment now.")
+@tool(say_while_running="I'm cancelling that appointment now.", mutating=True)
 def cancel_appointment(reference: str) -> dict[str, str]:
     """Cancel the appointment only after the caller confirms the destructive change."""
     _gateway.cancel(reference)

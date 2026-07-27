@@ -90,3 +90,40 @@ These choices apply the documented proposals authorized in the build mandate and
   signal capture disabled rather than installing competing handlers.
 - Publish only the runtime listener. The web token/records listener remains an
   authenticated internal Compose service surface.
+
+## 2026-07-27 — Twilio–LiveKit SIP authentication boundary
+
+- Supersede the original build-plan research sentence that put credentials on
+  the LiveKit inbound trunk. Current LiveKit provider documentation explicitly
+  states that Twilio Elastic SIP Trunking cannot use username/password
+  authentication for traffic originating at Twilio.
+- Scope the LiveKit inbound trunk to the owned E.164 number with no credentials.
+  Put the credential-list username/password on the LiveKit outbound trunk that
+  terminates into the Twilio SIP domain.
+- Enable Twilio secure trunking, use `;transport=tls` on the Twilio origination
+  URI, use LiveKit `SIP_TRANSPORT_TLS` outbound, and allow encrypted media on
+  both LiveKit trunks.
+- Evidence sources: the current LiveKit inbound-trunk, Twilio provider
+  quickstart, and secure-trunking guides, plus Twilio Elastic SIP Trunking
+  documentation. The installed `livekit-api==1.2.0` request fields were
+  separately inspected and are exercised by the local certification suite.
+
+## 2026-07-27 — Twilio Elastic SIP recording reconciliation
+
+- Automatic Elastic SIP trunk recording has no per-trunk completion callback:
+  the official endpoint and pinned SDK expose only recording mode and trim.
+  Voicekit therefore does not claim a callback that Twilio cannot configure.
+- Correlate the call through LiveKit's documented built-in participant
+  attribute `sip.twilio.callSid`. The LiveKit SIP service maps Twilio's carrier
+  header for inbound and outbound participants; outbound attributes may arrive
+  after the initial participant response.
+- After terminal persistence, bounded polling queries Twilio Core Recordings by
+  that CA SID, accepts exactly one completed recording with source `Trunking`,
+  downloads it through the existing Basic-authenticated media path, and emits
+  the same `call.recording.ready` contract. A missing SID or timeout remains a
+  visible pending recording for recovery; it does not mutate the terminal
+  event.
+- Amend spec §5.2 so certification requires signed callback ingestion when a
+  carrier supports it, or documented authenticated-ID reconciliation when it
+  does not. This preserves the external result contract while matching the
+  real carrier API.

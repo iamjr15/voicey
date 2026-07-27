@@ -29,6 +29,7 @@ class ToolMetadata:
     parameters_schema: Mapping[str, Any]
     return_schema: Mapping[str, Any]
     say_while_running: str | None
+    mutating: bool
     is_async: bool
     source: str = "python"
 
@@ -46,6 +47,7 @@ class ToolDecorator:
         /,
         *,
         say_while_running: str | None = None,
+        mutating: bool = False,
     ) -> Callable[[FunctionT], FunctionT]: ...
 
     def __call__(
@@ -54,6 +56,7 @@ class ToolDecorator:
         /,
         *,
         say_while_running: str | None = None,
+        mutating: bool = False,
     ) -> FunctionT | Callable[[FunctionT], FunctionT]:
         """Mark a plain typed function as a voicekit tool without wrapping it."""
 
@@ -61,6 +64,7 @@ class ToolDecorator:
             metadata = metadata_from_callable(
                 candidate,
                 say_while_running=say_while_running,
+                mutating=mutating,
             )
             setattr(candidate, _METADATA_ATTRIBUTE, metadata)
             return candidate
@@ -78,6 +82,7 @@ class ToolDecorator:
         headers_env: Mapping[str, str] | None = None,
         timeout_s: float = 8.0,
         say_while_running: str | None = None,
+        mutating: bool = False,
         description: str | None = None,
     ) -> HttpTool:
         """Create an HTTP-backed tool while keeping credentials environment-only."""
@@ -90,6 +95,7 @@ class ToolDecorator:
             headers_env=headers_env or {},
             timeout_s=timeout_s,
             say_while_running=say_while_running,
+            mutating=mutating,
             description=description,
         )
 
@@ -101,6 +107,7 @@ def metadata_from_callable(
     function: Callable[..., Any],
     *,
     say_while_running: str | None,
+    mutating: bool = False,
 ) -> ToolMetadata:
     """Build stable metadata from a callable signature and docstring."""
     name = getattr(function, "__name__", "")
@@ -171,6 +178,7 @@ def metadata_from_callable(
         parameters_schema=parameters_schema,
         return_schema=return_schema,
         say_while_running=say_while_running,
+        mutating=mutating,
         is_async=inspect.iscoroutinefunction(function),
     )
 

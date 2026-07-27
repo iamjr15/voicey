@@ -36,7 +36,8 @@ class HttpTool:
         headers_env: Mapping[str, str],
         timeout_s: float,
         say_while_running: str | None,
-        description: str | None,
+        mutating: bool = False,
+        description: str | None = None,
         client: httpx.AsyncClient | None = None,
         retry_delay_s: float = 0.1,
     ) -> None:
@@ -110,6 +111,7 @@ class HttpTool:
                 parameters_schema=schema,
                 return_schema={},
                 say_while_running=say_while_running,
+                mutating=mutating,
                 is_async=True,
                 source="http",
             ),

@@ -1,8 +1,7 @@
 # Twilio
 
-Twilio is the P1 reference carrier. The Pipecat path uses bidirectional Media
-Streams and the LiveKit SIP path remains capability-disabled until its P2
-provisioner and certification suite land.
+Twilio is the reference carrier. The Pipecat path uses bidirectional Media
+Streams; the LiveKit path uses fully API-managed Elastic SIP trunks.
 
 ## Install and credentials
 
@@ -33,15 +32,14 @@ does not implement a second signature algorithm.
 
 ## Capabilities
 
-| Capability | P1 Pipecat path |
-|---|---|
-| Inbound / outbound | enabled |
-| Async AMD | enabled; media waits for the AMD callback |
-| DTMF receive / send | enabled |
-| Transfer | cold (`Call.update` to `<Dial>`) |
-| Recording | dual-channel callback + authenticated engine ingestion |
-| Native outbound idempotency | unavailable |
-| LiveKit SIP | disabled until P2 |
+| Capability | Pipecat path | LiveKit path |
+|---|---|---|
+| Inbound / outbound | enabled | enabled through Elastic SIP |
+| Async AMD | enabled; media waits for callback | carrier/SIP disposition |
+| DTMF receive / send | enabled | native room event + LiveKit send tool |
+| Transfer | cold; P3 adds conference warm transfer | cold SIP REFER + native warm-transfer task |
+| Recording | dual-channel callback + authenticated ingestion | secure trunk recording + native session recording |
+| Native outbound idempotency | unavailable; durable intent fence | unavailable; durable intent fence |
 
 Twilio media is mono G.711 μ-law at 8 kHz. The certification rig covers
 μ-law↔linear conversion, 8↔16 kHz resampling, 20 ms pacing, three-frame jitter
@@ -119,7 +117,7 @@ machine policy, avoiding two competing audio consumers.
 - `hangup(call_sid)` completes the carrier leg.
 
 Warm transfer needs the P3 conference bridge and is intentionally absent from
-P1 capabilities.
+the Pipecat path until P3. It is already native on the LiveKit path.
 
 Recording callbacks are signature-verified like every carrier callback.
 Voicekit ignores callback media URLs for ingestion and constructs the recording
@@ -128,6 +126,46 @@ HTTP Basic authentication, accepts only known audio content types, enforces a
 100 MiB default limit, and writes through the protected `ArtifactStore`. The
 terminal event remains immutable with a pending engine recording reference;
 successful ingestion creates the separate `call.recording.ready` event.
+
+## LiveKit Elastic SIP provisioning
+
+`TwilioLiveKitSipProvisioner` treats the carrier and LiveKit changes as one
+FULL-durability ledger operation. It creates or reuses, in order:
+
+1. a number-scoped LiveKit inbound trunk with no credentials;
+2. an individual-room dispatch rule with explicit `RoomAgentDispatch`;
+3. a LiveKit outbound trunk to the Twilio domain with credentials and TLS;
+4. a secure Twilio Elastic SIP trunk;
+5. a TLS origination URL to the LiveKit SIP host;
+6. a Twilio credential list, credential, and trunk binding;
+7. the Twilio phone-number binding.
+
+The authentication asymmetry is required by Twilio: Elastic SIP does not
+support username/password authentication for traffic originating at Twilio.
+Credentials therefore belong only on the LiveKit outbound trunk that terminates
+into Twilio. The Twilio origination URI ends in `;transport=tls`, the LiveKit
+outbound transport is TLS, and both LiveKit trunks allow encrypted media.
+
+Every confirmed created resource is appended to the ledger before the next
+mutation. A definitive failure rolls back in reverse order and restores the
+complete phone-number route snapshot. An indeterminate network outcome is
+fenced as `ambiguous` and never destructively guessed.
+
+Outbound `create_sip_participant(wait_until_answered=True)` is also preceded by
+a durable intent. `SipCallError.sip_status_code` maps a definitive SIP rejection
+to `carrier_error`; an unknown outcome becomes `VK-TEL-007` and is not retried.
+
+When `phone.record` is enabled, a newly managed Twilio trunk is configured for
+dual-channel record-from-answer. Voicekit refuses to silently change the
+recording mode of an existing trunk because that can affect unrelated traffic.
+
+Twilio's Elastic SIP recording resource has no completion callback field—it
+supports only `mode` and `trim`. LiveKit provides the Twilio CA Call SID through
+the built-in `sip.twilio.callSid` participant attribute. After the terminal
+event, voicekit polls Core Recordings by that CA SID, requires exactly one
+completed item whose source is `Trunking`, downloads it with Basic
+authentication, and emits the same `call.recording.ready` event used by the
+Pipecat callback path. A timeout stays visibly pending for retry/recovery.
 
 ## Troubleshooting
 
@@ -160,10 +198,20 @@ uv run pytest --no-cov \
   tests/certification/test_twilio_media.py
 ```
 
+LiveKit SIP protocol, TLS/auth, idempotency, rollback, native DTMF/transfer,
+terminal mapping, recording policy, and actual-SIGKILL evidence:
+
+```bash
+uv run pytest --no-cov \
+  tests/unit/test_livekit_runtime.py \
+  tests/integration/test_livekit_sigkill.py \
+  tests/certification/test_twilio_livekit_sip.py
+```
+
 The no-charge, account-readiness, route mutation, paid PSTN, recording, DTMF,
 transfer, and physical-handset commands are recorded verbatim in
 [`docs/GAPS.md`](../GAPS.md). They remain pending because no Twilio credentials
 or live numbers are available in this workspace.
 
-Next step: start the P1 Pipecat public listener, then run the guarded route and
-PSTN commands from `docs/GAPS.md`.
+Next step: start the selected runtime, then run its guarded route and PSTN
+commands from `docs/GAPS.md`.

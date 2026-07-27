@@ -54,6 +54,7 @@ def test_tool_keeps_plain_function_and_records_metadata() -> None:
     assert get_tool_metadata(lookup_slot).name == "lookup_slot"
     assert get_tool_metadata(lookup_slot).description == "Look up one appointment slot."
     assert get_tool_metadata(lookup_slot).say_while_running == "One moment."
+    assert get_tool_metadata(lookup_slot).mutating is False
     assert get_tool_metadata(lookup_slot).parameters_schema == {
         "type": "object",
         "properties": {
@@ -74,6 +75,15 @@ def test_bare_tool_decorator() -> None:
 
     assert get_tool_metadata(ping).name == "ping"
     assert get_tool_metadata(ping).is_async
+
+
+def test_tool_records_explicit_mutation_semantics() -> None:
+    @tool(mutating=True)
+    def reserve(reference: str) -> str:
+        """Reserve one external resource."""
+        return reference
+
+    assert get_tool_metadata(reserve).mutating is True
 
 
 def test_tool_discovery_supports_modules_and_explicit_references(

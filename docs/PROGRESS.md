@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P2 — LiveKit parity, unified testing, Telnyx
-- **Current unit:** P2.1 LiveKit production runtime, SIP provisioning, and crash/certification parity
-- **Next task:** verify every LiveKit 1.6.7 symbol against the installed pin, then implement the production `AgentServer`/`rtc_session` runtime with incremental observations, fenced lifecycle/heartbeat, SIP provisioning and controls, full SIGKILL chaos parity, and the Twilio–LiveKit certification harness
-- **Completed:** all P0 units and P1.1–P1.12, including the truthful P1 phase runner; all automatable local P1 gates are green, while credentialed/public/manual P1 gates remain pending with exact commands in `docs/GAPS.md`
+- **Current unit:** P2.2 shared playground LiveKit client path
+- **Next task:** add the LiveKit token/session endpoint and `livekit-client` frontend adapter behind the existing two-listener playground security contract, wire `voicekit dev` to the production LiveKit host, and prove the runtime-specific five-minute quickstart path
+- **Completed:** all P0 and P1 units plus P2.1. The production LiveKit runtime, current provider/fallback mapping, native tools/workflows, fenced incremental lifecycle, actual-SIGKILL recovery, Twilio Elastic SIP provisioning/controls/recording reconciliation, and complete local certification harness are green. Credentialed/PSTN P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -40,6 +40,8 @@ Last updated: 2026-07-27
 | P1.12 local phase verification | green | Final wheel quickstart 34.086s/300s; exact 22-path CLI matrix; parallel isolation; rollback/fencing/dual-sweeper/actual-SIGKILL chaos; admin negative; 34 Twilio certification and 31 Docker cases; aggregate report `local_automated_status=green`; full suite 381 passed, 5 honest live skips, 90.04% branch coverage |
 | P1.12 reference audio latency | pending-live | Dedicated 20-turn native audio harness requires 20 distinct persisted `e2e` turns and p50 ≤800ms + p95 ≤1500ms; untracked backup lacks Anthropic; exact command in `docs/GAPS.md` |
 | P1 phase overall | pending-live | All local automation green; reference providers, Twilio/PSTN, public edge/Docker, and human wizard/doctor/microphone/handset evidence remain unpromoted; see `docs/verification/p1-gates.md` |
+| P2.1 LiveKit runtime/local certification | green | Native `AgentServer`/`rtc_session`, current 1.6.7 session APIs, provider fallbacks, complete config policy, least-privilege token, incremental persistence, heartbeat/fencing, actual SIGKILL recovery, native DTMF/cold+warm transfer, TLS/auth-correct Twilio SIP provision/reuse/rollback/ambiguity, outbound SIP mapping, and CA-SID recording reconciliation; full suite 447 passed, 8 honest live skips, 90.06% branch coverage; ruff/format/strict pyright green |
+| P2.1 Twilio–LiveKit account/PSTN certification | pending-live | Three guarded account/PSTN commands plus the physical inbound/outbound, DTMF, hangup, recording, transfer, terminal-delivery, and rollback checklist are ready in `docs/GAPS.md`; no required account variables exist locally |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

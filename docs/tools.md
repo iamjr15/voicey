@@ -10,7 +10,7 @@ module does not define conversation flow, routing, or a separate tool protocol.
 from voicekit import tool
 
 
-@tool(say_while_running="Let me check that for you.")
+@tool(say_while_running="Let me check that for you.", mutating=False)
 def available_slots(date: str, party_size: int = 1) -> list[str]:
     """Return available appointment slots for a date."""
     return ["10:00", "14:30"]
@@ -29,6 +29,11 @@ thread cannot be forcibly stopped by the interpreter, so mutating synchronous
 tools must be idempotent; prefer cancellable asynchronous clients for remote
 writes.
 
+Set `mutating=True` on any function that commits an external side effect. The
+LiveKit adapter uses native `RunContext.disallow_interruptions()` once such a
+tool starts; read tools remain interruptible. This protects an in-flight write,
+but it does not make the operation idempotent or authorize blind retries.
+
 ## HTTP tools
 
 ```python
@@ -41,6 +46,7 @@ get_customer = tool.http(
     headers_env={"Authorization": "Bearer ${CRM_API_KEY}"},
     timeout_s=8,
     say_while_running="I'm checking the customer record.",
+    mutating=False,
 )
 ```
 
@@ -65,6 +71,8 @@ result = await ToolExecutor().execute(
 
 Only `GET` is retried, once, and only for a network/timeout failure, HTTP 429,
 or HTTP 5xx response. Mutating methods are attempted exactly once.
+Declare `mutating=True` for non-GET definitions and for GET endpoints that
+commit a side effect despite their method.
 
 ## Safe execution
 
