@@ -284,6 +284,13 @@ infrastructure error.
 
 **Fix:** Verify public URL, proxy trust, signature, and signaling payload.
 
+## VK-RUN-008
+
+**Cause:** The runtime is draining and cannot expose a new call.
+
+**Fix:** Route the new call to the ready generation and let this generation
+finish existing calls.
+
 ## VK-TUN-001
 
 **Cause:** The selected tunnel dependency or executable is unavailable.
@@ -351,6 +358,43 @@ prepared safely.
 
 **Fix:** Rebuild the wheel assets or fix the reported project module before
 retrying.
+
+## VK-DEP-001
+
+**Cause:** A deployment artifact conflicts with an existing project file.
+
+**Fix:** Review or move the reported file; voicekit never overwrites deployment
+edits.
+
+## VK-DEP-002
+
+**Cause:** The deployment persistence topology is unsafe or incompatible.
+
+**Fix:** Use the target's documented storage backend, local volume, and replica
+topology, then rerun the persistence preflight.
+
+## VK-DEP-003
+
+**Cause:** The production container runtime configuration is incomplete or
+invalid.
+
+**Fix:** Set every documented deployment environment variable, then rerun
+`voicekit doctor`.
+
+## VK-DEP-004
+
+**Cause:** Post-deploy smoke verification failed or lacks a required live-call
+input.
+
+**Fix:** Correct the printed URL, number, or credential requirement and rerun
+the smoke command.
+
+## VK-DEP-005
+
+**Cause:** Docker or Compose could not validate the generated deployment.
+
+**Fix:** Install a supported Docker Compose release, fix the reported
+validation, and retry.
 
 ## VK-CLI-001
 

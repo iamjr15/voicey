@@ -246,6 +246,14 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The runtime host received a malformed or unauthenticated signaling request.",
         fix="Verify the expected public URL, proxy trust, signature, and signaling payload.",
     ),
+    "VK-RUN-008": ErrorDefinition(
+        code="VK-RUN-008",
+        cause="The runtime is draining and cannot expose a new call.",
+        fix=(
+            "Route the new call to the ready generation and let this generation "
+            "finish existing calls."
+        ),
+    ),
     "VK-TUN-001": ErrorDefinition(
         code="VK-TUN-001",
         cause="The selected tunnel provider dependency or executable is unavailable.",
@@ -295,6 +303,34 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         code="VK-WEB-005",
         cause="The embedded playground assets or development reload could not be prepared safely.",
         fix="Rebuild the wheel assets or fix the reported project module before retrying.",
+    ),
+    "VK-DEP-001": ErrorDefinition(
+        code="VK-DEP-001",
+        cause="A deployment artifact conflicts with an existing project file.",
+        fix="Review or move the reported file; voicekit never overwrites deployment edits.",
+    ),
+    "VK-DEP-002": ErrorDefinition(
+        code="VK-DEP-002",
+        cause="The deployment persistence topology is unsafe or incompatible.",
+        fix=(
+            "Use the target's documented storage backend, local volume, and replica topology, "
+            "then rerun the persistence preflight."
+        ),
+    ),
+    "VK-DEP-003": ErrorDefinition(
+        code="VK-DEP-003",
+        cause="The production container runtime configuration is incomplete or invalid.",
+        fix="Set every documented deployment environment variable, then rerun `voicekit doctor`.",
+    ),
+    "VK-DEP-004": ErrorDefinition(
+        code="VK-DEP-004",
+        cause="Post-deploy smoke verification failed or lacks a required live-call input.",
+        fix="Correct the printed URL/number/credential requirement and rerun the smoke command.",
+    ),
+    "VK-DEP-005": ErrorDefinition(
+        code="VK-DEP-005",
+        cause="Docker or Compose could not validate the generated deployment.",
+        fix="Install a supported Docker Compose release, fix the reported validation, and retry.",
     ),
     "VK-CLI-001": ErrorDefinition(
         code="VK-CLI-001",

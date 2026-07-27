@@ -151,8 +151,7 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
             kind="deploy",
             id="docker",
             description="Self-hosted container with durable local storage.",
-            enabled=False,
-            unavailable_reason="the validated Docker deploy target lands in P1.11",
+            enabled=True,
         ),
         Capability(
             kind="deploy",

@@ -108,6 +108,7 @@ class PipecatHostSettings:
     web_sample_rate: int = 16000
     twilio_sample_rate: int = 8000
     allow_insecure_web_sessions_for_tests: bool = False
+    storage_ready: bool = True
 
     @classmethod
     def from_env(cls, public_base: str) -> PipecatHostSettings:
@@ -141,6 +142,16 @@ class _PendingCall:
     admission: AdmissionLease
     lifecycle: PipecatCallLifecycle
     expires: asyncio.Task[None] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DrainReport:
+    """Bounded shutdown result exposed to the production supervisor."""
+
+    pending_at_start: int
+    active_at_start: int
+    forced_sessions: int
+    remaining_calls: int
 
 
 class _TwilioTransfer(TransferHandler):
@@ -229,7 +240,15 @@ class PipecatHost:
         self._web_sessions: dict[str, str] = {}
         self._session_tasks: set[asyncio.Task[object]] = set()
         self._state_lock = asyncio.Lock()
+        self._accepting = True
+        self._idle = asyncio.Event()
+        self._idle.set()
         self.app = self._build_app()
+
+    @property
+    def accepting(self) -> bool:
+        """Whether answer/token paths may expose a new call."""
+        return self._accepting
 
     async def reload_agent(self, agent: Agent, *, restart_runner: bool) -> bool:
         """Atomically apply a revision only when no call owns runtime capacity."""
@@ -270,6 +289,11 @@ class PipecatHost:
             existing = self._pending.get(call.call_id)
             if existing is not None:
                 return existing
+            if not self._accepting:
+                raise VoicekitError(
+                    "VK-RUN-008",
+                    detail="the runtime is draining and no longer accepts new calls.",
+                )
             admission = await self.admission.acquire(call.call_id)
             lifecycle = await self.lifecycle.begin(self.agent, call, admission)
             pending = _PendingCall(
@@ -282,7 +306,51 @@ class PipecatHost:
                 name=f"voicekit-pending-{call.call_id}",
             )
             self._pending[call.call_id] = pending
+            self._idle.clear()
             return pending
+
+    async def begin_drain(self) -> None:
+        """Atomically close admission while preserving already-visible calls."""
+        async with self._state_lock:
+            self._accepting = False
+
+    async def drain(self, *, timeout_s: float | None = None) -> DrainReport:
+        """Finish admitted calls, then force the bounded duration limit if needed."""
+        if timeout_s is not None and timeout_s <= 0:
+            raise VoicekitError("VK-RUN-008", detail="drain timeout must be positive.")
+        await self.begin_drain()
+        async with self._state_lock:
+            pending_at_start = len(self._pending)
+            active_at_start = len(self._active)
+        timeout = float(self.agent.limits.max_duration_s) if timeout_s is None else timeout_s
+        forced = 0
+        try:
+            await asyncio.wait_for(self._wait_until_idle(), timeout=timeout)
+        except TimeoutError:
+            async with self._state_lock:
+                sessions = tuple(self._active.values())
+                pending_ids = tuple(self._pending)
+            forced = len(sessions) + len(pending_ids)
+            await asyncio.gather(
+                *(session.end("duration_limit") for session in sessions),
+                return_exceptions=True,
+            )
+            await asyncio.gather(
+                *(self._finish_pending(call_id, "duration_limit") for call_id in pending_ids),
+                return_exceptions=True,
+            )
+            with suppress(TimeoutError):
+                await asyncio.wait_for(self._wait_until_idle(), timeout=5)
+        return DrainReport(
+            pending_at_start=pending_at_start,
+            active_at_start=active_at_start,
+            forced_sessions=forced,
+            remaining_calls=self.admission.active_count,
+        )
+
+    async def _wait_until_idle(self) -> None:
+        if self.admission.active_count:
+            await self._idle.wait()
 
     async def reserve_web_call(self) -> str:
         """Create the durable web call before its browser token is returned."""
@@ -301,6 +369,7 @@ class PipecatHost:
                 return
             del self._pending[pending.call.call_id]
         await pending.lifecycle.fail_setup()
+        self._mark_idle_if_empty()
 
     async def _claim_pending(self, call_id: str, token: str) -> _PendingCall:
         await self.admission.claim(call_id, token)
@@ -326,6 +395,7 @@ class PipecatHost:
             try:
                 yield
             finally:
+                await self.drain()
                 await self.runner_host.stop()
                 if self._session_tasks:
                     await asyncio.gather(*self._session_tasks, return_exceptions=True)
@@ -339,6 +409,7 @@ class PipecatHost:
         ) -> JSONResponse:
             status = {
                 "VK-RUN-004": 429,
+                "VK-RUN-008": 503,
                 "VK-WEB-001": 401,
                 "VK-WEB-002": 403,
                 "VK-WEB-003": 429,
@@ -350,12 +421,18 @@ class PipecatHost:
             )
 
         @app.get("/health")
-        async def health() -> dict[str, object]:  # pyright: ignore[reportUnusedFunction]
-            return {
-                "ok": self.runner_host.running,
-                "runtime": "pipecat",
-                "active_calls": self.admission.active_count,
-            }
+        async def health() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+            ready = self.runner_host.running and self._accepting and self.settings.storage_ready
+            return JSONResponse(
+                status_code=200 if ready else 503,
+                content={
+                    "ok": ready,
+                    "runtime": "pipecat",
+                    "active_calls": self.admission.active_count,
+                    "accepting": self._accepting,
+                    "storage_ready": self.settings.storage_ready,
+                },
+            )
 
         @app.post("/twilio/answer")
         async def twilio_answer(  # pyright: ignore[reportUnusedFunction]
@@ -381,7 +458,7 @@ class PipecatHost:
                     )
                 )
             except VoicekitError as exc:
-                if exc.code != "VK-RUN-004":
+                if exc.code not in {"VK-RUN-004", "VK-RUN-008"}:
                     raise
                 return Response(
                     content='<Response><Reject reason="busy" /></Response>',
@@ -453,6 +530,7 @@ class PipecatHost:
                 if pending is not None:
                     async with self._state_lock:
                         self._active.pop(pending.call.call_id, None)
+                    self._mark_idle_if_empty()
 
         @app.post("/twilio/events")
         @app.post("/twilio/events/{intent_id}")
@@ -569,6 +647,7 @@ class PipecatHost:
                     except Exception as exc:
                         callback_error.append(exc)
                         await pending.lifecycle.fail_setup()
+                        self._mark_idle_if_empty()
                         await self._release_web(pc_id)
                         with suppress(Exception):
                             await connection.disconnect()
@@ -629,6 +708,7 @@ class PipecatHost:
             async with self._state_lock:
                 self._active.pop(session.call.call_id, None)
                 self._web_sessions.pop(pc_id, None)
+            self._mark_idle_if_empty()
             await self._release_web(pc_id)
 
     def _track_session(self, task: asyncio.Task[object]) -> None:
@@ -672,6 +752,7 @@ class PipecatHost:
                 await pending.expires
             pending.expires = None
         await pending.lifecycle.fail_setup()
+        self._mark_idle_if_empty()
 
     async def _release_web(self, pc_id: str) -> None:
         if self.web_sessions is not None:
@@ -698,6 +779,11 @@ class PipecatHost:
             with suppress(asyncio.CancelledError):
                 await pending.expires
         await pending.lifecycle.finish(reason, provider_state="completed")
+        self._mark_idle_if_empty()
+
+    def _mark_idle_if_empty(self) -> None:
+        if self.admission.active_count == 0:
+            self._idle.set()
 
     def _require_twilio(self) -> TwilioRuntimeAdapter:
         if self.twilio is None:

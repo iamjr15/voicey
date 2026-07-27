@@ -5,6 +5,7 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -18,6 +19,7 @@ from voicekit.cli.wizard import InitResult
 from voicekit.config.catalog import ProviderKind
 from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
 from voicekit.config.models import ModelAxis
+from voicekit.deploy.docker import DockerSmokeResult
 from voicekit.obs.records import NewCall
 from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
 from voicekit.storage.sqlite import SQLiteRepository
@@ -249,6 +251,10 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
         (["numbers", "buy", "--help"], ("--yes", "--area")),
         (["numbers", "point", "--help"], ("--yes", "--url")),
         (["calls", "list", "--help"], ("--undelivered", "--all", "--json")),
+        (
+            ["deploy", "docker", "--help"],
+            ("--smoke", "--skip-smoke", "--to", "--engine-wheel", "--yes", "--json"),
+        ),
     ):
         help_result = runner.invoke(app, command)
         assert help_result.exit_code == 0
@@ -333,13 +339,122 @@ def test_money_and_live_mutations_require_confirmation(
 def test_future_capability_commands_fail_with_cataloged_error() -> None:
     for command in (
         ["test"],
-        ["deploy", "docker"],
         ["upgrade"],
     ):
         result = runner.invoke(app, command)
         assert result.exit_code == 1
         assert "VK-CLI-005" in result.stderr
         assert "Next:" in result.stderr
+
+
+def test_docker_deploy_generates_validates_updates_manifest_and_prints_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path)
+    calls: list[str] = []
+
+    class Generator:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+
+        def generate(self, *, engine_wheel: Path | None = None) -> object:
+            assert engine_wheel == tmp_path / "voicekit.whl"
+            calls.append("generate")
+            return SimpleNamespace(
+                dockerfile=tmp_path / "Dockerfile.voicekit",
+                compose=tmp_path / "compose.voicekit.yaml",
+                dockerignore=tmp_path / ".dockerignore",
+                environment_example=tmp_path / "docker.env.example",
+                engine_wheel=tmp_path / ".voicekit" / "deploy" / "voicekit.whl",
+            )
+
+        def validate(self, _artifacts: object) -> None:
+            calls.append("validate")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.DockerDeploymentGenerator", Generator)
+
+    result = runner.invoke(
+        app,
+        [
+            "deploy",
+            "docker",
+            "--engine-wheel",
+            str(tmp_path / "voicekit.whl"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert calls == ["generate", "validate"]
+    assert "docker compose -f compose.voicekit.yaml up -d --build" in result.stdout
+    assert "--engine-wheel" in result.stdout
+    assert "voicekit.whl" in result.stdout
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == "docker"
+
+
+def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path)
+    (tmp_path / ".env").write_text(
+        'TWILIO_ACCOUNT_SID="AC111"\nTWILIO_AUTH_TOKEN="token"\n',
+        encoding="utf-8",
+    )
+
+    class Generator:
+        def __init__(self, _root: Path) -> None:
+            return
+
+        def generate(self, *, engine_wheel: Path | None = None) -> object:
+            del engine_wheel
+            return SimpleNamespace(
+                dockerfile=tmp_path / "Dockerfile.voicekit",
+                compose=tmp_path / "compose.voicekit.yaml",
+                dockerignore=tmp_path / ".dockerignore",
+                environment_example=tmp_path / "docker.env.example",
+                engine_wheel=None,
+            )
+
+        def validate(self, _artifacts: object) -> None:
+            return
+
+    class Smoke:
+        async def verify(self, url: str) -> DockerSmokeResult:
+            return DockerSmokeResult(
+                url=url,
+                runtime="pipecat",
+                active_calls=0,
+                accepting=True,
+                storage_ready=True,
+            )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.DockerDeploymentGenerator", Generator)
+    monkeypatch.setattr("voicekit.cli.app.DockerSmokeVerifier", Smoke)
+    monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
+    FakeTwilio.events = []
+
+    result = runner.invoke(
+        app,
+        [
+            "deploy",
+            "docker",
+            "--smoke",
+            "https://voice.example",
+            "--to",
+            "+14155550199",
+            "--yes",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["smoke"]["storage_ready"] is True
+    assert payload["call_id"].startswith("CA")
+    assert FakeTwilio.events == ["call:+14155550123:+14155550199:https://voice.example"]
 
 
 def test_project_status_and_non_json_read_tables(

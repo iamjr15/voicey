@@ -119,6 +119,36 @@ restores, outbound calls, and result redelivery require explicit confirmation.
 Call reads and redelivery use the same protected SQLite repository and immutable
 terminal-event/outbox contract as the runtime.
 
+## Docker deployment
+
+Generate and validate the canonical self-host artifacts from an agent project:
+
+```bash
+voicekit deploy docker --skip-smoke
+docker compose -f compose.voicekit.yaml up -d --build
+```
+
+The command refuses to overwrite conflicting artifacts, records `docker` in
+the project manifest, validates the Compose model, and prints the explicit
+number-cutover and smoke steps. An unpublished checkout additionally requires
+`--engine-wheel /absolute/path/to/voicekit-*.whl`.
+
+Once HTTPS ingress and number routing are ready, a phone project can run the
+paid endpoint-and-call smoke:
+
+```bash
+voicekit deploy docker \
+  --smoke https://voice.example.com \
+  --to +15551234567 \
+  --yes
+```
+
+`--skip-smoke` and `--smoke` are mutually exclusive. Web-only projects require
+a real browser conversation instead of treating a health probe as speech
+evidence. Storage topology, secret handling, proxy trust, drain, rolling
+replacement, and recovery are documented in the
+[Docker deployment guide](deploy/docker.md).
+
 ## Doctor
 
 Run local preflight:

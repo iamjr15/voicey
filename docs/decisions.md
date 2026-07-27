@@ -70,3 +70,23 @@ These choices apply the documented proposals authorized in the build mandate and
   only APIs present in both supported ranges. The CLI's behavior and output
   contracts are unchanged and remain regression-tested at the resolver-selected
   Rich 13.9.4.
+
+## 2026-07-27 — Canonical Docker packaging and process boundary
+
+- Build the production runtime from the released voicekit wheel plus the
+  runtime/carrier extras selected in `voicekit.jsonc`. An unpublished `.dev0`
+  checkout must pass a locally built wheel explicitly; the generator copies it
+  mode 0600 and the final image removes all build inputs.
+- Install non-voicekit `[project].dependencies` separately and run project
+  agent/native-flow modules from `/app`. Do not package an arbitrary flat
+  project tree as part of the engine distribution.
+- Use a Docker-managed local-driver volume, SQLite WAL/FULL, local artifacts,
+  and one steady replica. Same-host generations may overlap only for controlled
+  handover and share fenced leases; network volumes and cross-host SQLite are
+  rejected at startup.
+- Let the voicekit container supervisor own SIGINT/SIGTERM and both Uvicorn
+  listeners. It closes admission before the bounded call drain, flushes due
+  result delivery, then exits. Uvicorn's installed server API is used with
+  signal capture disabled rather than installing competing handlers.
+- Publish only the runtime listener. The web token/records listener remains an
+  authenticated internal Compose service surface.

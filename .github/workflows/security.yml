@@ -28,3 +28,73 @@ jobs:
         run: uv run detect-secrets-hook --baseline .secrets.baseline $(git ls-files)
       - name: Dependency audit
         run: uv run pip-audit --local --skip-editable
+      - name: Build unpublished engine wheel
+        run: uv build --wheel --out-dir dist
+      - name: Prepare disposable Docker fixture environment
+        working-directory: tests/fixtures/docker-project
+        run: | # pragma: allowlist secret
+          printf '%s\n' \
+            'ANTHROPIC_API_KEY=fixture' \
+            'CARTESIA_API_KEY=fixture' \
+            'DEEPGRAM_API_KEY=fixture' \
+            'VOICEKIT_INTEGRATOR_SECRET=fixture-integrator' \
+            'VOICEKIT_PUBLIC_BASE=https://voice.example' \
+            'VOICEKIT_WEBHOOK_SECRET=whsec_Zml4dHVyZS1zZWNyZXQ=' \
+            > .env
+          chmod 600 .env
+      - name: Generate and validate canonical Docker artifacts
+        working-directory: tests/fixtures/docker-project
+        run: |
+          ../../../.venv/bin/voicekit deploy docker \
+            --engine-wheel ../../../dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --skip-smoke
+      - name: Build canonical production image
+        working-directory: tests/fixtures/docker-project
+        run: docker build --pull -f Dockerfile.voicekit -t voicekit-security:${{ github.sha }} .
+      - name: Start image and verify health plus SIGTERM drain
+        run: |
+          docker volume create voicekit-security-data
+          docker run -d --name voicekit-security \
+            --init \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 512 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=128m \
+            -p 17860:7860 \
+            -v voicekit-security-data:/app/data \
+            --env-file tests/fixtures/docker-project/.env \
+            -e VOICEKIT_DEPLOY_TARGET=docker \
+            -e VOICEKIT_STORAGE_BACKEND=sqlite \
+            -e VOICEKIT_SQLITE_LOCAL_ONLY=1 \
+            -e VOICEKIT_REPLICA_COUNT=1 \
+            -e VOICEKIT_DATA_DIR=/app/data \
+            -e VOICEKIT_PORT=7860 \
+            -e VOICEKIT_ADMIN_PORT=7861 \
+            -e VOICEKIT_ADMIN_ORIGIN=http://agent:7861 \
+            voicekit-security:${{ github.sha }}
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:17860/health; then
+              break
+            fi
+            if [ "$attempt" = 60 ]; then
+              docker logs voicekit-security
+              exit 1
+            fi
+            sleep 1
+          done
+          docker stop --timeout 20 voicekit-security
+          test "$(docker inspect -f '{{.State.ExitCode}}' voicekit-security)" = "0"
+      - name: Scan canonical production image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: voicekit-security:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - name: Remove disposable container resources
+        if: always()
+        run: |
+          docker rm -f voicekit-security 2>/dev/null || true
+          docker volume rm voicekit-security-data 2>/dev/null || true

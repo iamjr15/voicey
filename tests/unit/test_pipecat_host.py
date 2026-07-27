@@ -271,6 +271,37 @@ async def test_long_lived_runner_uses_auto_end_false() -> None:
     assert not host.running
 
 
+async def test_drain_closes_admission_terminalizes_pending_and_changes_readiness(
+    tmp_path: Path,
+) -> None:
+    host, repository, _adapter = await _host(tmp_path)
+    pending = await host.reserve_call(
+        PipecatCall(call_id="call-drain", channel="web", direction="inbound")
+    )
+
+    report = await host.drain(timeout_s=0.001)
+
+    assert not host.accepting
+    assert report.pending_at_start == 1
+    assert report.forced_sessions == 1
+    assert report.remaining_calls == 0
+    terminal = await repository.get_terminal_event_for_call(pending.call.call_id)
+    assert terminal.event_type == "call.completed"
+    record = await repository.get_call(pending.call.call_id)
+    assert record.terminal_reason == "duration_limit"
+    with pytest.raises(VoicekitError) as rejected:
+        await host.reserve_call(
+            PipecatCall(call_id="call-after-drain", channel="web", direction="inbound")
+        )
+    assert rejected.value.code == "VK-RUN-008"
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=host.app)) as client:
+        response = await client.get("http://test/health")
+    assert response.status_code == 503
+    assert response.json()["accepting"] is False
+    await repository.close()
+
+
 def test_twilio_transport_is_exactly_8khz_and_auto_hangs_up() -> None:
     params = twilio_transport_params(
         settings=PipecatHostSettings(

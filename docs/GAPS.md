@@ -13,6 +13,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 playground real microphone/provider call | ready-to-run, pending human/credentials | Command below | Valid reference-provider keys, browser microphone grant, a person speaking |
 | P1 appointment text Evals | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia keys and local Ollama `gemma2:9b` |
 | P1 appointment audio Evals | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys plus one-time Kokoro/Moonshine downloads |
+| P1 Docker public deployment + paid smoke | ready-to-run, pending public ingress/credentials/PSTN | Commands below | Public HTTPS ingress, live Twilio credentials, owned number, paid destination |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
@@ -213,3 +214,50 @@ Both commands use Pipecat's installed suite runner and return 1 on any failed
 scenario. The first audio run may download Kokoro/Moonshine model data. These
 gates remain `pending credentials/local judge` until the exact commands truly
 return 0.
+
+## P1 Docker public deployment and paid smoke
+
+The canonical image's local build, non-root/read-only start, storage preflight,
+ready health contract, SIGTERM drain, zero exit, and fixed high/critical
+vulnerability scan are automated. Those checks do not prove a public TLS edge
+or a real carrier call.
+
+Build the same unpublished engine wheel and generate artifacts in the target
+agent project:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+uv build --wheel --out-dir dist
+cd /path/to/agent-project
+"$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy docker \
+  --engine-wheel \
+  "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+  --skip-smoke
+VOICEKIT_PUBLIC_BASE=https://voice.example.com \
+  docker compose -f compose.voicekit.yaml up -d --build
+curl --fail https://voice.example.com/health
+```
+
+After configuring the public reverse proxy and injecting the live provider,
+webhook, integrator, and Twilio variables through the protected runtime
+environment, point the owned number and place the explicitly confirmed paid
+smoke:
+
+```bash
+"$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" numbers point +14155550123 \
+  --url https://voice.example.com \
+  --yes
+"$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy docker \
+  --smoke https://voice.example.com \
+  --to +15551234567 \
+  --engine-wheel \
+  "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+  --yes
+```
+
+Verify answer latency, greeting, speech in both directions, and acknowledged
+results-webhook delivery, then stop the old generation and observe a
+`container_drained` log with exit code zero. If the smoke fails, immediately
+run the `voicekit numbers restore <rollback-token> --yes` command printed by
+the cutover. This gate remains pending because no public target or live Twilio
+credentials are available in the current environment.

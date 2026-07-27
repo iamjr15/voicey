@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import sys
 from collections.abc import Callable, Coroutine, Mapping
 from dataclasses import asdict
@@ -31,6 +32,7 @@ from voicekit.cli.prompts import PromptChoice, QuestionaryPromptIO
 from voicekit.cli.wizard import InitOptions, InitWizard
 from voicekit.config.catalog import DEFAULT_PROVIDER_CATALOG, ProviderCatalogEntry
 from voicekit.config.manifest import ManifestStore, RecipeSelection
+from voicekit.deploy import DockerDeploymentGenerator, DockerSmokeVerifier
 from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 from voicekit.obs.logging import scrub_secrets
 from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
@@ -706,31 +708,138 @@ def run_tests_command(
     _fail(VoicekitError("VK-CLI-005", detail="unified `voicekit test` lands in P2."))
 
 
-@deploy_app.callback(invoke_without_command=True)
+@deploy_app.command("docker")
 def deploy_command(
-    ctx: typer.Context,
-    target: Annotated[str | None, typer.Argument(help="Deployment target.")] = None,
     yes: Annotated[bool, typer.Option("--yes", help="Confirm external mutations.")] = False,
     skip_smoke: Annotated[
         bool,
-        typer.Option("--skip-smoke/--smoke", help="Skip the post-deploy smoke call."),
+        typer.Option("--skip-smoke", help="Generate without running endpoint/call smoke."),
+    ] = False,
+    smoke_url: Annotated[
+        str | None,
+        typer.Option("--smoke", help="HTTPS deployment base to health-check and call."),
+    ] = None,
+    to_number: Annotated[
+        str | None,
+        typer.Option("--to", help="Paid smoke-call destination in E.164 form."),
+    ] = None,
+    engine_wheel: Annotated[
+        Path | None,
+        typer.Option("--engine-wheel", help="Local unpublished voicekit wheel."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable artifact and smoke facts."),
     ] = False,
 ) -> None:
-    """Deploy to a capability-gated target."""
-    del yes, skip_smoke
-    if ctx.invoked_subcommand is not None:
-        return
+    """Generate, validate, and optionally smoke the canonical Docker target."""
 
-    def operation() -> None:
-        if target is None:
-            raise VoicekitError("VK-CLI-001", detail="pass an explicit deploy target.")
-        DEFAULT_CAPABILITIES.require("deploy", target)
-        raise VoicekitError(
-            "VK-CLI-005",
-            detail=f"deploy target {target!r} is not packaged in this build.",
+    async def operation() -> None:
+        DEFAULT_CAPABILITIES.require("deploy", "docker")
+        if skip_smoke and smoke_url is not None:
+            raise VoicekitError(
+                "VK-CLI-010",
+                detail="--skip-smoke and --smoke cannot be used together.",
+            )
+        if to_number is not None and smoke_url is None:
+            raise VoicekitError("VK-CLI-010", detail="--to requires --smoke URL.")
+        context = _context()
+        manifest = require_manifest(context)
+        generator = DockerDeploymentGenerator(context.root)
+        artifacts = await asyncio.to_thread(
+            generator.generate,
+            engine_wheel=engine_wheel,
+        )
+        await asyncio.to_thread(generator.validate, artifacts)
+        updated = manifest.model_copy(update={"deploy_target": "docker"})
+        await asyncio.to_thread(
+            ManifestStore(context.root / "voicekit.jsonc").save,
+            updated,
         )
 
-    _guard(operation)
+        smoke: dict[str, object] | None = None
+        call_id: str | None = None
+        if smoke_url is not None:
+            smoke_result = await DockerSmokeVerifier().verify(smoke_url)
+            smoke = asdict(smoke_result)
+            if "phone" not in manifest.channels:
+                raise VoicekitError(
+                    "VK-DEP-004",
+                    detail=(
+                        "this web-only project requires a manual browser conversation; "
+                        "omit --smoke and follow the printed runbook."
+                    ),
+                )
+            destination = to_number or context.environment.get("VOICEKIT_SMOKE_TO")
+            if not destination:
+                raise VoicekitError(
+                    "VK-DEP-004",
+                    detail="a phone smoke requires --to E164 or VOICEKIT_SMOKE_TO.",
+                )
+            _confirm(
+                (
+                    f"Place one paid smoke call from {manifest.phone_number} "
+                    f"to {destination} through {smoke_result.url}?"
+                ),
+                yes=yes,
+            )
+            adapter = _twilio(context, expected_public_base=smoke_result.url)
+            try:
+                call_id = await asyncio.to_thread(
+                    adapter.start_call,
+                    cast("str", manifest.phone_number),
+                    destination,
+                    PipecatTarget(https_base=smoke_result.url),
+                )
+            finally:
+                adapter.ledger.close()
+
+        artifact_rows = {
+            "dockerfile": str(artifacts.dockerfile),
+            "compose": str(artifacts.compose),
+            "dockerignore": str(artifacts.dockerignore),
+            "environment_example": str(artifacts.environment_example),
+            "engine_wheel": (
+                None if artifacts.engine_wheel is None else str(artifacts.engine_wheel)
+            ),
+        }
+        next_command = "docker compose -f compose.voicekit.yaml up -d --build"
+        if json_output:
+            _json(
+                {
+                    "target": "docker",
+                    "artifacts": artifact_rows,
+                    "smoke": smoke,
+                    "call_id": call_id,
+                    "next_step": next_command,
+                }
+            )
+            return
+        console.print("Docker deployment artifacts are valid.")
+        for name, path in artifact_rows.items():
+            if path is not None:
+                console.print(f"{name}: {path}")
+        console.print(f"Next: {next_command}")
+        if manifest.phone_number is not None:
+            console.print(
+                "After HTTPS ingress is ready: "
+                f"voicekit numbers point {manifest.phone_number} --url "
+                "https://voice.example.com --yes"
+            )
+            if smoke_url is None and not skip_smoke:
+                wheel_option = (
+                    ""
+                    if artifacts.engine_wheel is None
+                    else f" --engine-wheel {shlex.quote(str(artifacts.engine_wheel))}"
+                )
+                console.print(
+                    "Then: voicekit deploy docker --smoke https://voice.example.com "
+                    f"--to +15551234567{wheel_option} --yes"
+                )
+        elif smoke_url is None and not skip_smoke:
+            console.print("Then complete one browser conversation through your allowed web origin.")
+
+    _guard_async(operation, json_output=json_output)
 
 
 @app.command("upgrade")

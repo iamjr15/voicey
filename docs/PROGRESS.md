@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P1 — engine spine, Pipecat, Twilio, CLI/playground, recipe #1, Docker
-- **Current unit:** P1.11 Docker deployment
-- **Next task:** implement `deploy docker`, persistence/secrets preflight, drain behavior, smoke-call flow, container scanning, and rolling-generation invariant tests
-- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI; P1.9 wheel-embedded playground; P1.10 wheel-packaged native appointment recipe and direct Pipecat text/audio Evals harness
+- **Current unit:** P1.12 phase verification harness
+- **Next task:** mechanize the fresh-machine five-minute quickstart, p50/p95 audio latency gate, complete command flag/JSON matrix, parallel-call isolation, phase chaos aggregation, tunneled-admin negative, and P1 exit report without promoting pending-live evidence
+- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI; P1.9 wheel-embedded playground; P1.10 wheel-packaged native appointment recipe and direct Pipecat text/audio Evals harness; P1.11 hardened canonical Docker deployment
 
 ## Gate status
 
@@ -35,6 +35,8 @@ Last updated: 2026-07-27
 | P1.9 real microphone/provider browser call | pending-live | Exact disposable-project command in `docs/GAPS.md`; requires reference-provider credentials, a human microphone grant, and speech |
 | P1.10 appointment recipe/local Evals contract | green | Native wheel-packaged recipe; `init`/no-overwrite copy; production-session `EvalTransport`; 7 text + 3 audio scenarios parse on Pipecat 1.6.0; installed CLI 0/1 contract runs in CI; `uv run pytest` → 343 passed, 5 honest live skips, 90.05% branch coverage; wheel and dependency audits green |
 | P1.10 credentialed text/audio Evals | pending-live | Exact disposable-project commands in `docs/GAPS.md`; current environment lacks Anthropic credentials and local Ollama |
+| P1.11 Docker implementation/local verification | green | Deterministic artifacts, Compose validation, env-only secrets, local WAL/FULL/artifact preflight, invalid-topology rejection, fenced rolling handover, production drain, health/smoke contracts, and CI image lifecycle/scan; final local image ran read-only/non-root with build-asserted NLTK data, health green, SIGTERM drain exit 0/OOM false, and Trivy fixed HIGH/CRITICAL + secret scans at 0; full suite → 377 passed, 5 honest live skips, 90.04% branch coverage |
+| P1.11 public HTTPS + paid Docker smoke | pending-live | Exact build, ingress, number-point, paid-call, verification, and rollback commands in `docs/GAPS.md`; requires public ingress and live funded Twilio resources |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.
