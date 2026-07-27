@@ -332,6 +332,26 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="Docker or Compose could not validate the generated deployment.",
         fix="Install a supported Docker Compose release, fix the reported validation, and retry.",
     ),
+    "VK-TST-001": ErrorDefinition(
+        code="VK-TST-001",
+        cause="A simulated-caller scenario, profile, filter, or test config is invalid.",
+        fix="Correct the reported tests/scenarios source or tests/voicekit-test.jsonc field.",
+    ),
+    "VK-TST-002": ErrorDefinition(
+        code="VK-TST-002",
+        cause="A native runtime evaluator is unavailable or rejected generated test inputs.",
+        fix="Install the selected runtime extra and use the pinned version shown by doctor.",
+    ),
+    "VK-TST-003": ErrorDefinition(
+        code="VK-TST-003",
+        cause="A configured test tier, sim-caller model, or judge could not execute.",
+        fix="Start the configured local model or supply the documented cloud/live prerequisites.",
+    ),
+    "VK-TST-004": ErrorDefinition(
+        code="VK-TST-004",
+        cause="One or more voice-agent scenarios failed a hard or judged assertion.",
+        fix="Review the transcript, cited judge reason, and stability attempts before retrying.",
+    ),
     "VK-CLI-001": ErrorDefinition(
         code="VK-CLI-001",
         cause="A non-interactive command is missing an explicit required choice.",

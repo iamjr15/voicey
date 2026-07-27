@@ -396,6 +396,36 @@ the smoke command.
 **Fix:** Install a supported Docker Compose release, fix the reported
 validation, and retry.
 
+## VK-TST-001
+
+**Cause:** A simulated-caller scenario, profile, filter, or test config is
+invalid.
+
+**Fix:** Correct the reported `tests/scenarios` source or
+`tests/voicekit-test.jsonc` field.
+
+## VK-TST-002
+
+**Cause:** A native runtime evaluator is unavailable or rejected generated test
+inputs.
+
+**Fix:** Install the selected runtime extra and use the pinned version shown by
+`voicekit doctor`.
+
+## VK-TST-003
+
+**Cause:** A configured test tier, sim-caller model, or judge could not execute.
+
+**Fix:** Start the configured local model or supply the documented cloud/live
+prerequisites.
+
+## VK-TST-004
+
+**Cause:** One or more voice-agent scenarios failed a hard or judged assertion.
+
+**Fix:** Review the transcript, cited judge reason, and stability attempts before
+retrying.
+
 ## VK-CLI-001
 
 **Cause:** A non-interactive command lacks an explicit required choice.

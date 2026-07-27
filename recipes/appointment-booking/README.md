@@ -49,19 +49,32 @@ a recipe state machine.
 
 ## Pipecat Evals
 
-The suite uses Pipecat's installed harness directly. Local Ollama is the default
-judge; install Ollama and pull the documented model once:
+`tests/scenarios.py` is the canonical seven-case suite used by both runtimes.
+`voicekit test` compiles it to Pipecat Evals YAML or native LiveKit
+`AgentSession.run()` assertions according to `voicekit.jsonc`. Local Ollama is
+the default sim caller and cited judge:
 
 ```bash
 ollama pull gemma2:9b
+voicekit test
+voicekit test --audio
+voicekit test --report junit
+```
+
+Pipecat compilation spawns a generated `-t eval` bot through the production
+session builder. LiveKit text tests use its native expect/judge API; its audio
+tier attaches a virtual PCM microphone and speaker so Kokoro caller speech
+travels through the real STT→LLM→TTS path and Moonshine judges the spoken
+output. An initial failure is rerun three times and remains failed while its
+stability percentage is reported.
+
+The older `evals/` manifests remain useful as direct Pipecat-framework fixtures
+and regression examples:
+
+```bash
 uv run pipecat eval suite evals/text-suite.yaml
 uv run pipecat eval suite evals/audio-suite.yaml -a
 ```
-
-The suite command spawns `eval_bot.py -t eval`, allocates one fresh bot per
-scenario, and exits nonzero when any expectation fails. Audio scenarios use
-local Kokoro for the simulated caller and Moonshine to transcribe the agent's
-real synthesized audio.
 
 The P1 reference-stack latency gate uses a dedicated 20-turn manifest and the
 production observer's persisted end-to-end samples:
@@ -75,9 +88,10 @@ It fails unless p50 is at most 800 ms and p95 is at most 1500 ms. Provider
 credentials must be injected into the process; the script never reads or logs
 secret values from scenario YAML.
 
-For a cloud judge, copy `evals/judge-cloud.example.yaml` to a private config
-location, choose it in a private scenario overlay, and inject that provider key
-with `voicekit keys add openai`. Do not commit the key.
+For a cloud judge or sim caller, create the secret-free
+`tests/voicekit-test.jsonc` config documented in `docs/testing.md` and inject
+the referenced key with `voicekit keys add openai`. Do not put a key in the
+config.
 
 Next: run the text suite on every prompt/tool change and the audio suite before
 shipping.

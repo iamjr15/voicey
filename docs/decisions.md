@@ -159,3 +159,22 @@ These choices apply the documented proposals authorized in the build mandate and
   completed values back into the workflow as untrusted caller data. Keep
   calendar operations in shared typed tools; do not introduce recipe state,
   a flow DSL, or a second tool protocol.
+
+## 2026-07-27 — Unified native testing boundary
+
+- Keep scenario source runtime-neutral, but compile and execute it only through
+  installed native evaluators: Pipecat EvalSuite YAML/transport or LiveKit
+  `AgentSession.run()`/`RunResult.expect`. The schema is test input, not a
+  conversation flow or runtime abstraction.
+- Use local Ollama `gemma2:9b` for both persona-only sim-caller planning and
+  cited judging by default. A secret-free `tests/voicekit-test.jsonc` may select
+  an OpenAI-compatible cloud endpoint and names only the key environment
+  variable.
+- Treat an initial failure as failed even when one or more of the three reruns
+  pass. Preserve all four attempts and report their stability percentage.
+- Implement LiveKit audio with attachable PCM input/output on the installed
+  session, Kokoro caller synthesis, production STT/LLM/TTS services, and
+  Moonshine output transcription. Never label text injection with an audio
+  modality and claim that it exercised the audio pipeline.
+- Leave `--live` fail-closed until the P3 PSTN loopback harness exists. A lower
+  tier is never an implicit substitute.

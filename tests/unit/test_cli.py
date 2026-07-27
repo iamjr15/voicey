@@ -349,10 +349,7 @@ def test_money_and_live_mutations_require_confirmation(
 
 
 def test_future_capability_commands_fail_with_cataloged_error() -> None:
-    for command in (
-        ["test"],
-        ["upgrade"],
-    ):
+    for command in (["upgrade"],):
         result = runner.invoke(app, command)
         assert result.exit_code == 1
         assert "VK-CLI-005" in result.stderr

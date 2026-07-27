@@ -23,6 +23,9 @@ from voicekit.errors import VoicekitError
 from voicekit.recipes.source import install_recipe, recipe_files
 from voicekit.runtimes.pipecat.evals import run_eval_agent
 from voicekit.storage.sqlite import SQLiteRepository
+from voicekit.testing import JudgeConfig, discover_scenarios
+from voicekit.testing.livekit import compile_livekit
+from voicekit.testing.pipecat import compile_pipecat
 
 ROOT = Path(__file__).parents[2]
 RECIPE = ROOT / "recipes" / "appointment-booking"
@@ -112,6 +115,34 @@ def test_recipe_source_selects_native_variant_and_never_overwrites(tmp_path: Pat
     with pytest.raises(VoicekitError) as missing_runtime:
         recipe_files("appointment-booking", cast(Any, "missing-runtime"))
     assert missing_runtime.value.code == "VK-CLI-005"
+
+
+def test_recipe_shared_suite_compiles_to_both_native_evaluators(tmp_path: Path) -> None:
+    scenarios = discover_scenarios(RECIPE)
+
+    assert {definition.name for definition in scenarios} == {
+        "barge_in_to_cancel",
+        "book_appointment",
+        "calendar_failure_is_safe",
+        "cancel_appointment",
+        "change_mind_reschedule",
+        "human_transfer",
+        "voicemail_privacy",
+    }
+    pipecat = compile_pipecat(
+        scenarios,
+        output_dir=tmp_path / "pipecat",
+        bot=RECIPE / "pipecat" / "eval_bot.py",
+        audio=False,
+        judge=JudgeConfig(),
+    )
+    native_manifest = EvalManifest.load(pipecat.manifest)
+    livekit = compile_livekit(scenarios)
+
+    assert len(native_manifest.runs) == 7
+    assert all(EvalScenario.load(path).turns for path in pipecat.scenarios)
+    assert len(livekit) == 7
+    assert all(case.turns for case in livekit)
 
 
 def test_recipe_scaffold_is_complete_native_and_manifested(tmp_path: Path) -> None:
@@ -426,10 +457,13 @@ async def test_eval_runtime_uses_native_transport_and_terminal_lifecycle(
 
     await run_eval_agent(
         _agent(),
-        EvalRunnerArguments(session_id="unit"),
+        EvalRunnerArguments(
+            session_id="unit",
+            body={"voicekit_call_id": "call_eval_manifest_body"},
+        ),
         repository=repository,
     )
-    record = await repository.get_call("call_eval_unit")
+    record = await repository.get_call("call_eval_manifest_body")
     await repository.close()
 
     assert observed["started"] is True

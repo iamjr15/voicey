@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P2 — LiveKit parity, unified testing, Telnyx
-- **Current unit:** P2.4 unified testing and `voicekit test`
-- **Next task:** implement the shared scenario/profile schema and compile it to installed Pipecat Evals plus native LiveKit `session.run()` assertions before adding the JUnit/CLI surface
-- **Completed:** all P0 and P1 units plus P2.1–P2.3. The production LiveKit runtime, browser client/token path, three-process local supervisor, native scratch quickstart, native appointment Agent handoffs/contact tasks, current provider/fallback mapping, fenced incremental lifecycle, actual-SIGKILL recovery, and Twilio Elastic SIP provisioning/controls/recording reconciliation are green. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
+- **Current unit:** P2.5 Telnyx adapter, both Pipecat and LiveKit paths
+- **Next task:** implement the Telnyx Call Control/TeXML bidirectional-streaming adapter and the LiveKit FQDN/credential SIP provisioning backend, then add rollback and certification harnesses for both
+- **Completed:** all P0 and P1 units plus P2.1–P2.4. The unified strict scenario API now compiles and executes through installed native Pipecat Evals or LiveKit AgentSession workflows, including real PCM audio bridges, hard result checks, cited judging, deterministic reruns, JSON/JUnit reporting, seven both-runtime appointment cases, and a fail-closed live tier. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -46,6 +46,8 @@ Last updated: 2026-07-27
 | P2.2 real LiveKit microphone/provider browser call | pending-live | Exact disposable-project command in `docs/GAPS.md`; requires a LiveKit project, reference-provider credentials, browser microphone permission, and human speech |
 | P2.3 appointment recipe LiveKit variant | green | Native intake→booking/reschedule/cancel Agent returns, return-to-intake, shared tool/context preservation, installed `GetNameTask`/`GetEmailTask`, both-runtime metadata/wizard copy, copied-project production-loader import, and wheel contents green; full suite 471 passed, 8 honest live skips, 90.03% branch coverage; strict ruff/format/pyright green |
 | P2.3 credentialed spoken appointment conversation | pending-live | Exact disposable recipe command and all-handoffs behavior checklist in `docs/GAPS.md`; requires a LiveKit project, reference providers, microphone permission, and human speech |
+| P2.4 unified native testing/local verification | green | Strict persona/scenario/profile schema, deterministic discovery/planning, hard durable-result assertions, cited judging, installed Pipecat EvalSuite text/audio compilation, native LiveKit text assertions, real PCM LiveKit audio bridge, four-attempt stability, JSON/JUnit/exit/next-step contracts, seven appointment cases on both compilers, fail-closed live tier, and wheel/CI wiring green; full suite 497 passed, 8 honest live skips, 90.18% branch coverage; ruff/format/strict pyright, pre-commit, wheel build, and dependency audit green |
+| P2.4 reference-provider text/audio suites | pending-live | Exact both-runtime disposable-project commands in `docs/GAPS.md`; current environment lacks Deepgram/Anthropic/Cartesia variables and Ollama |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

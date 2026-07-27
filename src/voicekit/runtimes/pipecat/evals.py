@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from pathlib import Path
+from typing import Any, cast
 
 from pipecat.evals.transport import EvalTransportParams
 from pipecat.runner.types import EvalRunnerArguments
@@ -48,10 +49,19 @@ async def run_eval_agent(
     *,
     repository: PipecatRepository | None = None,
     repository_path: Path = Path(".voicekit/evals.db"),
+    call_id: str | None = None,
 ) -> None:
     """Run one agent through Pipecat's installed ``-t eval`` transport."""
     if agent.runtime != "pipecat":
         raise VoicekitError("VK-RUN-001", detail="Pipecat Evals require runtime='pipecat'.")
+    body = cast(dict[str, Any], runner_args.body) if isinstance(runner_args.body, dict) else {}
+    configured_repository = body.get("voicekit_repository")
+    if repository is None and isinstance(configured_repository, str):
+        repository_path = Path(configured_repository)
+    configured_call_id = body.get("voicekit_call_id")
+    if call_id is None and isinstance(configured_call_id, str):
+        call_id = configured_call_id
+
     owned_repository: SQLiteRepository | None = None
     active_repository: PipecatRepository
     if repository is None:
@@ -66,7 +76,7 @@ async def run_eval_agent(
     wait_task: asyncio.Task[object] | None = None
     try:
         call = PipecatCall(
-            call_id=f"call_eval_{runner_args.session_id or uuid.uuid4().hex}",
+            call_id=call_id or f"call_eval_{runner_args.session_id or uuid.uuid4().hex}",
             channel="web",
             direction="inbound",
             provider="eval",

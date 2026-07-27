@@ -78,6 +78,11 @@ jobs:
         run: uv sync --frozen --extra pipecat --extra livekit --extra twilio
       - name: Mocked integration tests
         run: uv run pytest -m integration --no-cov
+      - name: Unified native scenario compiler gate
+        run: |
+          uv run pytest --no-cov \
+            tests/unit/test_testing.py \
+            tests/unit/test_recipe_appointment.py
 
   p1-gate:
     name: P1 local phase gate

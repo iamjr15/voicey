@@ -45,6 +45,8 @@ from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
 from voicekit.recipes.source import install_recipe
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony.models import PipecatTarget, RollbackToken
+from voicekit.testing.reporting import result_json, write_junit
+from voicekit.testing.runner import run_project_tests
 from voicekit.tunnel import TunnelPreference
 
 if TYPE_CHECKING:
@@ -743,9 +745,69 @@ def run_tests_command(
     live: Annotated[bool, typer.Option("--live/--no-live")] = False,
     report: Annotated[str | None, typer.Option("--report")] = None,
 ) -> None:
-    """Run unified simulated-caller scenarios (lands with runtime parity in P2)."""
-    del filter_text, audio, live, report
-    _fail(VoicekitError("VK-CLI-005", detail="unified `voicekit test` lands in P2."))
+    """Run shared scenarios through the project's native runtime evaluator."""
+    normalized_report = report.casefold() if report else None
+    if normalized_report not in {None, "junit", "json"}:
+        _fail(
+            VoicekitError(
+                "VK-CLI-010",
+                detail="--report must be `junit` or `json`.",
+            ),
+            json_output=normalized_report == "json",
+        )
+
+    async def operation() -> None:
+        context = _context()
+        suite = await run_project_tests(
+            context.root,
+            filter_text=filter_text,
+            audio=audio,
+            live=live,
+            environment=context.environment,
+        )
+        next_command = (
+            "voicekit dev"
+            if suite.passed
+            else _test_retry_command(
+                filter_text=filter_text,
+                audio=audio,
+                live=live,
+            )
+        )
+        if normalized_report == "json":
+            typer.echo(result_json(suite, next_step=next_command))
+        else:
+            table = Table(show_header=True)
+            for column in ("Scenario", "Runtime", "Tier", "Status", "Stability", "Duration"):
+                table.add_column(column)
+            for case in suite.cases:
+                table.add_row(
+                    case.name,
+                    case.runtime,
+                    case.tier,
+                    "PASS" if case.passed else "FAIL",
+                    f"{case.stability:.1f}% ({len(case.attempts)} attempt"
+                    f"{'s' if len(case.attempts) != 1 else ''})",
+                    f"{case.duration_ms} ms",
+                )
+                if not case.passed:
+                    for index, attempt in enumerate(case.attempts):
+                        for failure in attempt.failures:
+                            console.print(
+                                f"[red]  {case.name} attempt {index + 1}:[/red] {failure}"
+                            )
+            console.print(table)
+            if normalized_report == "junit":
+                junit = write_junit(
+                    suite,
+                    context.root / ".voicekit" / "test-results.xml",
+                )
+                console.print(f"JUnit: {junit}")
+            console.print(f"Next: {next_command}")
+        if not suite.passed:
+            raise typer.Exit(code=1)
+
+    _guard_async(operation, json_output=normalized_report == "json")
 
 
 @deploy_app.command("docker")
@@ -1014,6 +1076,22 @@ def _rows_or_table(
         table.add_row(*(json.dumps(row.get(column), default=str) for column in columns))
     console.print(table)
     console.print(f"Next: {next_command}")
+
+
+def _test_retry_command(
+    *,
+    filter_text: str | None,
+    audio: bool,
+    live: bool,
+) -> str:
+    arguments = ["voicekit", "test"]
+    if filter_text:
+        arguments.extend(("--filter", filter_text))
+    if audio:
+        arguments.append("--audio")
+    if live:
+        arguments.append("--live")
+    return shlex.join(arguments)
 
 
 def _json(value: Mapping[str, object]) -> None:

@@ -19,6 +19,8 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P2 Twilio–LiveKit PSTN certification | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded LiveKit/Twilio accounts, deployed agent, two physical endpoints |
 | P2 LiveKit playground real microphone/provider call | ready-to-run, pending credentials/human | Command below | LiveKit project, reference-provider keys, browser microphone grant, a person speaking |
 | P2 appointment LiveKit conversation | ready-to-run, pending credentials/human | Command and checklist below | LiveKit project, reference-provider keys, browser microphone grant, a person exercising all handoffs |
+| P2 unified appointment text suite, both runtimes | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia, local Ollama; both generated projects |
+| P2 unified appointment audio suite, both runtimes | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys, Ollama, Kokoro/Moonshine downloads; both generated projects |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
@@ -28,6 +30,66 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+## P2 unified scenario suite on both runtimes
+
+Normal CI validates the public scenario API, deterministic profiles, cited
+judge contract, four-attempt stability reporting, JSON/JUnit output, installed
+Pipecat scenario/manifest parsing, LiveKit native assertion plans, and the
+LiveKit PCM bridge. It compiles all seven appointment cases for both runtimes.
+Those local checks do not prove the reference-provider conversations.
+
+Export `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`, and `CARTESIA_API_KEY`, then
+install and start the documented local judge:
+
+```bash
+ollama pull gemma2:9b
+ollama serve
+```
+
+In another terminal from the repository root, create both disposable projects:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_TEST_PARENT="$(mktemp -d)"
+VOICEKIT_TEST_PIPECAT="$VOICEKIT_TEST_PARENT/appointment-pipecat"
+VOICEKIT_TEST_LIVEKIT="$VOICEKIT_TEST_PARENT/appointment-livekit"
+uv run voicekit init "$VOICEKIT_TEST_PIPECAT" \
+  --name appointment-pipecat \
+  --recipe appointment-booking \
+  --channels web \
+  --runtime pipecat \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+uv run voicekit init "$VOICEKIT_TEST_LIVEKIT" \
+  --name appointment-livekit \
+  --recipe appointment-booking \
+  --channels web \
+  --runtime livekit \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+```
+
+Run text, audio, and JUnit output on each native runtime:
+
+```bash
+(cd "$VOICEKIT_TEST_PIPECAT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --audio && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --report junit)
+(cd "$VOICEKIT_TEST_LIVEKIT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --audio && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --report junit)
+```
+
+Each command must return zero, each runtime must report all seven cases at
+100% stability, and both JUnit files must contain zero failures. The first
+audio run may download Kokoro and Moonshine. As of 2026-07-27 this environment
+has none of the three reference-provider variables and has no `ollama`
+executable, so no provider-backed result is represented as green.
 
 ## P2 LiveKit playground microphone/provider gate
 
