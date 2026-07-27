@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
 import pytest
 
-from voicekit.errors import ERROR_CATALOG, VoicekitError
+from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 
 
 def test_registered_error_exposes_stable_code_and_fix() -> None:
@@ -18,3 +23,30 @@ def test_unregistered_error_code_is_a_bug() -> None:
 
 def test_catalog_keys_match_definitions() -> None:
     assert all(key == definition.code for key, definition in ERROR_CATALOG.items())
+
+
+def test_every_statically_raised_error_is_registered_and_documented() -> None:
+    source_root = Path(__file__).parents[2] / "src" / "voicekit"
+    raised: set[str] = set()
+    for path in source_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "VoicekitError"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                raised.add(node.args[0].value)
+
+    assert raised <= ERROR_CATALOG.keys()
+    documentation = (source_root.parents[1] / "docs" / "errors.md").read_text(encoding="utf-8")
+    assert all(f"## {code}" in documentation for code in ERROR_CATALOG)
+
+
+def test_error_docs_url_rejects_unregistered_codes() -> None:
+    assert error_docs_url("VK-CLI-001").endswith("#vk-cli-001")
+    with pytest.raises(AssertionError, match="unregistered"):
+        error_docs_url("VK-NOT-REGISTERED")

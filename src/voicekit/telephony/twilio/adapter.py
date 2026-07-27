@@ -22,6 +22,7 @@ from voicekit.telephony.ledger import OutboundIntent, TelephonyLedger
 from voicekit.telephony.models import (
     CallEvent,
     Capabilities,
+    CarrierAccountState,
     LiveKitTarget,
     NumberInfo,
     PipecatTarget,
@@ -117,6 +118,25 @@ class TwilioAdapter:
         except Exception as exc:
             _raise_carrier(exc, operation="list numbers")
         return [_number_info(resource) for resource in cast("list[Any]", resources)]
+
+    def account_state(self) -> CarrierAccountState:
+        """Fetch safe trial/funding facts for doctor without returning credentials."""
+        try:
+            account = self._client.api.accounts(self.account_sid).fetch()
+            balance = self._client.api.v2010.accounts(self.account_sid).balance.fetch()
+        except Exception as exc:
+            _raise_carrier(exc, operation="inspect account")
+        return CarrierAccountState(
+            provider=self.provider,
+            status=str(account.status),
+            account_type=None if account.type is None else str(account.type),
+            balance=None if balance.balance is None else str(balance.balance),
+            currency=None if balance.currency is None else str(balance.currency),
+        )
+
+    def inbound_route(self, number: str) -> dict[str, str | None]:
+        """Fetch the current complete inbound route for doctor diffing."""
+        return _route_settings(self._owned_number(number))
 
     def buy_number(self, country: str, area: str | None = None) -> NumberInfo:
         normalized_country = country.upper()

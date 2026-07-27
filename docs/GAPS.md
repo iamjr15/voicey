@@ -8,6 +8,8 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 cloudflared public WebSocket edge | ready-to-run, pending edge DNS/network | Command below | `cloudflared`, outbound Cloudflare access, generated quick-tunnel DNS |
 | P1 physical-handset outbound check | ready-to-run, pending credentials/human | Paid PSTN command below | Physical handset, answering person, provisioned carrier numbers |
 | P1 inbound audio/transcript loopback | not-ready (P1.10 dependency) | Added to the same harness after the recipe endpoint lands | Running Pipecat pipeline, physical handset and provisioned number |
+| P1 full guided-wizard usability | ready-to-run, pending human/credentials | Command below | Interactive terminal, a human, provider keys |
+| P1 doctor on deliberately broken project | ready-to-run, pending human observation | Commands below | Interactive terminal; disposable fixture only |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
@@ -79,3 +81,44 @@ The inbound Pipecat runtime path now exists; the handset/audio-transcript
 loopback joins this suite with the P1.10 recipe endpoint and Evals harness.
 Mocked carrier protocol and local codec/tone-loopback evidence is green
 independently; it is not represented as live carrier evidence.
+
+## P1 CLI manual gates
+
+The full wizard must be assessed by a person because absence of coercive
+wording, initial selection, and confusing transitions is a usability claim.
+Create a disposable target and complete the flow without answer flags:
+
+```bash
+VOICEKIT_MANUAL_PROJECT="$(mktemp -d)/human-wizard"
+uv run voicekit init "$VOICEKIT_MANUAL_PROJECT"
+```
+
+Verify every choice starts unselected, scratch is last, channel multi-select
+requires an explicit selection, each pasted key is validated, and the final
+`Next:` command starts the generated project. Interrupt once before completion,
+then run:
+
+```bash
+uv run voicekit init "$VOICEKIT_MANUAL_PROJECT" --resume
+```
+
+The broken-machine doctor gate uses a disposable project rather than damaging
+the host. From the repository root:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_BROKEN_PROJECT="$(mktemp -d)"
+uv run python tests/manual/prepare_broken_doctor.py "$VOICEKIT_BROKEN_PROJECT"
+(cd "$VOICEKIT_BROKEN_PROJECT" && "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor)
+```
+
+The run is expected to exit non-zero and visibly diagnose missing provider and
+carrier credentials, missing webhook secret, `.env.example` drift, unreachable
+signed receiver, and route/account checks it cannot safely perform. Then run
+the safe subset and verify that secrets are not printed:
+
+```bash
+(cd "$VOICEKIT_BROKEN_PROJECT" && "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor --fix)
+```
+
+These remain `pending human` until a person records the observed outcome.

@@ -56,7 +56,7 @@ Rules that keep this honest:
 
 1. **Bootstraps stay thin.** A bootstrap may assemble, register, and observe; it may never reinterpret conversation semantics. If a feature requires wrapping a runtime's conversation API, the feature is redesigned or dropped.
 2. **Everything in shared core is runtime-blind.** Shared core communicates with bootstraps only through defined interfaces (§5 telephony targets, §6 results events, §8 client session tokens).
-3. **The manifest (`voicekit.jsonc`)** records init choices (runtime, recipe + version, carriers, deploy target) so every command is resumable and `recipes update-check` / `upgrade` can reason about drift.
+3. **The manifest (`voicekit.jsonc`)** records init choices (runtime, recipe + version, channels, carriers + selected E.164 phone number, deploy target) so every command is resumable and `recipes update-check` / `upgrade` can reason about drift.
 
 Packaging: single distribution `voicekit` with extras — `voicekit[pipecat]`, `voicekit[livekit]` (each pinning a tested version range of its runtime), `voicekit[twilio,telnyx,vobiz,plivo]`. `init` installs exactly what the wizard's answers require.
 

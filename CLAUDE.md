@@ -20,6 +20,6 @@ Greenfield open-source product: **the production toolchain around Pipecat and Li
 
 ## Current state
 
-- Phase: **P1, unit 8 (`cli/`)**. P0 completed 2026-07-26. P1.1–P1.7 shipped configuration, observability, fenced results/storage, safe typed tools, Twilio adapter/local certification, production Pipecat runtime, and supervised development tunnels with an authenticated WebSocket probe. Credential/PSTN and the environment-blocked cloudflared public-edge gate remain explicit in `docs/GAPS.md`. See `docs/PROGRESS.md`.
+- Phase: **P1, unit 9 (`playground/`)**. P0 completed 2026-07-26. P1.1–P1.8 shipped configuration, observability, fenced results/storage, safe typed tools, Twilio adapter/local certification, production Pipecat runtime, supervised development tunnels, and the complete guided CLI/doctor/error-catalog surface. Credential, PSTN, public-edge, and human usability gates remain explicit in `docs/GAPS.md`. See `docs/PROGRESS.md`.
 - Open human-only decision: final product name before first publish. Reference model and sim-judge defaults were accepted in the implementation mandate and recorded in `docs/decisions.md`.
 - `.env.parley-backup` holds provider API keys carried over from the predecessor project (uncommitted; for dev convenience).

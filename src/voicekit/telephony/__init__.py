@@ -3,6 +3,7 @@
 from voicekit.telephony.models import (
     CallEvent,
     Capabilities,
+    CarrierAccountState,
     LiveKitTarget,
     NumberInfo,
     PipecatTarget,
@@ -16,6 +17,7 @@ from voicekit.telephony.registry import adapter_names, load_adapter
 __all__ = [
     "CallEvent",
     "Capabilities",
+    "CarrierAccountState",
     "LiveKitTarget",
     "NumberInfo",
     "PipecatTarget",

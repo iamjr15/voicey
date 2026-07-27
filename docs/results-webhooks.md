@@ -146,4 +146,4 @@ replayable. The local artifact implementation rejects path traversal and
 symlinks and stores files at `0600` below a `0700` root.
 
 Next step for receiver development: copy the verification example, then run
-`voicekit doctor --send-test` when the P1.8 doctor surface is installed.
+`voicekit doctor --send-test`.

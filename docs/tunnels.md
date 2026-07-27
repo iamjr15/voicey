@@ -124,5 +124,5 @@ establishes a connector and emits a URL, but the generated hostname did not
 resolve within 60 seconds on 2026-07-27. This is recorded in
 [`GAPS.md`](GAPS.md), not represented as a green edge test.
 
-Next step: `voicekit dev --phone` will own this lifecycle when the P1.8 CLI
-unit lands.
+`voicekit dev --phone` now owns this lifecycle: it probes the tunnel before
+changing a route and restores both route and tunnel during teardown.

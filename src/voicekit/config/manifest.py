@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import json5
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, model_validator
 
-from voicekit.config.models import ModelAxis, RuntimeName, VoicekitModel
+from voicekit.config.models import E164_PATTERN, ModelAxis, RuntimeName, VoicekitModel
 from voicekit.errors import VoicekitError
 
 ChannelName = Literal["phone", "web"]
@@ -49,8 +49,30 @@ class ProjectManifest(VoicekitModel):
     channels: Annotated[frozenset[ChannelName], Field(min_length=1)]
     models: dict[ModelAxis, str]
     carriers: list[str] = Field(default_factory=list[str])
+    phone_number: str | None = None
     deploy_target: DeployTarget | None = None
     state: ManifestState = Field(default_factory=ManifestState)
+
+    @model_validator(mode="after")
+    def phone_choice_is_resumable(self) -> ProjectManifest:
+        if "phone" in self.channels:
+            if (
+                self.phone_number is None
+                or not E164_PATTERN.fullmatch(self.phone_number)
+                or len(self.carriers) != 1
+            ):
+                msg = (
+                    "phone channel requires one carrier and one E.164 phone_number. "
+                    "Fix: resume init and select an owned number."
+                )
+                raise ValueError(msg)
+        elif self.phone_number is not None or self.carriers:
+            msg = (
+                "phone_number/carriers exist without the phone channel. "
+                "Fix: add the phone channel or remove phone configuration."
+            )
+            raise ValueError(msg)
+        return self
 
 
 class ManifestStore:

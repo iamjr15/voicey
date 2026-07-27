@@ -41,7 +41,12 @@ from voicekit.runtimes.pipecat.lifecycle import (
 )
 from voicekit.runtimes.pipecat.session import PipecatSession, PipecatSessionBuilder
 from voicekit.storage.models import EndedReason
-from voicekit.telephony.models import CallEvent, PipecatTarget, TelephonyRequest
+from voicekit.telephony.models import (
+    CallEvent,
+    PipecatTarget,
+    RuntimeTarget,
+    TelephonyRequest,
+)
 
 
 class TwilioRuntimeAdapter(Protocol):
@@ -51,7 +56,7 @@ class TwilioRuntimeAdapter(Protocol):
 
     def verify_request(self, request: TelephonyRequest) -> bool: ...
 
-    def answer_response(self, target: object) -> str: ...
+    def answer_response(self, target: RuntimeTarget) -> str: ...
 
     def parse_event(self, request: TelephonyRequest) -> CallEvent: ...
 
@@ -60,7 +65,7 @@ class TwilioRuntimeAdapter(Protocol):
         call_sid: str,
         *,
         answered_by: str,
-        target: object,
+        target: RuntimeTarget,
         connect_machine: bool = False,
     ) -> str: ...
 

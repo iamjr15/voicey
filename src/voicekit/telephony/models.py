@@ -57,6 +57,17 @@ class NumberInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class CarrierAccountState:
+    """Safe account facts used by doctor; never contains credentials."""
+
+    provider: str
+    status: str
+    account_type: str | None
+    balance: str | None
+    currency: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class PipecatTarget:
     """Public HTTP/WS routes for a Pipecat media-stream worker."""
 

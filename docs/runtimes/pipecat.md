@@ -152,5 +152,5 @@ mapping, failover, 8 kHz serializer settings, incremental observations, and
 fenced terminal persistence. External PSTN evidence remains separately tracked
 in [`docs/GAPS.md`](../GAPS.md).
 
-Next step: run `voicekit doctor` once the P1.8 CLI unit exposes the guided
-host startup and key checks.
+Next step: run `voicekit doctor`, then use `voicekit dev` for the guided host
+startup.

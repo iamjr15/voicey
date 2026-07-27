@@ -107,7 +107,9 @@ result events so operators can identify exactly what was live for a call.
 
 The project manifest is an engine-owned, resumable record of wizard choices. It
 contains the project, runtime, recipe version, channels, providers, deploy
-target, and completed steps. It never contains secret values.
+target, and completed steps. For phone projects it also stores exactly one
+carrier and its selected E.164 number so interrupted routing and calling
+commands can resume. It never contains secret values.
 
 `ManifestStore` accepts JSON5 comments and trailing commas. Saves use a
 same-directory temporary file, flush file contents, atomically replace the

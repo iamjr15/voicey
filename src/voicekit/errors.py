@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+ERROR_DOCS_BASE = "https://github.com/voicekit/voicekit/blob/main/docs/errors.md"
+
 
 @dataclass(frozen=True, slots=True)
 class ErrorDefinition:
@@ -269,6 +271,56 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The tunnel process or listener could not be shut down cleanly.",
         fix="Stop the reported tunnel process before starting another development session.",
     ),
+    "VK-CLI-001": ErrorDefinition(
+        code="VK-CLI-001",
+        cause="A non-interactive command is missing an explicit required choice.",
+        fix="Pass the exact flag named by the error or rerun in an interactive terminal.",
+    ),
+    "VK-CLI-002": ErrorDefinition(
+        code="VK-CLI-002",
+        cause="The guided setup was cancelled, conflicted, or cannot be resumed safely.",
+        fix="Rerun `voicekit init --resume` or choose a new empty project directory.",
+    ),
+    "VK-CLI-003": ErrorDefinition(
+        code="VK-CLI-003",
+        cause="A project scaffold or protected environment file could not be written safely.",
+        fix="Check project permissions and disk space, then resume `voicekit init`.",
+    ),
+    "VK-CLI-004": ErrorDefinition(
+        code="VK-CLI-004",
+        cause="A required provider key is missing, invalid, or could not be verified.",
+        fix="Run the printed `voicekit keys add <provider>` command and validate again.",
+    ),
+    "VK-CLI-005": ErrorDefinition(
+        code="VK-CLI-005",
+        cause="The requested runtime, carrier, recipe, deploy target, or extra is unavailable.",
+        fix="Choose an enabled capability or install the exact extra printed by the command.",
+    ),
+    "VK-CLI-006": ErrorDefinition(
+        code="VK-CLI-006",
+        cause="One or more doctor preflight checks failed.",
+        fix="Apply each printed advice line, then rerun `voicekit doctor`.",
+    ),
+    "VK-CLI-007": ErrorDefinition(
+        code="VK-CLI-007",
+        cause="The command cannot run from the current project or lifecycle state.",
+        fix="Run the printed next step or resume the interrupted command first.",
+    ),
+    "VK-CLI-008": ErrorDefinition(
+        code="VK-CLI-008",
+        cause="A money-spending or live-routing mutation lacks explicit confirmation.",
+        fix="Review the exact mutation, then rerun interactively or pass `--yes`.",
+    ),
+    "VK-CLI-009": ErrorDefinition(
+        code="VK-CLI-009",
+        cause="A CLI operation failed without a safe provider-specific mapping.",
+        fix="Retry with `--verbose`; if it repeats, use the printed pre-filled issue link.",
+    ),
+    "VK-CLI-010": ErrorDefinition(
+        code="VK-CLI-010",
+        cause="A command output request or filter is malformed.",
+        fix="Correct the reported flag, identifier, or JSON/output option and retry.",
+    ),
 }
 
 
@@ -289,3 +341,11 @@ class VoicekitError(RuntimeError):
             message = f"{message} {detail}"
         message = f"{message} Fix: {definition.fix}"
         super().__init__(message)
+
+
+def error_docs_url(code: str) -> str:
+    """Return the stable public catalog anchor for a registered error."""
+    if code not in ERROR_CATALOG:
+        msg = f"unregistered voicekit error code: {code}"
+        raise AssertionError(msg)
+    return f"{ERROR_DOCS_BASE}#{code.casefold()}"
