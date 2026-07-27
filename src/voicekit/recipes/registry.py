@@ -80,5 +80,29 @@ DEFAULT_RECIPE_REGISTRY = RecipeRegistry(
             min_engine="0.1.0",
             source_available=True,
         ),
+        RecipeDefinition(
+            name="front-desk",
+            version="1.0.0",
+            description="Answer, triage, take messages, and warm transfer.",
+            runtimes=frozenset({"pipecat", "livekit"}),
+            min_engine="0.1.0",
+            source_available=True,
+        ),
+        RecipeDefinition(
+            name="lead-intake",
+            version="1.0.0",
+            description="Qualify inquiries, capture consented leads, and schedule follow-up.",
+            runtimes=frozenset({"pipecat", "livekit"}),
+            min_engine="0.1.0",
+            source_available=True,
+        ),
+        RecipeDefinition(
+            name="restaurant-reservations",
+            version="1.0.0",
+            description="Reserve tables and offer an explicit waitlist fallback.",
+            runtimes=frozenset({"pipecat", "livekit"}),
+            min_engine="0.1.0",
+            source_available=True,
+        ),
     )
 )

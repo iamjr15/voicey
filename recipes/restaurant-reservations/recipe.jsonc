@@ -1,0 +1,13 @@
+{
+  // Static offline metadata. Runtime source is copied into the user's project.
+  "name": "restaurant-reservations",
+  "version": "1.0.0",
+  "min_engine": "0.1.0",
+  "runtimes": ["pipecat", "livekit"],
+  "summary": "Reserve tables with party-size, timing, special-request, and waitlist handling.",
+  "integration_points": [
+    "tools.py:TodoRestaurantGateway",
+    "VOICEKIT_TRANSFER_NUMBER",
+    "agent.py:Results.webhook"
+  ]
+}

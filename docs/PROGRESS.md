@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P3 — recipes, additional carriers, live tier, cloud deploys, relay, warm transfer
-- **Current unit:** P3.1 recipes 2–4 on both native runtimes
-- **Next task:** implement restaurant-reservations, front-desk, and lead-intake with native Pipecat Flows and native LiveKit Agent workflows, shared typed integrations, full scenario suites, registry/wheel/docs wiring, and both-runtime verification
-- **Completed:** all P0, P1, and P2 numbered units. P2's checked-in feature/config matrices and 36-test parity suite are CI-enforced; the release-shaped aggregate reran the complete P1 gate plus LiveKit crash, unified testing, Twilio–LiveKit, and both Telnyx paths with all six local groups green. The full suite is 628 passed, 14 honest live skips, 90.08% branch coverage. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact commands in `docs/GAPS.md`
+- **Current unit:** P3.2 Vobiz Pipecat certification + LiveKit feasibility spike
+- **Next task:** implement signed Vobiz call/media control on Pipecat, empirically test its current SIP surface against LiveKit requirements, record the feasibility decision, and enable only evidence-backed capability paths
+- **Completed:** all P0 and P1/P2 numbered units plus P3.1. Four offline first-party recipes now ship on both native runtimes; the three P3 recipes add 17 shared scenarios and verified typed integration/result contracts. The full suite is 644 passed, 14 honest live skips, 90.09% branch coverage. Credentialed/PSTN/microphone/conversation gates remain pending with exact commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -53,6 +53,8 @@ Last updated: 2026-07-27
 | P2.6 runtime parity + config matrices | green | 36 runtime-parameterized tests enforce identical greeting, tool order, webhook shape, all 14 shared config fields, pinned versions, evidence-backed feature cells, and the sole declared Pipecat warm-transfer P3 exclusion; signed recording callbacks now ingest into engine storage before emitting `call.recording.ready`, and engine artifact reads require the current/previous result secret |
 | P2 local phase aggregate | green | Release-shaped P2 runner: complete P1 regression 38.415s, parity, LiveKit runtime/SIGKILL, unified testing, Twilio–LiveKit, and Telnyx both paths all green; report `.voicekit/verification/p2-gate-report.json` |
 | P2 phase overall | pending-live | All local automation is green; reference-provider conversations, LiveKit microphone/workflow, funded Twilio/Telnyx PSTN, and physical handset gates remain unpromoted; see `docs/verification/p2-gates.md` |
+| P3.1 recipes 2–4 local verification | green | Restaurant reservations, front desk, and lead intake ship shared typed stubs/prompts/results, native Pipecat and LiveKit workflows, 17 scenarios compiled to both test adapters, registry/wizard/copy packaging, release-wheel source, and written quality/docs contracts; full suite 644 passed, 14 honest live skips, 90.09% branch coverage |
+| P3.1 reference-provider recipe conversations | pending-live | Exact six-project text/audio/JUnit loop and behavior checklist in `docs/GAPS.md`; requires Deepgram/Anthropic/Cartesia credentials, Ollama, and live warm-transfer infrastructure |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

@@ -147,6 +147,24 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
             enabled=True,
         ),
         Capability(
+            kind="recipe",
+            id="restaurant-reservations",
+            description="Reserve tables and offer an explicit waitlist fallback.",
+            enabled=True,
+        ),
+        Capability(
+            kind="recipe",
+            id="front-desk",
+            description="Answer, triage, take messages, and warm transfer.",
+            enabled=True,
+        ),
+        Capability(
+            kind="recipe",
+            id="lead-intake",
+            description="Qualify inquiries, capture consented leads, and schedule follow-up.",
+            enabled=True,
+        ),
+        Capability(
             kind="deploy",
             id="docker",
             description="Self-hosted container with durable local storage.",

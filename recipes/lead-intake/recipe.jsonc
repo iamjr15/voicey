@@ -1,0 +1,13 @@
+{
+  // Static offline metadata. Runtime source is copied into the user's project.
+  "name": "lead-intake",
+  "version": "1.0.0",
+  "min_engine": "0.1.0",
+  "runtimes": ["pipecat", "livekit"],
+  "summary": "Qualify an inquiry, capture consented contact details, and schedule follow-up.",
+  "integration_points": [
+    "tools.py:TodoLeadGateway",
+    "VOICEKIT_TRANSFER_NUMBER",
+    "agent.py:Results.webhook"
+  ]
+}

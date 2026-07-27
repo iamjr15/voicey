@@ -601,3 +601,42 @@ results-webhook delivery, then stop the old generation and observe a
 run the `voicekit numbers restore <rollback-token> --yes` command printed by
 the cutover. This gate remains pending because no public target or live Twilio
 credentials are available in the current environment.
+
+## P3 first-party recipe provider conversations
+
+All three P3 recipe sources, deterministic integrations, native entrypoints,
+and 17 shared scenarios compile locally on both runtimes. Real STT→LLM→TTS
+execution needs the locked reference-provider credentials and local Ollama.
+From the repository root, run each recipe/runtime pair in a disposable project:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_RECIPE_PARENT="$(mktemp -d)"
+for VOICEKIT_RECIPE in restaurant-reservations front-desk lead-intake; do
+  for VOICEKIT_RUNTIME in pipecat livekit; do
+    VOICEKIT_PROJECT="$VOICEKIT_RECIPE_PARENT/$VOICEKIT_RECIPE-$VOICEKIT_RUNTIME"
+    uv run voicekit init "$VOICEKIT_PROJECT" \
+      --name "$VOICEKIT_RECIPE-$VOICEKIT_RUNTIME" \
+      --recipe "$VOICEKIT_RECIPE" \
+      --channels web \
+      --runtime "$VOICEKIT_RUNTIME" \
+      --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+      --no-draft-prompts \
+      --yes
+    (
+      cd "$VOICEKIT_PROJECT"
+      "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test
+      "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --audio
+      "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --report junit
+    )
+  done
+done
+```
+
+For `front-desk`, repeat the live phone conversation after P3 warm-transfer
+provisioning and verify that the human hears the private briefing before the
+caller joins. For restaurant reservations, verify an unavailable large party
+becomes waitlisted rather than confirmed. For lead intake, decline retention
+consent and confirm no lead is persisted. These gates remain pending until all
+commands return zero and those behaviors are observed; local compilation is not
+promoted as provider-conversation evidence.

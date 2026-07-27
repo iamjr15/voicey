@@ -1,0 +1,13 @@
+{
+  // Static offline metadata. Runtime source is copied into the user's project.
+  "name": "front-desk",
+  "version": "1.0.0",
+  "min_engine": "0.1.0",
+  "runtimes": ["pipecat", "livekit"],
+  "summary": "Answer common questions, triage callers, take messages, and warm transfer.",
+  "integration_points": [
+    "tools.py:TodoFrontDeskGateway",
+    "VOICEKIT_TRANSFER_NUMBER",
+    "agent.py:Results.webhook"
+  ]
+}

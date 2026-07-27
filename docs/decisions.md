@@ -225,3 +225,20 @@ These choices apply the documented proposals authorized in the build mandate and
   previous Results webhook secret as a bearer credential during rotation and
   returns `Cache-Control: private, no-store`; carrier URLs never leave the
   authenticated ingestion boundary.
+
+## 2026-07-27 — P3 first-party recipe boundaries
+
+- Keep each Pipecat variant as a directly loadable native `NodeConfig` and each
+  LiveKit variant as native Agent-returning handoffs. The shared scenario
+  source remains evaluator input only and never becomes a flow abstraction.
+- Model restaurant waitlisting as a separate confirmed mutation whose result
+  is explicitly not a table guarantee.
+- Restrict front-desk answers to the configured knowledge tool and keep
+  immediate life-safety direction ahead of hold or transfer. Ordinary warm
+  transfer requires caller consent and a private briefing.
+- Qualify leads only from business-need, timeline, broad budget, and
+  organization-size facts. Require explicit retention/follow-up consent and
+  prohibit protected traits and unrelated sensitive data.
+- Apply the checked-in recipe quality checklist to first-party and community
+  sources; community entries do not receive a certification claim until their
+  credentialed provider suite has actually run.

@@ -77,6 +77,9 @@ packages = ["src/voicekit"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "recipes/appointment-booking" = "voicekit/recipe_data/appointment-booking"
+"recipes/front-desk" = "voicekit/recipe_data/front-desk"
+"recipes/lead-intake" = "voicekit/recipe_data/lead-intake"
+"recipes/restaurant-reservations" = "voicekit/recipe_data/restaurant-reservations"
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"

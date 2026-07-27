@@ -154,7 +154,12 @@ def test_capabilities_and_recipes_report_runtime_and_recipe_availability() -> No
     assert DEFAULT_CAPABILITIES.require("runtime", "livekit").enabled
 
     available = DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False)
-    assert [recipe.name for recipe in available] == ["appointment-booking"]
+    assert [recipe.name for recipe in available] == [
+        "appointment-booking",
+        "front-desk",
+        "lead-intake",
+        "restaurant-reservations",
+    ]
     assert DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "pipecat") == available[0]
     assert DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "livekit") == available[0]
     assert available[0].runtimes == frozenset({"pipecat", "livekit"})
