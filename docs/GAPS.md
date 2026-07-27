@@ -5,6 +5,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | Gate | Status | Exact runbook command | Requirement |
 |---|---|---|---|
 | P1 Twilio carrier/API certification | ready-to-run, pending credentials/PSTN | Commands below | Twilio test/live credentials, funded number, public target, PSTN |
+| P1 cloudflared public WebSocket edge | ready-to-run, pending edge DNS/network | Command below | `cloudflared`, outbound Cloudflare access, generated quick-tunnel DNS |
 | P1 physical-handset outbound check | ready-to-run, pending credentials/human | Paid PSTN command below | Physical handset, answering person, provisioned carrier numbers |
 | P1 inbound audio/transcript loopback | not-ready (P1.10 dependency) | Added to the same harness after the recipe endpoint lands | Running Pipecat pipeline, physical handset and provisioned number |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
@@ -14,7 +15,27 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
 | P4 24-hour soak | not-ready | Added with the P4 soak harness | 24 hours of uninterrupted runner time |
 
-Statuses change to `ready-to-run, pending credentials/time` only after the harness, configuration, and exact command exist. A row moves to the completion report as green only after the command actually passes.
+Statuses change to `ready-to-run, pending …` only after the harness,
+configuration, and exact command exist. A row moves to the completion report
+as green only after the command actually passes.
+## P1 cloudflared public WebSocket edge
+
+The harness starts a loopback FastAPI listener, installs an ephemeral
+challenge-only WebSocket endpoint, creates a cloudflared quick tunnel, verifies
+the exact challenge through the public `wss://` route, and tears down both
+processes:
+
+```bash
+VOICEKIT_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL \
+  uv run pytest -m live --no-cov \
+  tests/live/test_tunnel_live.py::test_cloudflared_quick_tunnel_websocket_round_trip
+```
+
+On 2026-07-27, cloudflared 2026.3.0 connected and emitted a
+`trycloudflare.com` URL on three attempts, but the generated hostname remained
+unresolvable for the full 60-second probe deadline (`gaierror`). The harness
+failed and cleaned up every child process, so this edge gate remains pending.
+
 ## P1 Twilio credential and PSTN gates
 
 - **Twilio no-charge test-credential Calls API:** ready-to-run, pending

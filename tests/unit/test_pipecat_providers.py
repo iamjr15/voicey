@@ -17,12 +17,12 @@ from voicekit.errors import VoicekitError
 from voicekit.runtimes.pipecat.providers import DefaultProviderFactory
 
 _ENVIRONMENT = {
-    "DEEPGRAM_API_KEY": "deepgram-test",
-    "OPENAI_API_KEY": "openai-test",
-    "ANTHROPIC_API_KEY": "anthropic-test",
-    "GEMINI_API_KEY": "gemini-test",
-    "CARTESIA_API_KEY": "cartesia-test",
-    "ELEVENLABS_API_KEY": "elevenlabs-test",
+    "DEEPGRAM_API_KEY": "deepgram-test",  # pragma: allowlist secret
+    "OPENAI_API_KEY": "openai-test",  # pragma: allowlist secret
+    "ANTHROPIC_API_KEY": "anthropic-test",  # pragma: allowlist secret
+    "GEMINI_API_KEY": "gemini-test",  # pragma: allowlist secret
+    "CARTESIA_API_KEY": "cartesia-test",  # pragma: allowlist secret
+    "ELEVENLABS_API_KEY": "elevenlabs-test",  # pragma: allowlist secret
 }
 
 

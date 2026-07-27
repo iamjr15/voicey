@@ -10,6 +10,9 @@ This table records versions empirically installed and inspected during P0. Runti
 | LiveKit Agents | `livekit-agents==1.6.7` | Installed from PyPI on 2026-07-26; latest resolver candidate was unchanged |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
+| ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |
+| cloudflared CLI | `2026.3.0` observed locally | Quick-tunnel URL emission and bounded process cleanup ran; public hostname DNS remained unavailable, so external WS evidence is pending |
+| websockets Python | `>=16,<17` (`16.1.1` tested) | Current asyncio `connect()` context manager exercised by local and guarded public probes |
 | Pipecat client JS | `@pipecat-ai/client-js==1.13.0` | npm registry checked 2026-07-26 |
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
 | Pipecat SmallWebRTC | `@pipecat-ai/small-webrtc-transport==1.10.6` | npm registry checked 2026-07-26 |
@@ -27,6 +30,8 @@ This table records versions empirically installed and inspected during P0. Runti
 - LiveKit SIP: current trunk/rule methods are `create_inbound_trunk` and `create_dispatch_rule`; their `create_sip_*` aliases are deprecated. `create_sip_participant` and `transfer_sip_participant` remain current.
 - Twilio request validation: `RequestValidator.validate(uri, params, signature)`; JSON body hashing is selected by the signed `bodySHA256` query parameter.
 - Twilio outbound: `CallList.create` has no idempotency-key parameter; async AMD uses `async_amd` plus its callback fields, and call redirects use `CallContext.update(twiml=...)`.
+- ngrok Python: synchronous `forward()` returns a listener; `Listener.close()` is awaitable. HTTP endpoints carry WebSocket upgrades without a second endpoint.
+- Cloudflared quick tunnels emit their public URL on stderr before edge DNS is necessarily ready; the WebSocket probe retries within one bounded deadline.
 
 ## Upgrade rule
 

@@ -57,7 +57,7 @@ def _agent(
         web=Web(enabled=True, allowed_origins=["https://app.example"]),
         results=Results(
             webhook="https://receiver.example/results",
-            secret_env="RESULT_SECRET",
+            secret_env="RESULT_SECRET",  # pragma: allowlist secret
         ),
         limits=Limits(
             max_duration_s=60,

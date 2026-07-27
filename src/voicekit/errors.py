@@ -244,6 +244,31 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The runtime host received a malformed or unauthenticated signaling request.",
         fix="Verify the expected public URL, proxy trust, signature, and signaling payload.",
     ),
+    "VK-TUN-001": ErrorDefinition(
+        code="VK-TUN-001",
+        cause="The selected tunnel provider dependency or executable is unavailable.",
+        fix="Install the exact tunnel extra or executable named by the error, then retry.",
+    ),
+    "VK-TUN-002": ErrorDefinition(
+        code="VK-TUN-002",
+        cause="The tunnel provider, local port, public URL, or protocol is invalid.",
+        fix="Use a supported provider, a free TCP port, and an HTTPS public origin.",
+    ),
+    "VK-TUN-003": ErrorDefinition(
+        code="VK-TUN-003",
+        cause="The tunnel process exited or did not publish a valid public URL in time.",
+        fix="Check provider connectivity and safe tunnel diagnostics, then retry.",
+    ),
+    "VK-TUN-004": ErrorDefinition(
+        code="VK-TUN-004",
+        cause="The public tunnel failed its authenticated WebSocket round-trip probe.",
+        fix="Do not point a carrier; repair WebSocket upgrade forwarding and rerun doctor.",
+    ),
+    "VK-TUN-005": ErrorDefinition(
+        code="VK-TUN-005",
+        cause="The tunnel process or listener could not be shut down cleanly.",
+        fix="Stop the reported tunnel process before starting another development session.",
+    ),
 }
 
 

@@ -36,12 +36,14 @@ dependencies = [
   "typer==0.27.0",
   "uvicorn[standard]>=0.40,<1",
   "watchfiles>=1.1,<2",
+  "websockets>=16,<17",
 ]
 
 [project.optional-dependencies]
 pipecat = ["pipecat-ai[anthropic,deepgram,google,webrtc,websocket]==1.6.0"]
 livekit = ["livekit-agents==1.6.7", "livekit-api==1.2.0"]
 twilio = ["python-multipart>=0.0.22,<1", "twilio==9.10.9"]
+tunnel = ["ngrok==1.4.0"]
 
 [project.scripts]
 voicekit = "voicekit.cli.app:app"
