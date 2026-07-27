@@ -691,6 +691,45 @@ def test_scratch_scaffold_is_native_compilable_and_manifested(tmp_path: Path) ->
     assert "voicekit[pipecat,twilio]" in project_data
 
 
+def test_livekit_vobiz_scaffold_declares_every_control_plane_value(tmp_path: Path) -> None:
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    manifest = ProjectManifest(
+        project_name="india-agent",
+        runtime="livekit",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"phone"}),
+        models=models,
+        carriers=["vobiz"],
+        phone_number="+918071234567",
+    )
+    scaffold = ScratchScaffold(
+        project_name="india-agent",
+        description="Handle calls.",
+        stt="deepgram/nova-3",
+        llm="anthropic/claude-sonnet-5",
+        tts="cartesia/sonic-3.5",
+        phone_provider="vobiz",
+        phone_number="+918071234567",
+        web_enabled=False,
+        runtime="livekit",
+    )
+
+    ScaffoldWriter().write(tmp_path, scaffold, manifest)
+
+    project = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    env = (tmp_path / ".env.example").read_text(encoding="utf-8")
+    assert "voicekit[livekit,vobiz]" in project
+    assert "VOBIZ_AUTH_ID=" in env
+    assert "VOBIZ_AUTH_TOKEN=" in env
+    assert "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID=" in env
+    assert "VOICEKIT_VOBIZ_SIP_USERNAME=" in env
+    assert "VOICEKIT_VOBIZ_SIP_PASSWORD=" in env
+
+
 def test_scaffold_refuses_to_overwrite_user_content(tmp_path: Path) -> None:
     (tmp_path / "agent.py").write_text("# mine\n", encoding="utf-8")
     scaffold = ScratchScaffold(

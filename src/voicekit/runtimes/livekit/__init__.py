@@ -26,6 +26,12 @@ from voicekit.runtimes.livekit.telnyx import (
 )
 from voicekit.runtimes.livekit.token import LiveKitToken, LiveKitTokenIssuer
 from voicekit.runtimes.livekit.tools import shared_livekit_tools
+from voicekit.runtimes.livekit.vobiz import (
+    VobizLiveKitSipConfig,
+    VobizLiveKitSipProvisioner,
+    VobizSipHTTPBackend,
+    VobizSipProvisioningResult,
+)
 
 __all__ = [
     "LiveKitAdmissionGate",
@@ -47,5 +53,9 @@ __all__ = [
     "TwilioLiveKitSipConfig",
     "TwilioLiveKitSipProvisioner",
     "TwilioTrunkRecordingReconciler",
+    "VobizLiveKitSipConfig",
+    "VobizLiveKitSipProvisioner",
+    "VobizSipHTTPBackend",
+    "VobizSipProvisioningResult",
     "shared_livekit_tools",
 ]

@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P3 — recipes, additional carriers, live tier, cloud deploys, relay, warm transfer
-- **Current unit:** P3.2 Vobiz Pipecat certification + LiveKit feasibility spike
-- **Next task:** implement signed Vobiz call/media control on Pipecat, empirically test its current SIP surface against LiveKit requirements, record the feasibility decision, and enable only evidence-backed capability paths
-- **Completed:** all P0 and P1/P2 numbered units plus P3.1. Four offline first-party recipes now ship on both native runtimes; the three P3 recipes add 17 shared scenarios and verified typed integration/result contracts. The full suite is 644 passed, 14 honest live skips, 90.09% branch coverage. Credentialed/PSTN/microphone/conversation gates remain pending with exact commands in `docs/GAPS.md`
+- **Current unit:** P3.3 Plivo + generic SIP beta
+- **Next task:** implement the Plivo carrier adapter and its Pipecat media/callback path, add the explicit LiveKit generic-SIP beta provisioner, wire capability/reporting/CLI/deploy surfaces, and ship exact beta and live runbooks
+- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.2. Vobiz now has signed, fenced Pipecat Voice API/media handling and deterministic LiveKit UDP SIP provisioning after a positive feasibility result. The full suite is 728 passed, 20 honest live skips, 90.02% branch coverage. Credentialed/PSTN/microphone/conversation gates remain pending with exact commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -55,6 +55,8 @@ Last updated: 2026-07-27
 | P2 phase overall | pending-live | All local automation is green; reference-provider conversations, LiveKit microphone/workflow, funded Twilio/Telnyx PSTN, and physical handset gates remain unpromoted; see `docs/verification/p2-gates.md` |
 | P3.1 recipes 2–4 local verification | green | Restaurant reservations, front desk, and lead intake ship shared typed stubs/prompts/results, native Pipecat and LiveKit workflows, 17 scenarios compiled to both test adapters, registry/wizard/copy packaging, release-wheel source, and written quality/docs contracts; full suite 644 passed, 14 honest live skips, 90.09% branch coverage |
 | P3.1 reference-provider recipe conversations | pending-live | Exact six-project text/audio/JUnit loop and behavior checklist in `docs/GAPS.md`; requires Deepgram/Anthropic/Cartesia credentials, Ollama, and live warm-transfer infrastructure |
+| P3.2 Vobiz dual-path local certification | green | Vobiz Voice API/VobizXML, V3/V2 HMAC + replay defense, route/intent fences, PCMU/8 kHz Pipecat media, authoritative terminal callback, recording ingestion, positive LiveKit SIP feasibility, deterministic UDP trunk/dispatch/number provisioning, drift rejection, reverse rollback, CLI/doctor/scaffold/Docker wiring; full suite 728 passed, 20 honest live skips, 90.02% branch coverage; strict static gates and release build green |
+| P3.2 Vobiz account/PSTN certification | pending-live | Exact guarded Pipecat and LiveKit commands plus physical both-path checklist in `docs/GAPS.md`; requires funded Vobiz/LiveKit accounts, a public target, existing SIP credential, and physical endpoints |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

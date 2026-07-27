@@ -22,6 +22,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P2 unified appointment text suite, both runtimes | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia, local Ollama; both generated projects |
 | P2 unified appointment audio suite, both runtimes | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys, Ollama, Kokoro/Moonshine downloads; both generated projects |
 | P2 Telnyx certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Telnyx/LiveKit accounts, both carrier paths, public target, PSTN |
+| P3 Vobiz certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Vobiz/LiveKit accounts, Vobiz SIP credential, public Pipecat target, PSTN |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
@@ -601,6 +602,88 @@ results-webhook delivery, then stop the old generation and observe a
 run the `voicekit numbers restore <rollback-token> --yes` command printed by
 the cutover. This gate remains pending because no public target or live Twilio
 credentials are available in the current environment.
+
+## P3 Vobiz certification on Pipecat and LiveKit
+
+Offline certification covers Vobiz Voice API request shapes, VobizXML,
+V3/V2 callback signatures and nonce replay, PCMU/8 kHz serialization, one-use
+media admission, provider-authoritative terminalization, route/intent fencing,
+recording ingestion, the documented LiveKit UDP topology, deterministic
+resource reuse, drift rejection, reverse rollback, and ambiguous writes. Those
+tests do not prove the current account control plane or a PSTN conversation.
+
+Export the Vobiz account, owned-number, public deployment, and paid-call
+values:
+
+```bash
+export VOBIZ_AUTH_ID='MA_...'
+export VOBIZ_AUTH_TOKEN='...'
+export VOICEKIT_VOBIZ_LIVE_FROM='+9180...'
+export VOICEKIT_VOBIZ_LIVE_TO='+91...'
+export VOICEKIT_VOBIZ_TRANSFER_TO='+91...'
+export VOICEKIT_LIVE_PUBLIC_BASE='https://voice.example.com'
+export VOICEKIT_VOBIZ_LIVE_RECORDING_URL='https://provider-recording-url-from-a-verified-callback'
+export VOICEKIT_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
+export VOICEKIT_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
+```
+
+Run the Pipecat/Voice API account, route restore, paid AMD/DTMF/recording/cold
+transfer, and artifact-ingestion gates:
+
+```bash
+uv run pytest -q --no-cov -m live tests/live/test_vobiz_live.py
+```
+
+The route test restores in `finally`; preserve its rollback token and carrier
+audit log. The recording URL must come from a callback whose HMAC was verified
+by the deployed host. Never paste an unrelated URL merely to satisfy the
+download test.
+
+For the LiveKit path, create a Vobiz SIP credential and export the exact
+existing values plus a deployed native agent and certification room:
+
+```bash
+export LIVEKIT_URL='wss://project.livekit.cloud'
+export LIVEKIT_API_KEY='...'
+export LIVEKIT_API_SECRET='...'
+export VOICEKIT_LIVEKIT_AGENT_NAME='appointment-booking'
+export VOICEKIT_LIVEKIT_SIP_URI='sip:project-id.sip.livekit.cloud'
+export VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID='...'
+export VOICEKIT_VOBIZ_SIP_USERNAME='...'
+export VOICEKIT_VOBIZ_SIP_PASSWORD='...'
+export LIVEKIT_SIP_OUTBOUND_TRUNK='ST_...'
+export VOICEKIT_LIVEKIT_CERT_ROOM='voicekit-vobiz-cert'
+```
+
+Run provision→idempotent reuse→reverse rollback and a paid outbound SIP call:
+
+```bash
+uv run pytest -q --no-cov -m live tests/live/test_vobiz_livekit_live.py
+```
+
+Then perform the physical both-path checklist:
+
+1. Call the Vobiz number from a physical handset through the Pipecat route;
+   verify the greeting, two-way speech, interruption clear, incoming DTMF,
+   outbound DTMF, normal caller hangup, and exactly one acknowledged terminal
+   result.
+2. Place the guarded Pipecat outbound call; verify async AMD, the configured
+   digit sequence, cold transfer to the second physical endpoint, recording
+   callback, authenticated engine artifact, and route restoration after
+   stopping `voicekit dev --phone`.
+3. Re-provision the LiveKit route twice; confirm the second operation creates
+   zero resources. Call inbound and outbound through Vobiz SIP, verify both
+   speech directions and terminal mapping, then roll back and confirm the
+   prior number binding is restored.
+4. Inspect Vobiz and LiveKit: transport must be UDP/5060, inbound LiveKit
+   addresses exactly `13.233.44.61/32`, and no test must claim TLS/SRTP.
+5. Retain call ids, result event ids, recording ids, provisioning operation
+   ids, timestamps, and the zero-exit test output without retaining secrets or
+   raw caller PII.
+
+This row stays pending until both commands return zero and the physical
+checklist is recorded. A passing offline suite or provider dashboard screenshot
+is not a substitute.
 
 ## P3 first-party recipe provider conversations
 

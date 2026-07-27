@@ -50,7 +50,7 @@ def _context(
     tmp_path: Path,
     *,
     phone: bool,
-    carrier: Literal["twilio", "telnyx"] = "twilio",
+    carrier: Literal["twilio", "telnyx", "vobiz"] = "twilio",
 ) -> ProjectContext:
     models: dict[ModelAxis, str] = {
         "stt": "deepgram/nova-3",
@@ -76,6 +76,8 @@ def _context(
             "TELNYX_API_KEY": "telnyx-key",  # pragma: allowlist secret
             "TELNYX_PUBLIC_KEY": "public-key",
             "TELNYX_CONNECTION_ID": "connection-id",
+            "VOBIZ_AUTH_ID": "MA_VOBIZTEST",
+            "VOBIZ_AUTH_TOKEN": "vobiz-token",  # pragma: allowlist secret
             "VOICEKIT_WEBHOOK_SECRET": encode_secret(b"d" * 32),
         },
     )
@@ -131,11 +133,11 @@ def test_load_agent_requires_exported_typed_agent(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("carrier", ["twilio", "telnyx"])
+@pytest.mark.parametrize("carrier", ["twilio", "telnyx", "vobiz"])
 async def test_phone_dev_supervisor_points_probes_and_restores(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    carrier: Literal["twilio", "telnyx"],
+    carrier: Literal["twilio", "telnyx", "vobiz"],
 ) -> None:
     events: list[str] = []
 
@@ -157,7 +159,11 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
 
     class FakeTunnelManager:
         def __init__(self, *, environment: Mapping[str, str]) -> None:
-            expected = "TWILIO_AUTH_TOKEN" if carrier == "twilio" else "TELNYX_API_KEY"
+            expected = {
+                "twilio": "TWILIO_AUTH_TOKEN",
+                "telnyx": "TELNYX_API_KEY",
+                "vobiz": "VOBIZ_AUTH_TOKEN",
+            }[carrier]
             assert environment[expected]
 
         async def open(self, port: int, **_kwargs: object) -> FakeTunnel:
@@ -206,6 +212,7 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
             assert settings.pending_media_timeout_s == 120
             assert (kwargs["twilio"] is not None) is (carrier == "twilio")
             assert (kwargs["telnyx"] is not None) is (carrier == "telnyx")
+            assert (kwargs["vobiz"] is not None) is (carrier == "vobiz")
             self.target = PipecatTarget(settings.public_base)
 
         async def reserve_web_call(self) -> str:
@@ -234,8 +241,10 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
     monkeypatch.setattr("voicekit.cli.dev.TunnelProbe", FakeProbe)
     monkeypatch.setattr("voicekit.cli.dev.TwilioAdapter", FakeAdapter)
     import voicekit.telephony.telnyx as telnyx_runtime
+    import voicekit.telephony.vobiz as vobiz_runtime
 
     monkeypatch.setattr(telnyx_runtime, "TelnyxAdapter", FakeAdapter)
+    monkeypatch.setattr(vobiz_runtime, "VobizAdapter", FakeAdapter)
     monkeypatch.setattr("voicekit.cli.dev.PipecatHost", FakeHost)
     monkeypatch.setattr("voicekit.cli.dev.uvicorn.Server", FakeServer)
     monkeypatch.setattr("voicekit.cli.dev.uvicorn.Config", config)
@@ -602,6 +611,117 @@ async def test_livekit_phone_provisioning_selects_telnyx_control_planes(
     )
     assert config_event[1]["number"] == "+14155550123"
     assert config_event[1]["auth_username"] == "voicekit-user"
+    await livekit_client.aclose()
+    ledger.close()
+
+
+@pytest.mark.asyncio
+async def test_livekit_phone_provisioning_selects_vobiz_control_planes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    events: list[object] = []
+
+    class FakeLiveKitAPI:
+        sip = "livekit-sip-service"
+
+        def __init__(self, url: str, api_key: str, api_secret: str) -> None:
+            events.append(("livekit", url, api_key, api_secret))
+
+        async def aclose(self) -> None:
+            events.append("livekit-close")
+
+    class FakeBackend:
+        def __init__(self, *, auth_id: str, auth_token: str) -> None:
+            events.append(("vobiz-backend", auth_id, auth_token))
+
+    class FakeLedger:
+        def __init__(self, path: Path) -> None:
+            events.append(("ledger", path.name))
+
+        def close(self) -> None:
+            events.append("ledger-close")
+
+    class FakeConfig:
+        def __init__(self, **values: object) -> None:
+            self.values = values
+            events.append(("vobiz-config", values))
+
+    class FakeProvisioner:
+        def __init__(self, *, livekit: object, vobiz: object, ledger: object) -> None:
+            events.append(
+                (
+                    "vobiz-provisioner",
+                    livekit,
+                    vobiz.__class__.__name__,
+                    ledger.__class__.__name__,
+                )
+            )
+
+        async def provision(self, config: FakeConfig) -> object:
+            events.append(("vobiz-provision", config.values))
+            return SimpleNamespace(operation_id="vobiz-sip-operation")
+
+    monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.vobiz.VobizSipHTTPBackend",
+        FakeBackend,
+    )
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.vobiz.VobizLiveKitSipConfig",
+        FakeConfig,
+    )
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.vobiz.VobizLiveKitSipProvisioner",
+        FakeProvisioner,
+    )
+    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+
+    base = _context(tmp_path, phone=True, carrier="vobiz")
+    assert base.manifest is not None
+    context = ProjectContext(
+        root=base.root,
+        manifest=base.manifest.model_copy(update={"runtime": "livekit"}),
+        checkpoint=False,
+        environment={
+            **base.environment,
+            "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+            "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID": "cred-vobiz",
+            "VOICEKIT_VOBIZ_SIP_USERNAME": "voicekit-user",
+            "VOICEKIT_VOBIZ_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+        },
+    )
+    agent = _agent(runtime="livekit").model_copy(
+        update={
+            "phone": Phone(
+                provider="vobiz",
+                number="+14155550123",
+                record=True,
+            )
+        }
+    )
+
+    provisioner, operation_id, livekit_client, ledger = await _provision_livekit_phone(
+        context,
+        agent=agent,
+        api_key="api-key",  # pragma: allowlist secret
+        api_secret="api-secret",  # pragma: allowlist secret
+        server_url="wss://project.livekit.cloud",
+    )
+
+    assert isinstance(provisioner, FakeProvisioner)
+    assert operation_id == "vobiz-sip-operation"
+    assert isinstance(livekit_client, FakeLiveKitAPI)
+    assert isinstance(ledger, FakeLedger)
+    assert ("vobiz-backend", "MA_VOBIZTEST", "vobiz-token") in events
+    config_event = next(
+        cast("tuple[str, dict[str, object]]", event)
+        for event in events
+        if isinstance(event, tuple) and event[0] == "vobiz-config"
+    )
+    assert config_event[1]["number"] == "+14155550123"
+    assert config_event[1]["credential_id"] == "cred-vobiz"
+    assert config_event[1]["max_concurrent_calls"] == 20
     await livekit_client.aclose()
     ledger.close()
 

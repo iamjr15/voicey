@@ -50,6 +50,24 @@ class TelnyxDownloader:
         return storage_key
 
 
+class VobizDownloader:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def download_recording(
+        self,
+        recording_url: str,
+        *,
+        artifact_store: ArtifactStore,
+        storage_key: str,
+        max_bytes: int = 100 * 1024 * 1024,
+    ) -> str:
+        assert max_bytes > 0
+        self.calls.append(recording_url)
+        await artifact_store.put(storage_key, b"vobiz-audio")
+        return storage_key
+
+
 async def _recording_call(
     repository: SQLiteRepository,
     call_id: str,
@@ -89,17 +107,19 @@ async def _recording_call(
 
 
 @pytest.mark.asyncio
-async def test_recording_handler_ingests_both_carriers_and_protects_reads(
+async def test_recording_handler_ingests_all_carriers_and_protects_reads(
     tmp_path: Path,
 ) -> None:
     current = "whsec_Y3VycmVudA=="  # pragma: allowlist secret
     previous = "whsec_cHJldmlvdXM="  # pragma: allowlist secret
     twilio = TwilioDownloader()
     telnyx = TelnyxDownloader()
+    vobiz = VobizDownloader()
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     async with SQLiteRepository(tmp_path / "calls.sqlite3") as repository:
         await _recording_call(repository, "CA-recording")
         await _recording_call(repository, "v3:recording")
+        await _recording_call(repository, "vobiz-recording")
         handler = PipecatRecordingHandler(
             repository=repository,
             artifact_store=artifacts,
@@ -108,6 +128,7 @@ async def test_recording_handler_ingests_both_carriers_and_protects_reads(
             previous_secret=previous,
             twilio=twilio,
             telnyx=telnyx,
+            vobiz=vobiz,
         )
 
         await handler.handle_twilio(
@@ -127,10 +148,21 @@ async def test_recording_handler_ingests_both_carriers_and_protects_reads(
                 recording_url="https://storage.example.test/signed.mp3",
             )
         )
+        await handler.handle_vobiz(
+            CallEvent(
+                type="recording_ready",
+                provider_call_id="vobiz-recording",
+                provider_status="completed",
+                recording_sid="vobiz-recording-1",
+                recording_url="https://storage.example.test/vobiz.mp3",
+            )
+        )
         twilio_snapshot = await repository.get_recording_for_call("CA-recording")
         telnyx_snapshot = await repository.get_recording_for_call("v3:recording")
+        vobiz_snapshot = await repository.get_recording_for_call("vobiz-recording")
         assert twilio_snapshot is not None
         assert telnyx_snapshot is not None
+        assert vobiz_snapshot is not None
 
         assert (
             await handler.read(
@@ -146,6 +178,13 @@ async def test_recording_handler_ingests_both_carriers_and_protects_reads(
             )
             == b"telnyx-audio"
         )
+        assert (
+            await handler.read(
+                vobiz_snapshot.recording_id,
+                f"Bearer {current}",
+            )
+            == b"vobiz-audio"
+        )
         with pytest.raises(VoicekitError) as unauthorized:
             await handler.read(twilio_snapshot.recording_id, "Bearer wrong")
 
@@ -160,6 +199,7 @@ async def test_recording_handler_ingests_both_carriers_and_protects_reads(
 
     assert twilio.calls == ["RE-recording"]
     assert telnyx.calls == ["https://storage.example.test/signed.mp3"]
+    assert vobiz.calls == ["https://storage.example.test/vobiz.mp3"]
     assert unauthorized.value.code == "VK-WEB-004"
     assert twilio_snapshot.status == "ready"
     assert twilio_snapshot.access_url is not None
@@ -254,6 +294,25 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_url="https://storage.example.test/signed.mp3",
                 )
             )
+        with pytest.raises(VoicekitError, match="invalid Vobiz"):
+            await handler.handle_vobiz(
+                CallEvent(
+                    type="recording_ready",
+                    provider_call_id="CA-pending",
+                    provider_status="saved",
+                    recording_sid="recording-pending",
+                )
+            )
+        with pytest.raises(VoicekitError, match="Vobiz recording adapter"):
+            await handler.handle_vobiz(
+                CallEvent(
+                    type="recording_ready",
+                    provider_call_id="CA-pending",
+                    provider_status="saved",
+                    recording_sid="recording-pending",
+                    recording_url="https://storage.example.test/vobiz.mp3",
+                )
+            )
         pending = await repository.get_recording_for_call("CA-pending")
         assert pending is not None
         with pytest.raises(VoicekitError) as unreadable:
@@ -274,6 +333,13 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
             )
         )
         await handler.handle_telnyx(
+            CallEvent(
+                type="recording_failed",
+                provider_call_id="CA-pending",
+                provider_status="failed",
+            )
+        )
+        await handler.handle_vobiz(
             CallEvent(
                 type="recording_failed",
                 provider_call_id="CA-pending",

@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
     from voicekit.telephony.ledger import TelephonyLedger
     from voicekit.telephony.telnyx import TelnyxAdapter
+    from voicekit.telephony.vobiz import VobizAdapter
 
 DevNotice = Callable[[str], None]
 
@@ -91,7 +92,7 @@ async def run_dev(
             return
         tunnel_handle = None
         rollback: RollbackToken | None = None
-        adapter: TwilioAdapter | TelnyxAdapter | None = None
+        adapter: TwilioAdapter | TelnyxAdapter | VobizAdapter | None = None
         try:
             external_base = "https://localhost.invalid"
             public_origin = f"http://127.0.0.1:{port}"
@@ -127,6 +128,15 @@ async def run_dev(
                         connection_id=context.environment.get("TELNYX_CONNECTION_ID"),
                         ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
                     )
+                elif selected_provider == "vobiz":
+                    from voicekit.telephony.vobiz import VobizAdapter
+
+                    adapter = VobizAdapter(
+                        auth_id=context.environment.get("VOBIZ_AUTH_ID"),
+                        auth_token=context.environment.get("VOBIZ_AUTH_TOKEN"),
+                        ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+                        expected_public_base=external_base,
+                    )
                 secret = context.environment.get(agent.results.secret_env, "")
                 previous_secret = (
                     None
@@ -149,6 +159,9 @@ async def run_dev(
                             cast("TelnyxAdapter", adapter)
                             if selected_provider == "telnyx"
                             else None
+                        ),
+                        vobiz=(
+                            cast("VobizAdapter", adapter) if selected_provider == "vobiz" else None
                         ),
                     )
                     if agent.phone is not None and agent.phone.record
@@ -201,6 +214,9 @@ async def run_dev(
                             cast("TelnyxAdapter", adapter)
                             if selected_provider == "telnyx"
                             else None
+                        ),
+                        vobiz=(
+                            cast("VobizAdapter", adapter) if selected_provider == "vobiz" else None
                         ),
                         web_sessions=security,
                         recording_handler=recording_handler,
@@ -511,11 +527,11 @@ async def _provision_livekit_phone(
     if (
         manifest.phone_number is None
         or agent.phone is None
-        or agent.phone.provider not in {"twilio", "telnyx"}
+        or agent.phone.provider not in {"twilio", "telnyx", "vobiz"}
     ):
         raise VoicekitError(
             "VK-CLI-007",
-            detail="LiveKit --phone requires one configured Twilio or Telnyx number.",
+            detail="LiveKit --phone requires one configured Twilio, Telnyx, or Vobiz number.",
         )
     livekit_client = livekit_api.LiveKitAPI(server_url, api_key, api_secret)
     ledger = TelephonyLedger(context.root / ".voicekit" / "telephony.sqlite3")
@@ -560,7 +576,7 @@ async def _provision_livekit_phone(
                 )
             )
             provisioner: _PhoneProvisioner = twilio_provisioner
-        else:
+        elif agent.phone.provider == "telnyx":
             from voicekit.runtimes.livekit.telnyx import (
                 TelnyxLiveKitSipConfig,
                 TelnyxLiveKitSipProvisioner,
@@ -596,6 +612,51 @@ async def _provision_livekit_phone(
                 )
             )
             provisioner = telnyx_provisioner
+        else:
+            from voicekit.runtimes.livekit.vobiz import (
+                VobizLiveKitSipConfig,
+                VobizLiveKitSipProvisioner,
+                VobizSipHTTPBackend,
+            )
+
+            vobiz_provisioner = VobizLiveKitSipProvisioner(
+                livekit=livekit_client.sip,
+                vobiz=VobizSipHTTPBackend(
+                    auth_id=_required_environment(
+                        context.environment,
+                        "VOBIZ_AUTH_ID",
+                    ),
+                    auth_token=_required_environment(
+                        context.environment,
+                        "VOBIZ_AUTH_TOKEN",
+                    ),
+                ),
+                ledger=ledger,
+            )
+            result = await vobiz_provisioner.provision(
+                VobizLiveKitSipConfig(
+                    number=manifest.phone_number,
+                    agent_name=agent.name,
+                    livekit_sip_uri=_required_environment(
+                        context.environment,
+                        "VOICEKIT_LIVEKIT_SIP_URI",
+                    ),
+                    credential_id=_required_environment(
+                        context.environment,
+                        "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID",
+                    ),
+                    auth_username=_required_environment(
+                        context.environment,
+                        "VOICEKIT_VOBIZ_SIP_USERNAME",
+                    ),
+                    auth_password=_required_environment(
+                        context.environment,
+                        "VOICEKIT_VOBIZ_SIP_PASSWORD",
+                    ),
+                    max_concurrent_calls=agent.limits.max_concurrent,
+                )
+            )
+            provisioner = vobiz_provisioner
     except Exception:
         await livekit_client.aclose()
         ledger.close()

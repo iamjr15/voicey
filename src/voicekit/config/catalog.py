@@ -248,5 +248,20 @@ DEFAULT_PROVIDER_CATALOG = ProviderCatalog(
             native_idempotency=True,
             description="Call Control and SIP carrier; country-specific pricing.",
         ),
+        _entry(
+            id="vobiz",
+            kind="carrier",
+            languages=frozenset(),
+            price="variable",
+            latency="network-dependent",
+            keys=("VOBIZ_AUTH_ID", "VOBIZ_AUTH_TOKEN"),
+            url="https://api.vobiz.ai/api/v1/auth/me",
+            headers={
+                "X-Auth-ID": "${VOBIZ_AUTH_ID}",
+                "X-Auth-Token": "${VOBIZ_AUTH_TOKEN}",
+            },
+            native_idempotency=False,
+            description="Programmable voice, media streams, and SIP with an India wedge.",
+        ),
     )
 )

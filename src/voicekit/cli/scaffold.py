@@ -264,6 +264,8 @@ testpaths = ["tests"]
                 "TELNYX_PUBLIC_KEY",
             }
         )
+    elif scaffold.phone_provider == "vobiz":
+        env_names.update({"VOBIZ_AUTH_ID", "VOBIZ_AUTH_TOKEN"})
     if scaffold.runtime == "livekit":
         env_names.update({"LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"})
         if scaffold.phone_provider == "twilio":
@@ -281,6 +283,15 @@ testpaths = ["tests"]
                     "VOICEKIT_LIVEKIT_SIP_URI",
                     "VOICEKIT_TELNYX_SIP_PASSWORD",
                     "VOICEKIT_TELNYX_SIP_USERNAME",
+                }
+            )
+        elif scaffold.phone_provider == "vobiz":
+            env_names.update(
+                {
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID",
+                    "VOICEKIT_VOBIZ_SIP_PASSWORD",
+                    "VOICEKIT_VOBIZ_SIP_USERNAME",
                 }
             )
     if is_recipe:

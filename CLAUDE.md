@@ -20,6 +20,6 @@ Greenfield open-source product: **the production toolchain around Pipecat and Li
 
 ## Current state
 
-- Phase: **P2, unit 1 (LiveKit production runtime/SIP/crash and Twilio certification parity)**. P0 and all P1 units are implemented. P1's final local phase runner is green (fresh-wheel native quickstart in 34.086s, exact CLI matrix, isolation/chaos/admin/Twilio/Docker gates); the overall phase remains honestly `pending-live` for reference-provider latency, PSTN/public targets, and human checks, with exact commands in `docs/GAPS.md`. P2 must verify all LiveKit 1.6.7 symbols against the installed pin before use. See `docs/PROGRESS.md`.
+- Phase: **P3, unit 3 (Plivo + generic SIP beta)**. P0, P1, P2, and P3.1–P3.2 are implemented locally. Vobiz now ships both the signed Pipecat Voice API/media path and the officially documented LiveKit UDP SIP path; its credentialed and paid PSTN gates remain honestly pending with exact commands in `docs/GAPS.md`. The current full suite is 728 passed, 20 honest live skips, and 90.02% branch coverage; strict ruff/format/pyright and the release-shaped wheel are green. Continue to verify every Pipecat/LiveKit symbol against the installed pins. See `docs/PROGRESS.md`.
 - Open human-only decision: final product name before first publish. Reference model and sim-judge defaults were accepted in the implementation mandate and recorded in `docs/decisions.md`.
 - `.env.parley-backup` holds provider API keys carried over from the predecessor project (uncommitted; for dev convenience).

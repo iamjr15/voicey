@@ -231,7 +231,7 @@ def test_catalog_validation_collects_all_missing_keys() -> None:
     assert all("voicekit keys add" in issue.fix for issue in issues)
 
 
-def test_catalog_validation_reports_unknown_models_carriers_and_bad_secret() -> None:
+def test_catalog_validation_reports_unknown_models_missing_carrier_keys_and_bad_secret() -> None:
     agent = _agent(
         models=Models(
             stt="unknown/stt",
@@ -246,7 +246,7 @@ def test_catalog_validation_reports_unknown_models_carriers_and_bad_secret() -> 
 
     assert {issue.code for issue in issues} == {
         "VK-CFG-101",
-        "VK-CFG-104",
+        "VK-CFG-105",
         "VK-CFG-106",
     }
     assert all(issue.fix for issue in issues)

@@ -239,12 +239,16 @@ class _RecordingHandler:
     def __init__(self) -> None:
         self.twilio: list[CallEvent] = []
         self.telnyx: list[CallEvent] = []
+        self.vobiz: list[CallEvent] = []
 
     async def handle_twilio(self, event: CallEvent) -> None:
         self.twilio.append(event)
 
     async def handle_telnyx(self, event: CallEvent) -> None:
         self.telnyx.append(event)
+
+    async def handle_vobiz(self, event: CallEvent) -> None:
+        self.vobiz.append(event)
 
     async def read(self, recording_id: str, authorization: str | None) -> bytes:
         if authorization != "Bearer whsec-test":

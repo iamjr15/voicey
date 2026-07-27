@@ -29,6 +29,7 @@ from voicekit.cli.doctor import (
     _runtime_check,
     _telnyx_check,
     _twilio_check,
+    _vobiz_check,
 )
 from voicekit.cli.keys import KeyCheck
 from voicekit.config.catalog import ProviderKind
@@ -420,6 +421,56 @@ def test_telnyx_doctor_checks_funding_ownership_and_connection_route(
     )
     assert not missing.ok
     assert "TELNYX_API_KEY" in missing.issues[0]
+
+
+def test_vobiz_doctor_checks_funding_ownership_and_inbound_route(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class FakeVobizCarrier(FakeCarrier):
+        def account_state(self) -> CarrierAccountState:
+            return CarrierAccountState(
+                provider="vobiz",
+                status="active",
+                account_type="master",
+                balance="0",
+                currency="INR",
+            )
+
+        def inbound_route(self, _number: str) -> dict[str, str | None]:
+            return {"application_id": None, "trunk_group_id": None}
+
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    manifest = ProjectManifest(
+        project_name="vobiz-doctor",
+        runtime="pipecat",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"phone"}),
+        models=models,
+        carriers=["vobiz"],
+        phone_number="+919876543210",
+    )
+    context = ProjectContext(
+        tmp_path,
+        manifest,
+        False,
+        {
+            "VOBIZ_AUTH_ID": "MA_VOBIZTEST",
+            "VOBIZ_AUTH_TOKEN": "token",  # pragma: allowlist secret
+        },
+    )
+    monkeypatch.setattr("voicekit.telephony.vobiz.VobizAdapter", FakeVobizCarrier)
+
+    check = _vobiz_check(context, manifest)
+
+    assert not check.ok
+    assert any("balance" in issue for issue in check.issues)
+    assert any("no inbound" in issue for issue in check.issues)
+    assert any("KYC" in advice for advice in check.advice)
 
 
 def _free_port() -> int:

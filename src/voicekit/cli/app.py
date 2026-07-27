@@ -53,6 +53,7 @@ from voicekit.tunnel import TunnelPreference
 if TYPE_CHECKING:
     from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.twilio import TwilioAdapter
+    from voicekit.telephony.vobiz import VobizAdapter
 
 app = typer.Typer(
     add_completion=False,
@@ -981,7 +982,7 @@ def _carrier(
     context: ProjectContext,
     *,
     expected_public_base: str | None = None,
-) -> TwilioAdapter | TelnyxAdapter:
+) -> TwilioAdapter | TelnyxAdapter | VobizAdapter:
     from voicekit.telephony.telnyx import TelnyxAdapter
 
     manifest = require_manifest(context)
@@ -994,9 +995,18 @@ def _carrier(
             connection_id=context.environment.get("TELNYX_CONNECTION_ID"),
             ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
         )
+    if manifest.carriers == ["vobiz"]:
+        from voicekit.telephony.vobiz import VobizAdapter
+
+        return VobizAdapter(
+            auth_id=context.environment.get("VOBIZ_AUTH_ID"),
+            auth_token=context.environment.get("VOBIZ_AUTH_TOKEN"),
+            ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+            expected_public_base=expected_public_base,
+        )
     raise VoicekitError(
         "VK-CLI-005",
-        detail="this command requires the enabled Twilio or Telnyx carrier.",
+        detail="this command requires an enabled Twilio, Telnyx, or Vobiz carrier.",
     )
 
 
@@ -1027,10 +1037,19 @@ def _carrier_target(context: ProjectContext, public_base: str) -> PipecatTarget:
             recording_path="/telnyx/recordings",
             amd_path="/telnyx/amd",
         )
+    if manifest.carriers == ["vobiz"]:
+        return PipecatTarget(
+            public_base,
+            ws_path="/vobiz/media",
+            answer_path="/vobiz/answer",
+            event_path="/vobiz/events",
+            recording_path="/vobiz/recordings",
+            amd_path="/vobiz/amd",
+        )
     if manifest.carriers != ["twilio"]:
         raise VoicekitError(
             "VK-CLI-005",
-            detail="this command requires the enabled Twilio or Telnyx carrier.",
+            detail="this command requires an enabled Twilio, Telnyx, or Vobiz carrier.",
         )
     return PipecatTarget(public_base)
 

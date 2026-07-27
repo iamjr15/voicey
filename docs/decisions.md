@@ -242,3 +242,32 @@ These choices apply the documented proposals authorized in the build mandate and
 - Apply the checked-in recipe quality checklist to first-party and community
   sources; community entries do not receive a certification claim until their
   credentialed provider suite has actually run.
+
+## 2026-07-27 — Vobiz dual-path feasibility and safety boundary
+
+- Supersede the conditional Vobiz-on-LiveKit item in the P0 defaults: the
+  feasibility result is positive. Vobiz publishes dedicated inbound and
+  outbound LiveKit SIP procedures, so the capability registry exposes both
+  the Pipecat and LiveKit paths. Credentialed provisioning and PSTN evidence
+  remain pending-live and are not represented as green certification.
+- Follow the published interconnect literally: Vobiz sends inbound SIP to the
+  LiveKit SIP host over UDP/5060; the LiveKit inbound trunk accepts only
+  `13.233.44.61/32`; outbound uses the Vobiz-generated
+  `*.sip.vobiz.ai` domain and an existing Vobiz credential. LiveKit media
+  encryption is disabled for this route. Do not claim TLS or SRTP.
+- Require the existing Vobiz credential id, username, and password. The API
+  does not reveal stored passwords, so provisioning cannot safely infer
+  equivalence or rotate one implicitly.
+- Vobiz's current create-trunk documentation exposes two naming variants:
+  `trunk_direction`/`concurrent_calls_limit` and
+  `trunk_type`/`max_concurrent_calls`. Send both with equal values, read the
+  resource back, and make the guarded live provision/reuse/rollback test the
+  drift detector. An ambiguous write stops without speculative retry.
+- Use Pipecat 1.6.0's installed `PlivoFrameSerializer` only for its compatible
+  Vobiz PCMU media envelope, with `auto_hang_up=False`. Parse one start frame,
+  bind it to the one-use reservation, and leave all carrier HTTP actions with
+  `VobizAdapter`; Pipecat must never contact Plivo for a Vobiz session.
+- Treat the signed Vobiz terminal callback as authoritative. A closed media
+  socket does not end or duplicate-terminalize the call. Callback HMAC
+  verification, nonce replay protection, durable route/intent fences, bounded
+  recording ingestion, and reverse SIP rollback are required on every path.

@@ -283,6 +283,14 @@ class Doctor:
                     "VOICEKIT_TELNYX_SIP_PASSWORD",
                 )
                 carrier_label = "Telnyx↔LiveKit"
+            elif self.manifest.carriers == ["vobiz"]:
+                sip_names = (
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID",
+                    "VOICEKIT_VOBIZ_SIP_USERNAME",
+                    "VOICEKIT_VOBIZ_SIP_PASSWORD",
+                )
+                carrier_label = "Vobiz↔LiveKit"
             else:
                 sip_names = (
                     "VOICEKIT_LIVEKIT_SIP_URI",
@@ -495,6 +503,8 @@ def _port_check(port: int) -> DoctorCheck:
 def _carrier_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
     if manifest.carriers == ["telnyx"]:
         return _telnyx_check(context, manifest)
+    if manifest.carriers == ["vobiz"]:
+        return _vobiz_check(context, manifest)
     return _twilio_check(context, manifest)
 
 
@@ -620,6 +630,65 @@ def _telnyx_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorC
     return _result(
         "carrier",
         "Telnyx account, funding, signatures, and inbound route",
+        issues,
+        advice,
+    )
+
+
+def _vobiz_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
+    from voicekit.telephony.vobiz import VobizAdapter
+
+    if manifest.carriers != ["vobiz"] or manifest.phone_number is None:
+        return _result(
+            "carrier",
+            "Carrier account, funding, KYC, and inbound route",
+            ["The selected carrier is not available in this certification phase."],
+            ["Resume init with Twilio, Telnyx, or Vobiz, then rerun `voicekit doctor`."],
+        )
+    required = ("VOBIZ_AUTH_ID", "VOBIZ_AUTH_TOKEN")
+    missing = [name for name in required if not context.environment.get(name)]
+    if missing:
+        return _result(
+            "carrier",
+            "Vobiz account, funding, signatures, and inbound route",
+            [f"Missing Vobiz values: {', '.join(missing)}."],
+            ["Add the Vobiz Auth ID and Auth Token, then rerun `voicekit doctor`."],
+        )
+    issues: list[str] = []
+    advice: list[str] = []
+    adapter = VobizAdapter(
+        auth_id=context.environment.get("VOBIZ_AUTH_ID"),
+        auth_token=context.environment.get("VOBIZ_AUTH_TOKEN"),
+        ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+        expected_public_base=context.environment.get("VOICEKIT_PUBLIC_URL"),
+    )
+    try:
+        account = adapter.account_state()
+        try:
+            balance = None if account.balance is None else float(account.balance)
+        except ValueError:
+            balance = None
+        if balance is not None and balance <= 0:
+            issues.append(f"Vobiz balance is {account.balance} {account.currency or ''}.".strip())
+            advice.append("Fund the Vobiz account before placing calls.")
+        numbers = adapter.list_numbers()
+        selected = [number for number in numbers if number.number == manifest.phone_number]
+        if len(selected) != 1:
+            issues.append(f"{manifest.phone_number} is not uniquely owned by this Vobiz account.")
+            advice.append("Select an owned E.164 number with `voicekit init --resume`.")
+        else:
+            route = adapter.inbound_route(manifest.phone_number)
+            if not route.get("application_id") and not route.get("trunk_group_id"):
+                issues.append("The selected Vobiz number has no inbound application or SIP trunk.")
+                advice.append("Run `voicekit dev --phone` for a temporary conflict-safe route.")
+        advice.append(
+            "Confirm Vobiz account KYC and destination permissions before live PSTN tests."
+        )
+    finally:
+        adapter.ledger.close()
+    return _result(
+        "carrier",
+        "Vobiz account, funding, signatures, and inbound route",
         issues,
         advice,
     )

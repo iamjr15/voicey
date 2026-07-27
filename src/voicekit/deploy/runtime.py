@@ -49,6 +49,7 @@ from voicekit.storage.sqlite import SQLiteRepository
 if TYPE_CHECKING:
     from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.twilio import TwilioAdapter
+    from voicekit.telephony.vobiz import VobizAdapter
 
 _LOG = get_logger(component="docker-runtime")
 
@@ -180,6 +181,7 @@ async def _serve(
 ) -> None:
     twilio: TwilioAdapter | None = None
     telnyx: TelnyxAdapter | None = None
+    vobiz: VobizAdapter | None = None
     database_path = preflight.database_path
     async with SQLiteRepository(database_path) as repository:
         if agent.phone is not None:
@@ -215,6 +217,25 @@ async def _serve(
                     public_key=environment.get("TELNYX_PUBLIC_KEY"),
                     connection_id=environment.get("TELNYX_CONNECTION_ID"),
                     ledger_path=settings.data_dir / "telephony.sqlite3",
+                )
+            elif agent.phone.provider == "vobiz":
+                from voicekit.telephony.vobiz import VobizAdapter
+
+                missing = [
+                    name
+                    for name in ("VOBIZ_AUTH_ID", "VOBIZ_AUTH_TOKEN")
+                    if not environment.get(name)
+                ]
+                if missing:
+                    raise VoicekitError(
+                        "VK-DEP-003",
+                        detail=f"Vobiz deployment is missing {', '.join(missing)}.",
+                    )
+                vobiz = VobizAdapter(
+                    auth_id=environment.get("VOBIZ_AUTH_ID"),
+                    auth_token=environment.get("VOBIZ_AUTH_TOKEN"),
+                    ledger_path=settings.data_dir / "telephony.sqlite3",
+                    expected_public_base=settings.public_base,
                 )
             else:
                 raise VoicekitError(
@@ -265,6 +286,7 @@ async def _serve(
                 previous_secret=previous_secret,
                 twilio=twilio,
                 telnyx=telnyx,
+                vobiz=vobiz,
             )
             if agent.phone is not None and agent.phone.record
             else None
@@ -281,6 +303,7 @@ async def _serve(
             ),
             twilio=twilio,
             telnyx=telnyx,
+            vobiz=vobiz,
             web_sessions=web_security,
             recording_handler=recording_handler,
         )
@@ -312,6 +335,8 @@ async def _serve(
                 await asyncio.to_thread(twilio.ledger.close)
             if telnyx is not None:
                 await asyncio.to_thread(telnyx.ledger.close)
+            if vobiz is not None:
+                await asyncio.to_thread(vobiz.ledger.close)
 
 
 def _admin_app(

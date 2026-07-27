@@ -213,7 +213,7 @@ must restore the complete pre-trunk number route.
 |---|---|---|---|---|
 | Twilio | **Certified** | Media Streams WS + TwiML | Elastic SIP trunk | Reference implementation |
 | Telnyx | **Certified** | TeXML + streaming | SIP trunk | |
-| Vobiz | **Certified** | Answer XML + WS (India) | SIP if supported, else Pipecat-path only (capability-flagged) | India wedge |
+| Vobiz | **Certified** | VobizXML + bidirectional PCMU WS | API-managed UDP SIP trunks | India wedge; credentialed/PSTN certification remains a release gate |
 | Plivo | Beta | Plivo XML + streams | SIP trunk | |
 | Generic SIP | Beta | — (use LiveKit path) | Direct trunk | Escape hatch for PBX/other carriers |
 
@@ -515,6 +515,12 @@ Estimate honestly: this is roughly 4–6 months for a small senior team (2–3 e
 1. **Name** (and therefore package/CLI/registry names) — everything above uses `voicekit` as placeholder.
 2. Hosting org for repo + docs domain.
 3. Judge-model default for sim tests (quality vs cost).
-4. Whether Vobiz LiveKit-path is feasible (SIP support?) or ships Pipecat-path-only with a capability flag.
-5. P1 reference model set (Deepgram/Claude/Cartesia assumed above).
+4. P1 reference model set (Deepgram/Claude/Cartesia assumed above).
+
+Vobiz LiveKit feasibility was resolved positively in P3: Vobiz documents
+inbound and outbound LiveKit SIP interconnects. Voicekit provisions the current
+Vobiz and LiveKit control planes with UDP/5060, the documented Vobiz gateway
+allowlist, explicit existing Vobiz credentials, deterministic reuse, and
+reverse rollback. The credentialed/PSTN commands remain a truthful release
+gate in `docs/GAPS.md`.
 ```

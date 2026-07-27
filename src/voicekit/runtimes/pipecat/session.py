@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -157,7 +157,9 @@ class PipecatSession:
     pipeline_params: PipelineParams
     global_tools: tuple[FlowsFunctionSchema, ...]
     duration_task: asyncio.Task[None] | None = None
+    provider_terminal_required: bool = False
     _ended_reason: EndedReason | None = None
+    _terminal_signal: asyncio.Event = field(default_factory=asyncio.Event)
     _flow_initialized: bool = False
 
     @property
@@ -172,10 +174,19 @@ class PipecatSession:
     async def wait(self) -> PersistedEvent:
         """Wait for pipeline completion and close the fenced lifecycle."""
         try:
-            with results.result_context(self.lifecycle.buffer):
-                await self.worker.wait()
-        except Exception:
-            self.set_reason("worker_crash")
+            try:
+                with results.result_context(self.lifecycle.buffer):
+                    await self.worker.wait()
+            except Exception:
+                self.set_reason("worker_crash")
+            if self.provider_terminal_required and self._ended_reason is None:
+                try:
+                    await asyncio.wait_for(
+                        self._terminal_signal.wait(),
+                        timeout=self.agent.limits.max_duration_s + 30,
+                    )
+                except TimeoutError:
+                    self.set_reason("duration_limit")
         finally:
             await self._cancel_duration_timer()
         reason = self._ended_reason or (
@@ -208,6 +219,7 @@ class PipecatSession:
     def set_reason(self, reason: EndedReason) -> None:
         if self._ended_reason is None or reason in _FAILURE_REASONS:
             self._ended_reason = reason
+        self._terminal_signal.set()
 
     async def _cancel_duration_timer(self) -> None:
         if self.duration_task is None:
@@ -385,7 +397,8 @@ class PipecatSessionBuilder:
             _transport: BaseTransport,
             _client: object,
         ) -> None:
-            await session.end("caller_hangup")
+            if not session.provider_terminal_required:
+                await session.end("caller_hangup")
 
         @session.worker.event_handler("on_pipeline_started")
         async def on_pipeline_started(  # pyright: ignore[reportUnusedFunction]
