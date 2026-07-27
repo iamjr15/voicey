@@ -48,6 +48,18 @@ scenario, and exits nonzero when any expectation fails. Audio scenarios use
 local Kokoro for the simulated caller and Moonshine to transcribe the agent's
 real synthesized audio.
 
+The P1 reference-stack latency gate uses a dedicated 20-turn manifest and the
+production observer's persisted end-to-end samples:
+
+```bash
+uv run python /path/to/voicekit/tests/verification/p1_latency_gate.py \
+  --project "$PWD"
+```
+
+It fails unless p50 is at most 800 ms and p95 is at most 1500 ms. Provider
+credentials must be injected into the process; the script never reads or logs
+secret values from scenario YAML.
+
 For a cloud judge, copy `evals/judge-cloud.example.yaml` to a private config
 location, choose it in a private scenario overlay, and inject that provider key
 with `voicekit keys add openai`. Do not commit the key.

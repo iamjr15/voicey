@@ -1,0 +1,206 @@
+{
+  "contract_version": 1,
+  "scope": "P1 actionable command paths; groups are navigation-only",
+  "json_policy": "required on read/report surfaces; not applicable to streaming and mutating surfaces",
+  "commands": [
+    {
+      "path": "",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--json", "--version"],
+      "paired_options": []
+    },
+    {
+      "path": "init",
+      "phase": "p1",
+      "interaction": "wizard-with-noninteractive-flags",
+      "json": "not-applicable",
+      "arguments": ["path"],
+      "options": ["--channels", "--description", "--draft-prompts", "--models", "--name", "--no-draft-prompts", "--phone-number", "--phone-provider", "--recipe", "--resume", "--runtime", "--yes"],
+      "paired_options": [["--draft-prompts", "--no-draft-prompts"]],
+      "question_flag_twins": ["--channels", "--description", "--draft-prompts", "--models", "--name", "--phone-number", "--phone-provider", "--recipe", "--runtime"]
+    },
+    {
+      "path": "dev",
+      "phase": "p1",
+      "interaction": "streaming-runtime",
+      "json": "not-applicable",
+      "arguments": [],
+      "options": ["--no-open", "--no-phone", "--phone", "--port", "--tunnel", "--url"],
+      "paired_options": [["--phone", "--no-phone"]]
+    },
+    {
+      "path": "call",
+      "phase": "p1",
+      "interaction": "confirmed-live-mutation",
+      "json": "not-applicable",
+      "arguments": ["e164"],
+      "options": ["--url", "--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "doctor",
+      "phase": "p1",
+      "interaction": "read-with-safe-fixes",
+      "json": "required",
+      "arguments": [],
+      "options": ["--fix", "--json", "--no-fix", "--no-send-test", "--port", "--send-test"],
+      "paired_options": [["--fix", "--no-fix"], ["--send-test", "--no-send-test"]]
+    },
+    {
+      "path": "keys list",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--json"],
+      "paired_options": []
+    },
+    {
+      "path": "keys validate",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--json"],
+      "paired_options": []
+    },
+    {
+      "path": "keys add",
+      "phase": "p1",
+      "interaction": "secret-prompt-or-injected-environment",
+      "json": "not-applicable",
+      "arguments": ["provider"],
+      "options": ["--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "recipes list",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--json"],
+      "paired_options": []
+    },
+    {
+      "path": "recipes add",
+      "phase": "p1",
+      "interaction": "local-no-overwrite-mutation",
+      "json": "not-applicable",
+      "arguments": ["name"],
+      "options": [],
+      "paired_options": []
+    },
+    {
+      "path": "recipes update-check",
+      "phase": "p4-reserved",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--json"],
+      "paired_options": []
+    },
+    {
+      "path": "numbers list",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--json"],
+      "paired_options": []
+    },
+    {
+      "path": "numbers buy",
+      "phase": "p1",
+      "interaction": "confirmed-money-mutation",
+      "json": "not-applicable",
+      "arguments": ["country"],
+      "options": ["--area", "--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "numbers release",
+      "phase": "p1",
+      "interaction": "confirmed-live-mutation",
+      "json": "not-applicable",
+      "arguments": ["number"],
+      "options": ["--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "numbers point",
+      "phase": "p1",
+      "interaction": "confirmed-live-mutation",
+      "json": "not-applicable",
+      "arguments": ["number"],
+      "options": ["--url", "--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "numbers restore",
+      "phase": "p1",
+      "interaction": "confirmed-live-mutation",
+      "json": "not-applicable",
+      "arguments": ["token"],
+      "options": ["--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "calls list",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": [],
+      "options": ["--all", "--json", "--limit", "--undelivered"],
+      "paired_options": [["--undelivered", "--all"]]
+    },
+    {
+      "path": "calls show",
+      "phase": "p1",
+      "interaction": "read",
+      "json": "required",
+      "arguments": ["call_id"],
+      "options": ["--json"],
+      "paired_options": []
+    },
+    {
+      "path": "calls redeliver",
+      "phase": "p1",
+      "interaction": "confirmed-external-mutation",
+      "json": "not-applicable",
+      "arguments": ["identifier"],
+      "options": ["--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "test",
+      "phase": "p2-reserved",
+      "interaction": "test-runner",
+      "json": "not-applicable",
+      "arguments": [],
+      "options": ["--audio", "--filter", "--live", "--no-audio", "--no-live", "--report"],
+      "paired_options": [["--audio", "--no-audio"], ["--live", "--no-live"]]
+    },
+    {
+      "path": "deploy docker",
+      "phase": "p1",
+      "interaction": "artifact-report-with-optional-confirmed-smoke",
+      "json": "required",
+      "arguments": [],
+      "options": ["--engine-wheel", "--json", "--skip-smoke", "--smoke", "--to", "--yes"],
+      "paired_options": []
+    },
+    {
+      "path": "upgrade",
+      "phase": "p4-reserved",
+      "interaction": "confirmed-package-mutation",
+      "json": "not-applicable",
+      "arguments": [],
+      "options": ["--pre", "--stable", "--yes"],
+      "paired_options": [["--pre", "--stable"]]
+    }
+  ]
+}

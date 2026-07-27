@@ -1,0 +1,66 @@
+name: appointment_reference_stack_latency
+user: !include ../user-audio.yaml
+judge: !include ../judge-audio-local.yaml
+turns:
+  - expect:
+      - event: tts_response
+  - user: "What appointment times are available on August fourth twenty twenty six in America New York?"
+    expect:
+      - event: tts_response
+  - user: "What about August fifth in the same timezone?"
+    expect:
+      - event: tts_response
+  - user: "Please check August sixth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August seventh in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August tenth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August eleventh in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twelfth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August thirteenth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August fourteenth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August seventeenth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August eighteenth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August nineteenth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twentieth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twenty first in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twenty fourth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twenty fifth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twenty sixth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twenty seventh in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Please check August twenty eighth in the same timezone."
+    expect:
+      - event: tts_response
+  - user: "Finally, please check August thirty first in the same timezone."
+    expect:
+      - event: tts_response

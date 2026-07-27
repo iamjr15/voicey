@@ -164,15 +164,18 @@ def test_pipecat_eval_scenarios_and_manifests_load_on_the_installed_pin() -> Non
     ]
     text_manifest = EvalManifest.load(evals / "text-suite.yaml")
     audio_manifest = EvalManifest.load(evals / "audio-suite.yaml")
+    latency_manifest = EvalManifest.load(evals / "latency-suite.yaml")
 
-    assert len(scenarios) == 10
+    assert len(scenarios) == 11
     assert len(text_manifest.runs) == 7
     assert len(audio_manifest.runs) == 3
+    assert len(latency_manifest.runs) == 1
     assert all(
         manifest.spawn.endswith("-t eval --port {port}")
         for manifest in (
             text_manifest,
             audio_manifest,
+            latency_manifest,
         )
     )
     assert any(scenario.user_audio is not None and scenario.bot_audio for scenario in scenarios)

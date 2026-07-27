@@ -37,6 +37,24 @@ The first run downloads local speech models. Recordings and logs are written
 under `eval-runs/`, which is project-local diagnostic output and must not be
 committed when it contains real conversations.
 
+## Reference latency suite
+
+`evals/latency-suite.yaml` runs a dedicated 20-user-turn audio scenario on the
+locked Deepgram Nova-3, Anthropic Claude, and Cartesia Sonic 3.5 stack. Do not
+use Pipecat expectation wall time as the latency measurement. The phase gate
+reads `metric='e2e'` samples written by the production
+`UserBotLatencyObserver`, applies the engine's nearest-rank summary, and
+requires p50 ≤ 800 ms plus p95 ≤ 1500 ms:
+
+```bash
+uv run python /path/to/voicekit/tests/verification/p1_latency_gate.py \
+  --project "$PWD"
+```
+
+The command requires 20 distinct measured turns and writes a secret-free JSON
+report under `.voicekit/verification/`. Missing provider credentials are
+reported as pending-live rather than success.
+
 ## Judge configuration
 
 `evals/judge-local.yaml` and `evals/judge-audio-local.yaml` select local Ollama

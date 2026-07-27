@@ -4,10 +4,10 @@ Last updated: 2026-07-27
 
 ## Current checkpoint
 
-- **Phase:** P1 — engine spine, Pipecat, Twilio, CLI/playground, recipe #1, Docker
-- **Current unit:** P1.12 phase verification harness
-- **Next task:** mechanize the fresh-machine five-minute quickstart, p50/p95 audio latency gate, complete command flag/JSON matrix, parallel-call isolation, phase chaos aggregation, tunneled-admin negative, and P1 exit report without promoting pending-live evidence
-- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI; P1.9 wheel-embedded playground; P1.10 wheel-packaged native appointment recipe and direct Pipecat text/audio Evals harness; P1.11 hardened canonical Docker deployment
+- **Phase:** P2 — LiveKit parity, unified testing, Telnyx
+- **Current unit:** P2.1 LiveKit production runtime, SIP provisioning, and crash/certification parity
+- **Next task:** verify every LiveKit 1.6.7 symbol against the installed pin, then implement the production `AgentServer`/`rtc_session` runtime with incremental observations, fenced lifecycle/heartbeat, SIP provisioning and controls, full SIGKILL chaos parity, and the Twilio–LiveKit certification harness
+- **Completed:** all P0 units and P1.1–P1.12, including the truthful P1 phase runner; all automatable local P1 gates are green, while credentialed/public/manual P1 gates remain pending with exact commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -37,6 +37,9 @@ Last updated: 2026-07-27
 | P1.10 credentialed text/audio Evals | pending-live | Exact disposable-project commands in `docs/GAPS.md`; current environment lacks Anthropic credentials and local Ollama |
 | P1.11 Docker implementation/local verification | green | Deterministic artifacts, Compose validation, env-only secrets, local WAL/FULL/artifact preflight, invalid-topology rejection, fenced rolling handover, production drain, health/smoke contracts, and CI image lifecycle/scan; final local image ran read-only/non-root with build-asserted NLTK data, health green, SIGTERM drain exit 0/OOM false, and Trivy fixed HIGH/CRITICAL + secret scans at 0; full suite → 377 passed, 5 honest live skips, 90.04% branch coverage |
 | P1.11 public HTTPS + paid Docker smoke | pending-live | Exact build, ingress, number-point, paid-call, verification, and rollback commands in `docs/GAPS.md`; requires public ingress and live funded Twilio resources |
+| P1.12 local phase verification | green | Final wheel quickstart 34.086s/300s; exact 22-path CLI matrix; parallel isolation; rollback/fencing/dual-sweeper/actual-SIGKILL chaos; admin negative; 34 Twilio certification and 31 Docker cases; aggregate report `local_automated_status=green`; full suite 381 passed, 5 honest live skips, 90.04% branch coverage |
+| P1.12 reference audio latency | pending-live | Dedicated 20-turn native audio harness requires 20 distinct persisted `e2e` turns and p50 ≤800ms + p95 ≤1500ms; untracked backup lacks Anthropic; exact command in `docs/GAPS.md` |
+| P1 phase overall | pending-live | All local automation green; reference providers, Twilio/PSTN, public edge/Docker, and human wizard/doctor/microphone/handset evidence remain unpromoted; see `docs/verification/p1-gates.md` |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

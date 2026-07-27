@@ -60,8 +60,9 @@ calendar. Its stable `APT-…` reference is for local conversations and tests.
 
 ## Verification
 
-See [Pipecat Evals](../testing/pipecat-evals.md) for the text/audio suite,
-local-Ollama default, cloud override shape, exit contract, and exact commands.
+See [Pipecat Evals](../testing/pipecat-evals.md) for the text/audio suites,
+20-turn reference latency gate, local-Ollama default, cloud override shape,
+exit contract, and exact commands.
 
 Next: run the text suite after every prompt or tool change and the audio suite
 before deployment.

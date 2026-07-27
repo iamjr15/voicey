@@ -13,6 +13,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 playground real microphone/provider call | ready-to-run, pending human/credentials | Command below | Valid reference-provider keys, browser microphone grant, a person speaking |
 | P1 appointment text Evals | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia keys and local Ollama `gemma2:9b` |
 | P1 appointment audio Evals | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys plus one-time Kokoro/Moonshine downloads |
+| P1 reference audio latency | ready-to-run, pending credentials | Command below | Deepgram, Anthropic, and Cartesia keys; p50 ≤ 800 ms and p95 ≤ 1500 ms |
 | P1 Docker public deployment + paid smoke | ready-to-run, pending public ingress/credentials/PSTN | Commands below | Public HTTPS ingress, live Twilio credentials, owned number, paid destination |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
@@ -210,10 +211,23 @@ review:
   "$VOICEKIT_REPO_ROOT/.venv/bin/pipecat" eval suite evals/audio-suite.yaml -a)
 ```
 
-Both commands use Pipecat's installed suite runner and return 1 on any failed
-scenario. The first audio run may download Kokoro/Moonshine model data. These
-gates remain `pending credentials/local judge` until the exact commands truly
-return 0.
+Run the dedicated 20-turn reference-stack latency gate. It reads the production
+observer's persisted end-to-end samples, requires 20 distinct measured turns,
+and enforces both percentile budgets:
+
+```bash
+"$VOICEKIT_REPO_ROOT/.venv/bin/python" \
+  "$VOICEKIT_REPO_ROOT/tests/verification/p1_latency_gate.py" \
+  --project "$VOICEKIT_EVAL_PROJECT"
+```
+
+The suite commands use Pipecat's installed runner and return 1 on any failed
+scenario. The first audio run may download Kokoro/Moonshine model data. The
+latency wrapper returns 2 when credentials are missing and 1 for a suite,
+sample-count, model, or percentile failure. These gates remain pending until
+the exact commands truly return 0. The local untracked backup has Deepgram and
+Cartesia values but no Anthropic value, so the latency command was not run and
+is not green.
 
 ## P1 Docker public deployment and paid smoke
 
