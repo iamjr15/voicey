@@ -121,6 +121,12 @@ default, and writes through `ArtifactStore`. Only a URL from the verified
 callback is eligible. The terminal event retains its immutable pending
 recording reference; ingestion emits `call.recording.ready`.
 
+For inbound Call Control calls, voicekit issues `record_start` after durable
+reservation and before media startup, using dual-channel MP3 plus a
+deterministic `command_id`. Outbound creation carries the equivalent recording
+policy. The ready engine URL requires the current or previous result webhook
+secret as a bearer and never exposes the signed Telnyx source URL.
+
 ## LiveKit FQDN SIP provisioning
 
 `TelnyxLiveKitSipProvisioner` applies the two control planes as one ledgered

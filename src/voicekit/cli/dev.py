@@ -28,7 +28,12 @@ from voicekit.playground import (
     WebSessionSecurity,
     embedded_frontend,
 )
-from voicekit.runtimes.pipecat import PipecatHost, PipecatHostSettings
+from voicekit.runtimes.pipecat import (
+    PipecatHost,
+    PipecatHostSettings,
+    PipecatRecordingHandler,
+)
+from voicekit.storage.artifacts import LocalArtifactStore
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony.models import RollbackToken
 from voicekit.telephony.twilio import TwilioAdapter
@@ -123,6 +128,32 @@ async def run_dev(
                         ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
                     )
                 secret = context.environment.get(agent.results.secret_env, "")
+                previous_secret = (
+                    None
+                    if agent.results.previous_secret_env is None
+                    else context.environment.get(agent.results.previous_secret_env)
+                )
+                recording_handler = (
+                    PipecatRecordingHandler(
+                        repository=repository,
+                        artifact_store=LocalArtifactStore(context.root / ".voicekit" / "artifacts"),
+                        access_base=external_base,
+                        current_secret=secret,
+                        previous_secret=previous_secret,
+                        twilio=(
+                            cast("TwilioAdapter", adapter)
+                            if selected_provider == "twilio"
+                            else None
+                        ),
+                        telnyx=(
+                            cast("TelnyxAdapter", adapter)
+                            if selected_provider == "telnyx"
+                            else None
+                        ),
+                    )
+                    if agent.phone is not None and agent.phone.record
+                    else None
+                )
                 tokens = SessionTokenManager(
                     secret,
                     audience=public_origin,
@@ -172,6 +203,7 @@ async def run_dev(
                             else None
                         ),
                         web_sessions=security,
+                        recording_handler=recording_handler,
                     )
                     reloads = ReloadController(
                         root=context.root,

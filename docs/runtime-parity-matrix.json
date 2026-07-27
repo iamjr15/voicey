@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "runtimes": {
+    "pipecat": "1.6.0",
+    "livekit": "1.6.7"
+  },
+  "rows": [
+    {
+      "feature": "native_workflows",
+      "contract": "Conversation logic stays in each framework's native workflow model.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/unit/test_pipecat_runtime.py::test_native_flow_entry_initializes_flow_manager"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/unit/test_livekit_runtime.py::test_native_livekit_flow_loader_accepts_only_agent_workflows"
+      }
+    },
+    {
+      "feature": "greeting",
+      "contract": "Both runtime variants start from the same recipe-owned greeting instruction.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/parity/test_behavioral_parity.py::test_recipe_greeting_is_identical[pipecat]"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/parity/test_behavioral_parity.py::test_recipe_greeting_is_identical[livekit]"
+      }
+    },
+    {
+      "feature": "tool_sequence",
+      "contract": "Shared typed tools retain declaration and execution order.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/parity/test_behavioral_parity.py::test_shared_tool_sequence_is_identical[pipecat]"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/parity/test_behavioral_parity.py::test_shared_tool_sequence_is_identical[livekit]"
+      }
+    },
+    {
+      "feature": "webhook_payload",
+      "contract": "The terminal webhook schema and inclusion/redaction rules are runtime-invariant.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/parity/test_behavioral_parity.py::test_terminal_webhook_payload_is_identical[pipecat]"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/parity/test_behavioral_parity.py::test_terminal_webhook_payload_is_identical[livekit]"
+      }
+    },
+    {
+      "feature": "config_mapping",
+      "contract": "Every shared behavior, limit, fallback, and recording field reaches a native mechanism.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/parity/test_config_mapping.py"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/parity/test_config_mapping.py"
+      }
+    },
+    {
+      "feature": "fenced_lifecycle",
+      "contract": "Calls persist before exposure and produce exactly one terminal event.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/integration/test_results_sigkill.py"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/integration/test_livekit_sigkill.py"
+      }
+    },
+    {
+      "feature": "web_channel",
+      "contract": "A scoped browser credential reaches native audio media without provider secrets.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/unit/test_pipecat_host.py::test_web_signaling_requires_scoped_token_origin_and_peer_binding"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/unit/test_livekit_host.py::test_livekit_browser_reservation_is_durable_before_token_and_fails_cleanly"
+      }
+    },
+    {
+      "feature": "twilio_phone",
+      "contract": "Inbound, outbound, DTMF, recording, hangup, and transfer are locally certified.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/certification/test_twilio_adapter.py"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/certification/test_twilio_livekit_sip.py"
+      }
+    },
+    {
+      "feature": "telnyx_phone",
+      "contract": "Call Control/media and LiveKit SIP paths are both locally certified.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/certification/test_telnyx_adapter.py"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/certification/test_telnyx_livekit_sip.py"
+      }
+    },
+    {
+      "feature": "recording",
+      "contract": "phone.record activates provider recording and an engine-owned pending artifact reference.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/unit/test_pipecat_host.py::test_pipecat_inbound_recording_starts_before_media_answer"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/unit/test_livekit_runtime.py::test_livekit_policy_reaches_native_session_and_transfer_tools"
+      }
+    },
+    {
+      "feature": "dtmf",
+      "contract": "Configured DTMF receive/send uses native carrier or room events.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/unit/test_pipecat_runtime.py::test_dtmf_policy_filters_native_frame"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/unit/test_livekit_host.py::test_job_call_control_uses_native_transfer_and_dtmf"
+      }
+    },
+    {
+      "feature": "cold_transfer",
+      "contract": "The configured human destination is exposed through a native runtime tool.",
+      "pipecat": {
+        "status": "supported",
+        "evidence": "tests/unit/test_pipecat_runtime.py::test_transfer_tool_invokes_carrier_and_queues_native_end_frame"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/unit/test_livekit_runtime_edges.py::test_livekit_language_cold_and_warm_tools_execute_native_actions"
+      }
+    },
+    {
+      "feature": "warm_transfer",
+      "contract": "The agent briefs a human before connecting the caller.",
+      "pipecat": {
+        "status": "declared_exclusion",
+        "reason": "The Twilio conference-bridge implementation is the locked P3 warm-transfer build unit.",
+        "target_phase": "P3",
+        "evidence": "docs/build-plan.md#p3--recipes-2--vobiz--plivosip-beta--live-tier--cloud-deploys--warm-transfer-pipecat"
+      },
+      "livekit": {
+        "status": "supported",
+        "evidence": "tests/unit/test_livekit_runtime_edges.py::test_livekit_language_cold_and_warm_tools_execute_native_actions"
+      }
+    }
+  ]
+}

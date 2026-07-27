@@ -6,7 +6,13 @@ from pathlib import Path
 
 from pipecat.flows import FlowManager, NodeConfig
 
-_PROMPTS = Path(__file__).parent / "prompts"
+_SOURCE_DIR = Path(__file__).parent
+_PROMPTS = (
+    _SOURCE_DIR / "prompts"
+    if (_SOURCE_DIR / "prompts").is_dir()
+    else _SOURCE_DIR.parent / "prompts"
+)
+_GREETING_INSTRUCTION = (_PROMPTS / "greeting.md").read_text(encoding="utf-8").strip()
 
 
 def entry(_flow_manager: FlowManager) -> NodeConfig:
@@ -21,11 +27,7 @@ def entry(_flow_manager: FlowManager) -> NodeConfig:
         task_messages=[
             {
                 "role": "developer",
-                "content": (
-                    "Greet the caller, ask whether they want to book, reschedule, "
-                    "cancel, or speak with a person, then follow the role policy. "
-                    "Use the registered calendar functions for every calendar fact."
-                ),
+                "content": _GREETING_INSTRUCTION,
             }
         ],
         respond_immediately=True,

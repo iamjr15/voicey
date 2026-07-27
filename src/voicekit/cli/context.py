@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import os
+import sys
+from collections.abc import Generator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -10,6 +15,7 @@ from voicekit.cli.checkpoint import InitCheckpointStore
 from voicekit.cli.environment import EnvFileStore, merged_environment
 from voicekit.cli.keys import required_entries
 from voicekit.config.manifest import ManifestStore, ProjectManifest
+from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 
 
@@ -52,6 +58,49 @@ def require_manifest(context: ProjectContext) -> ProjectManifest:
     )
 
 
+def load_project_agent(context: ProjectContext) -> Agent:
+    """Import the configured project Agent with its root and environment active."""
+    manifest = require_manifest(context)
+    try:
+        with _project_import_path(context.root), _project_environment(context.environment):
+            importlib.invalidate_caches()
+            existing = sys.modules.get(manifest.agent_module)
+            existing_file = getattr(existing, "__file__", None)
+            if existing is not None and (
+                existing_file is None
+                or not Path(existing_file).resolve().is_relative_to(context.root)
+            ):
+                del sys.modules[manifest.agent_module]
+                existing = None
+            module = (
+                importlib.import_module(manifest.agent_module)
+                if existing is None
+                else importlib.reload(existing)
+            )
+            agent: object = module.agent
+    except (ImportError, AttributeError) as exc:
+        raise VoicekitError(
+            "VK-CLI-007",
+            detail=f"{manifest.agent_module}.py must export an Agent named `agent`.",
+        ) from exc
+    except Exception as exc:
+        raise VoicekitError(
+            "VK-CLI-007",
+            detail=f"{manifest.agent_module}.py failed to load ({type(exc).__name__}).",
+        ) from exc
+    if not isinstance(agent, Agent):
+        raise VoicekitError(
+            "VK-CLI-007",
+            detail=f"{manifest.agent_module}.agent is not a voicekit Agent.",
+        )
+    if agent.runtime != manifest.runtime:
+        raise VoicekitError(
+            "VK-CLI-007",
+            detail="voicekit.jsonc and agent.py select different runtimes.",
+        )
+    return agent
+
+
 def next_step(context: ProjectContext) -> str:
     if context.checkpoint:
         return "voicekit init --resume"
@@ -77,3 +126,28 @@ def _manifest_root(start: Path) -> Path:
         if (directory / "voicekit.jsonc").exists():
             return directory
     return candidate
+
+
+@contextmanager
+def _project_import_path(root: Path) -> Generator[None, None, None]:
+    text = str(root)
+    sys.path.insert(0, text)
+    try:
+        yield
+    finally:
+        with suppress(ValueError):
+            sys.path.remove(text)
+
+
+@contextmanager
+def _project_environment(values: dict[str, str]) -> Generator[None, None, None]:
+    original = {name: os.environ.get(name) for name in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for name, value in original.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value

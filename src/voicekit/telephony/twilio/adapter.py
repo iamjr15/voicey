@@ -470,6 +470,36 @@ class TwilioAdapter:
     def answer_response(self, target: RuntimeTarget) -> str:
         return self._stream_twiml(_pipecat_target(target), {})
 
+    def start_recording(self, call_sid: str, target: RuntimeTarget) -> str:
+        """Idempotently ensure one dual-channel recording exists for a live call."""
+        sid = _validate_call_sid(call_sid)
+        pipecat = _pipecat_target(target)
+        try:
+            recordings = cast(
+                "list[Any]",
+                self._client.calls(sid).recordings.list(limit=2),
+            )
+        except Exception as exc:
+            _raise_carrier(exc, operation="inspect live-call recording")
+        if len(recordings) > 1:
+            raise VoicekitError(
+                "VK-TEL-009",
+                detail=f"Twilio call {sid} has multiple recordings; operator review is required.",
+            )
+        if recordings:
+            return _validate_recording_sid(str(recordings[0].sid))
+        try:
+            recording = self._client.calls(sid).recordings.create(
+                recording_channels="dual",
+                recording_status_callback=pipecat.recording_url,
+                recording_status_callback_method="POST",
+                recording_status_callback_event=["completed", "absent"],
+                trim="do-not-trim",
+            )
+        except Exception as exc:
+            _raise_carrier(exc, operation="start live-call recording")
+        return _validate_recording_sid(str(recording.sid))
+
     def parse_event(self, request: TelephonyRequest) -> CallEvent:
         call_sid = _validate_call_sid(_form_value(request.form, "CallSid"))
         intent_id = request.route_params.get("intent_id")

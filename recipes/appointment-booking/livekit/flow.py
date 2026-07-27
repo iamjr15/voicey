@@ -17,6 +17,7 @@ _ROLE = "\n\n".join(
     (_PROMPTS / name).read_text(encoding="utf-8")
     for name in ("system.md", "failure.md", "voicemail.md")
 )
+_GREETING_INSTRUCTION = (_PROMPTS / "greeting.md").read_text(encoding="utf-8").strip()
 
 NativeTool = llm.Tool | llm.Toolset
 
@@ -66,12 +67,7 @@ class AppointmentIntakeAgent(AppointmentAgent):
         )
 
     async def on_enter(self) -> None:
-        self.session.generate_reply(
-            instructions=(
-                "Greet the caller in one short sentence and ask whether they want to book, "
-                "reschedule, cancel, or speak with a person."
-            )
-        )
+        self.session.generate_reply(instructions=_GREETING_INSTRUCTION)
 
     @function_tool
     async def start_booking(self) -> Agent:

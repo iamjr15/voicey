@@ -376,6 +376,7 @@ def test_call_control_actions_cover_media_dtmf_transfer_and_hangup(
     adapter, fake, _, _ = adapter_bundle
     adapter.answer_call(CALL_ID)
     adapter.start_media(CALL_ID, TARGET)
+    adapter.start_recording(CALL_ID)
     adapter.send_dtmf(CALL_ID, "12#")
     adapter.cold_transfer(CALL_ID, "+14155550102")
     adapter.hangup(CALL_ID)
@@ -388,6 +389,7 @@ def test_call_control_actions_cover_media_dtmf_transfer_and_hangup(
     assert set(actions) == {
         "answer",
         "streaming_start",
+        "record_start",
         "send_dtmf",
         "transfer",
         "hangup",
@@ -399,6 +401,11 @@ def test_call_control_actions_cover_media_dtmf_transfer_and_hangup(
     assert stream["stream_bidirectional_mode"] == "rtp"
     assert stream["stream_bidirectional_codec"] == "PCMU"
     assert stream["stream_bidirectional_sampling_rate"] == 8000
+    recording = actions["record_start"]
+    assert recording is not None
+    assert recording["format"] == "mp3"
+    assert recording["channels"] == "dual"
+    assert recording["command_id"]
 
 
 def test_texml_response_is_bidirectional_parameterized_and_bounded(

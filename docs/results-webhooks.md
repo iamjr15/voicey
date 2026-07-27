@@ -136,6 +136,17 @@ non-terminal event with its own event id and outbox delivery.
 
 Raw carrier media URLs are never exposed.
 
+Fetch the ready engine URL with the same current webhook secret used by the
+receiver:
+
+```text
+Authorization: Bearer whsec_...
+```
+
+The previous configured secret is accepted during rotation overlap. The URL
+contains no credential, responses are `private, no-store`, and pending,
+failed, unknown, or unauthorized recording reads fail closed.
+
 ## Retention
 
 SQLite retention uses each call's `purge_after_days` and covers the call row,

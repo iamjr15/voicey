@@ -28,6 +28,7 @@ class PipecatPolicy:
     transfer_number: str | None
     end_call_phrases: tuple[str, ...]
     fallback_language: str | None
+    record: bool
 
     @classmethod
     def from_agent(cls, agent: Agent) -> PipecatPolicy:
@@ -42,6 +43,7 @@ class PipecatPolicy:
             transfer_number=agent.behavior.transfer_number,
             end_call_phrases=tuple(agent.behavior.end_call_phrases),
             fallback_language=agent.voice.fallback_language,
+            record=bool(agent.phone and agent.phone.record),
         )
 
 
@@ -49,66 +51,72 @@ PIPECAT_CONFIG_MAPPINGS: tuple[ConfigMapping, ...] = (
     ConfigMapping(
         "models.fallbacks.stt",
         "ServiceSwitcher(services=[primary, backup], ServiceSwitcherStrategyFailover)",
-        "test_model_fallback_axis_uses_native_switcher[stt]",
+        "test_config_field_mapping[pipecat-models.fallbacks.stt]",
     ),
     ConfigMapping(
         "models.fallbacks.llm",
         "LLMSwitcher(llms=[primary, backup], ServiceSwitcherStrategyFailover)",
-        "test_model_fallback_axis_uses_native_switcher[llm]",
+        "test_config_field_mapping[pipecat-models.fallbacks.llm]",
     ),
     ConfigMapping(
         "models.fallbacks.tts",
         "ServiceSwitcher(services=[primary, backup], ServiceSwitcherStrategyFailover)",
-        "test_model_fallback_axis_uses_native_switcher[tts]",
+        "test_config_field_mapping[pipecat-models.fallbacks.tts]",
     ),
     ConfigMapping(
         "limits.max_duration_s",
         "asyncio duration task queues EndFrame(reason='duration_limit')",
-        "test_duration_limit_queues_end_frame",
+        "test_config_field_mapping[pipecat-limits.max_duration_s]",
     ),
     ConfigMapping(
         "limits.max_concurrent",
         "AdmissionController reservation before carrier answer or WebRTC SDP answer",
-        "test_admission_is_atomic_and_busy_at_limit",
+        "test_config_field_mapping[pipecat-limits.max_concurrent]",
     ),
     ConfigMapping(
         "limits.silence_hangup_s",
         "LLMUserAggregatorParams.user_idle_timeout plus PipelineWorker idle backstop",
-        "test_policy_fields_reach_native_pipecat_objects",
+        "test_config_field_mapping[pipecat-limits.silence_hangup_s]",
     ),
     ConfigMapping(
         "limits.daily_spend_alert_usd",
         "PipecatPolicy threshold plus PipelineParams.enable_usage_metrics",
-        "test_policy_fields_reach_native_pipecat_objects",
+        "test_config_field_mapping[pipecat-limits.daily_spend_alert_usd]",
     ),
     ConfigMapping(
         "behavior.allow_interruptions",
         "AlwaysUserMuteStrategy while bot speaks when false; native VAD interruption when true",
-        "test_interruption_policy_uses_native_user_mute_strategy",
+        "test_config_field_mapping[pipecat-behavior.allow_interruptions]",
     ),
     ConfigMapping(
         "behavior.voicemail",
-        "signed Twilio AMD callback selects hangup or connect-machine flow",
-        "test_voicemail_policy_controls_amd_disposition",
+        "signed carrier AMD callback selects hangup or connect-machine flow",
+        "test_config_field_mapping[pipecat-behavior.voicemail]",
     ),
     ConfigMapping(
         "behavior.dtmf",
-        "TwilioFrameSerializer InputDTMFFrame gated by DTMFPolicyProcessor",
-        "test_dtmf_policy_filters_native_frame",
+        "carrier serializer InputDTMFFrame gated by DTMFPolicyProcessor",
+        "test_config_field_mapping[pipecat-behavior.dtmf]",
     ),
     ConfigMapping(
         "behavior.transfer_number",
         "global native FlowsFunctionSchema invokes carrier transfer and queues EndFrame",
-        "test_transfer_config_adds_native_flow_tool",
+        "test_config_field_mapping[pipecat-behavior.transfer_number]",
     ),
     ConfigMapping(
         "behavior.end_call_phrases",
         "assistant aggregator turn event matches phrase and queues EndFrame",
-        "test_end_phrase_event_requests_agent_hangup",
+        "test_config_field_mapping[pipecat-behavior.end_call_phrases]",
     ),
     ConfigMapping(
         "voice.fallback_language",
         "typed STTUpdateSettingsFrame and TTSUpdateSettingsFrame for every service member",
-        "test_language_fallback_uses_typed_service_settings",
+        "test_config_field_mapping[pipecat-voice.fallback_language]",
+    ),
+    ConfigMapping(
+        "phone.record",
+        "carrier live-call recording command plus signed callback parsing "
+        "and authenticated download",
+        "test_config_field_mapping[pipecat-phone.record]",
     ),
 )

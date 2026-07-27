@@ -22,6 +22,7 @@ from voicekit.capabilities import DEFAULT_CAPABILITIES
 from voicekit.cli.context import (
     ProjectContext,
     discover_project,
+    load_project_agent,
     next_step,
     require_manifest,
 )
@@ -266,11 +267,14 @@ def call_command(
                 detail="start `voicekit dev --phone` or pass --url first.",
             )
         adapter = _carrier(context)
+        agent = load_project_agent(context)
         try:
             call_sid = adapter.start_call(
                 manifest.phone_number,
                 e164,
                 _carrier_target(context, target_url),
+                amd=True,
+                record=bool(agent.phone and agent.phone.record),
             )
         finally:
             adapter.ledger.close()
@@ -898,12 +902,15 @@ def deploy_command(
                 yes=yes,
             )
             adapter = _carrier(context, expected_public_base=smoke_result.url)
+            agent = load_project_agent(context)
             try:
                 call_id = await asyncio.to_thread(
                     adapter.start_call,
                     cast("str", manifest.phone_number),
                     destination,
                     _carrier_target(context, smoke_result.url),
+                    amd=True,
+                    record=bool(agent.phone and agent.phone.record),
                 )
             finally:
                 adapter.ledger.close()

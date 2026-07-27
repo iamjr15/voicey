@@ -59,6 +59,8 @@ class TwilioRuntimeAdapter(Protocol):
 
     def answer_response(self, target: RuntimeTarget) -> str: ...
 
+    def start_recording(self, call_sid: str, target: RuntimeTarget) -> str: ...
+
     def parse_event(self, request: TelephonyRequest) -> CallEvent: ...
 
     def resume_after_amd(
@@ -86,9 +88,21 @@ class TelnyxRuntimeAdapter(Protocol):
 
     def start_media(self, call_control_id: str, target: RuntimeTarget) -> None: ...
 
+    def start_recording(self, call_control_id: str) -> None: ...
+
     def cold_transfer(self, call_control_id: str, to_number: str) -> None: ...
 
     def hangup(self, call_control_id: str) -> None: ...
+
+
+class RecordingHandler(Protocol):
+    """Verified callback ingestion plus protected artifact reads."""
+
+    async def handle_twilio(self, event: CallEvent) -> None: ...
+
+    async def handle_telnyx(self, event: CallEvent) -> None: ...
+
+    async def read(self, recording_id: str, authorization: str | None) -> bytes: ...
 
 
 class WebSessionAuthorizer(Protocol):
@@ -239,6 +253,7 @@ class PipecatHost:
         request_handler: SmallWebRTCRequestHandler | None = None,
         session_builder: PipecatSessionBuilder | None = None,
         web_sessions: WebSessionAuthorizer | None = None,
+        recording_handler: RecordingHandler | None = None,
     ) -> None:
         if agent.runtime != "pipecat":
             raise VoicekitError("VK-RUN-001", detail="PipecatHost requires runtime='pipecat'.")
@@ -294,6 +309,7 @@ class PipecatHost:
             transfer_handler=transfer_handler,
         )
         self.web_sessions = web_sessions
+        self.recording_handler = recording_handler
         self._pending: dict[str, _PendingCall] = {}
         self._active: dict[str, PipecatSession] = {}
         self._web_sessions: dict[str, str] = {}
@@ -507,6 +523,29 @@ class PipecatHost:
                 },
             )
 
+        @app.get("/recordings/{recording_id}")
+        async def recording_artifact(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            recording_id: str,
+        ) -> Response:
+            if self.recording_handler is None:
+                return _error_response("VK-RES-010", 404)
+            try:
+                content = await self.recording_handler.read(
+                    recording_id,
+                    request.headers.get("authorization"),
+                )
+            except VoicekitError as exc:
+                return _error_response(
+                    exc.code,
+                    403 if exc.code == "VK-WEB-004" else 404,
+                )
+            return Response(
+                content=content,
+                media_type="audio/mpeg",
+                headers={"cache-control": "private, no-store"},
+            )
+
         @app.post("/twilio/answer")
         async def twilio_answer(  # pyright: ignore[reportUnusedFunction]
             request: Request,
@@ -546,6 +585,16 @@ class PipecatHost:
                     "to_number": pending.call.to_number or "",
                 },
             )
+            if self.agent.phone is not None and self.agent.phone.record:
+                try:
+                    await asyncio.to_thread(
+                        adapter.start_recording,
+                        event.provider_call_id,
+                        target,
+                    )
+                except Exception:
+                    await self._fail_pending_setup(pending)
+                    raise
             return Response(
                 content=adapter.answer_response(target),
                 media_type="application/xml",
@@ -625,6 +674,28 @@ class PipecatHost:
                 await self._end_from_provider(event)
             return Response(status_code=204)
 
+        @app.post("/twilio/recordings")
+        async def twilio_recordings(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+        ) -> Response:
+            adapter = self._require_twilio()
+            form = await request.form()
+            telephony = _http_telephony_request(request, form)
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            event = adapter.parse_event(telephony)
+            if event.type not in {"recording_ready", "recording_failed"}:
+                return _error_response("VK-TEL-009", 400)
+            if self.recording_handler is None:
+                return _error_response("VK-TEL-009", 503)
+            try:
+                await self.recording_handler.handle_twilio(event)
+            except VoicekitError as exc:
+                if exc.code == "VK-RES-010":
+                    return _error_response(exc.code, 503)
+                raise
+            return Response(status_code=204)
+
         @app.post("/twilio/amd")
         async def twilio_amd(  # pyright: ignore[reportUnusedFunction]
             request: Request,
@@ -697,6 +768,15 @@ class PipecatHost:
                     "to_number": pending.call.to_number or "",
                 },
             )
+            if self.agent.phone is not None and self.agent.phone.record:
+                try:
+                    await asyncio.to_thread(
+                        adapter.start_recording,
+                        event.provider_call_id,
+                    )
+                except Exception:
+                    await self._fail_pending_setup(pending)
+                    raise
             return Response(
                 content=adapter.answer_response(target),
                 media_type="application/xml",
@@ -721,6 +801,16 @@ class PipecatHost:
             if not adapter.verify_request(telephony):
                 return _error_response("VK-RUN-007", 403)
             event = adapter.parse_event(telephony)
+            if event.type in {"recording_ready", "recording_failed"}:
+                if self.recording_handler is None:
+                    return _error_response("VK-TEL-009", 503)
+                try:
+                    await self.recording_handler.handle_telnyx(event)
+                except VoicekitError as exc:
+                    if exc.code == "VK-RES-010":
+                        return _error_response(exc.code, 503)
+                    raise
+                return Response(status_code=204)
             if event.type == "initiated":
                 try:
                     pending = await self.reserve_call(
@@ -754,6 +844,15 @@ class PipecatHost:
                         ws_path=(f"{self.telnyx_target.ws_path}/{pending.admission.token}"),
                     )
                     try:
+                        if (
+                            pending.call.direction == "inbound"
+                            and self.agent.phone is not None
+                            and self.agent.phone.record
+                        ):
+                            await asyncio.to_thread(
+                                adapter.start_recording,
+                                event.provider_call_id,
+                            )
                         await asyncio.to_thread(
                             adapter.start_media,
                             event.provider_call_id,

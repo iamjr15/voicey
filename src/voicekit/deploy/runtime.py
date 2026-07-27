@@ -38,7 +38,12 @@ from voicekit.playground import (
     embedded_frontend,
 )
 from voicekit.results import DeliveryWorker
-from voicekit.runtimes.pipecat import PipecatHost, PipecatHostSettings
+from voicekit.runtimes.pipecat import (
+    PipecatHost,
+    PipecatHostSettings,
+    PipecatRecordingHandler,
+)
+from voicekit.storage.artifacts import LocalArtifactStore
 from voicekit.storage.sqlite import SQLiteRepository
 
 if TYPE_CHECKING:
@@ -251,6 +256,19 @@ async def _serve(
                 ),
             )
 
+        recording_handler = (
+            PipecatRecordingHandler(
+                repository=repository,
+                artifact_store=LocalArtifactStore(settings.data_dir / "artifacts"),
+                access_base=settings.public_base,
+                current_secret=secret,
+                previous_secret=previous_secret,
+                twilio=twilio,
+                telnyx=telnyx,
+            )
+            if agent.phone is not None and agent.phone.record
+            else None
+        )
         host = PipecatHost(
             agent=agent,
             repository=repository,
@@ -264,6 +282,7 @@ async def _serve(
             twilio=twilio,
             telnyx=telnyx,
             web_sessions=web_security,
+            recording_handler=recording_handler,
         )
         delivery = DeliveryWorker(
             repository,

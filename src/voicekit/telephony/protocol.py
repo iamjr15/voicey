@@ -44,6 +44,12 @@ class TelephonyAdapter(Protocol):
         from_no: str,
         to_no: str,
         target: RuntimeTarget,
+        *,
+        intent_id: str | None = None,
+        amd: bool = False,
+        send_digits: str | None = None,
+        record: bool = False,
+        timeout_s: int = 30,
     ) -> str: ...
 
     def verify_request(self, request: TelephonyRequest) -> bool: ...

@@ -120,12 +120,19 @@ Warm transfer needs the P3 conference bridge and is intentionally absent from
 the Pipecat path until P3. It is already native on the LiveKit path.
 
 Recording callbacks are signature-verified like every carrier callback.
+For inbound Pipecat calls, voicekit first reserves the engine call and then
+uses Twilio's live-call Recordings resource to start one dual-channel
+recording with `completed` and `absent` callbacks. A read-before-write check
+reuses one existing recording and fails closed if the carrier reports more
+than one.
 Voicekit ignores callback media URLs for ingestion and constructs the recording
 resource URL from the validated account and recording SIDs. It downloads with
 HTTP Basic authentication, accepts only known audio content types, enforces a
 100 MiB default limit, and writes through the protected `ArtifactStore`. The
 terminal event remains immutable with a pending engine recording reference;
 successful ingestion creates the separate `call.recording.ready` event.
+The engine URL is fetched with the current or previous result webhook secret
+as a bearer; it never contains the carrier URL or a credential.
 
 ## LiveKit Elastic SIP provisioning
 

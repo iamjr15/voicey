@@ -4,10 +4,10 @@ Last updated: 2026-07-27
 
 ## Current checkpoint
 
-- **Phase:** P2 — LiveKit parity, unified testing, Telnyx
-- **Current unit:** P2.6 runtime parity and complete config-mapping matrices
-- **Next task:** build the runtime-parameterized behavioral suite and checked-in feature/config matrices, enforce every declared parity row in CI, then run the P2 exit aggregator without promoting pending live gates
-- **Completed:** all P0 and P1 units plus P2.1–P2.5. Telnyx now has certified local implementations on both required paths: signed Call Control/TeXML + native Pipecat media and ledgered Telnyx FQDN/credential SIP + LiveKit inbound/outbound wiring. Number orders, native-command intents, route/provision rollback, recording ingestion, CLI/doctor/scaffold/Docker integration, and six guarded live tests are complete. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact commands in `docs/GAPS.md`
+- **Phase:** P3 — recipes, additional carriers, live tier, cloud deploys, relay, warm transfer
+- **Current unit:** P3.1 recipes 2–4 on both native runtimes
+- **Next task:** implement restaurant-reservations, front-desk, and lead-intake with native Pipecat Flows and native LiveKit Agent workflows, shared typed integrations, full scenario suites, registry/wheel/docs wiring, and both-runtime verification
+- **Completed:** all P0, P1, and P2 numbered units. P2's checked-in feature/config matrices and 36-test parity suite are CI-enforced; the release-shaped aggregate reran the complete P1 gate plus LiveKit crash, unified testing, Twilio–LiveKit, and both Telnyx paths with all six local groups green. The full suite is 628 passed, 14 honest live skips, 90.08% branch coverage. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -50,6 +50,9 @@ Last updated: 2026-07-27
 | P2.4 reference-provider text/audio suites | pending-live | Exact both-runtime disposable-project commands in `docs/GAPS.md`; current environment lacks Deepgram/Anthropic/Cartesia variables and Ollama |
 | P2.5 Telnyx dual-path local certification | green | Signed Call Control/TeXML, native one-use PCMU/8 kHz Pipecat media, DTMF/AMD/hangup/transfer/recording, async number ownership, durable callback-only intent reconciliation, CAS route restore, current Telnyx FQDN + LiveKit trunks/dispatch, idempotent reuse/reverse rollback/ambiguity fencing, and CLI/doctor/scaffold/Docker selection green; full suite 581 passed, 14 honest live skips, 90.06% branch coverage; ruff/format/strict pyright, wheel and dependency audits green |
 | P2.5 Telnyx account/PSTN certification | pending-live | Six guarded commands plus the both-path physical checklist are exact in `docs/GAPS.md`; permitted local credential inventory contains no Telnyx or LiveKit variables |
+| P2.6 runtime parity + config matrices | green | 36 runtime-parameterized tests enforce identical greeting, tool order, webhook shape, all 14 shared config fields, pinned versions, evidence-backed feature cells, and the sole declared Pipecat warm-transfer P3 exclusion; signed recording callbacks now ingest into engine storage before emitting `call.recording.ready`, and engine artifact reads require the current/previous result secret |
+| P2 local phase aggregate | green | Release-shaped P2 runner: complete P1 regression 38.415s, parity, LiveKit runtime/SIGKILL, unified testing, Twilio–LiveKit, and Telnyx both paths all green; report `.voicekit/verification/p2-gate-report.json` |
+| P2 phase overall | pending-live | All local automation is green; reference-provider conversations, LiveKit microphone/workflow, funded Twilio/Telnyx PSTN, and physical handset gates remain unpromoted; see `docs/verification/p2-gates.md` |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

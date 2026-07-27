@@ -84,72 +84,72 @@ LIVEKIT_CONFIG_MAPPINGS: tuple[ConfigMapping, ...] = (
     ConfigMapping(
         "models.fallbacks.stt",
         "livekit.agents.stt.FallbackAdapter([primary, fallback])",
-        "test_livekit_provider_fallbacks_use_native_adapters",
+        "test_config_field_mapping[livekit-models.fallbacks.stt]",
     ),
     ConfigMapping(
         "models.fallbacks.llm",
         "livekit.agents.llm.FallbackAdapter([primary, fallback])",
-        "test_livekit_provider_fallbacks_use_native_adapters",
+        "test_config_field_mapping[livekit-models.fallbacks.llm]",
     ),
     ConfigMapping(
         "models.fallbacks.tts",
         "livekit.agents.tts.FallbackAdapter([primary, fallback])",
-        "test_livekit_provider_fallbacks_use_native_adapters",
+        "test_config_field_mapping[livekit-models.fallbacks.tts]",
     ),
     ConfigMapping(
         "limits.max_duration_s",
         "call-local duration task invokes AgentSession.aclose()",
-        "test_livekit_duration_limit_closes_session",
+        "test_config_field_mapping[livekit-limits.max_duration_s]",
     ),
     ConfigMapping(
         "limits.max_concurrent",
         "AdmissionController reservation before dispatch token or SIP job session",
-        "test_livekit_token_reserves_before_dispatch",
+        "test_config_field_mapping[livekit-limits.max_concurrent]",
     ),
     ConfigMapping(
         "limits.silence_hangup_s",
         "AgentSession.user_away_timeout and native user_state_changed=away",
-        "test_livekit_policy_reaches_native_session",
+        "test_config_field_mapping[livekit-limits.silence_hangup_s]",
     ),
     ConfigMapping(
         "limits.daily_spend_alert_usd",
         "LiveKitPolicy threshold plus native session usage events",
-        "test_livekit_policy_reaches_native_session",
+        "test_config_field_mapping[livekit-limits.daily_spend_alert_usd]",
     ),
     ConfigMapping(
         "behavior.allow_interruptions",
         "TurnHandlingOptions.interruption.enabled plus mutating-tool interruption boundary",
-        "test_livekit_policy_reaches_native_session",
+        "test_config_field_mapping[livekit-behavior.allow_interruptions]",
     ),
     ConfigMapping(
         "behavior.voicemail",
         "SIP participant disposition maps to configured hangup or message workflow",
-        "test_livekit_sip_voicemail_disposition",
+        "test_config_field_mapping[livekit-behavior.voicemail]",
     ),
     ConfigMapping(
         "behavior.dtmf",
         "room sip_dtmf_received listener and beta send_dtmf_events tool are capability-gated",
-        "test_livekit_dtmf_policy_gates_native_events",
+        "test_config_field_mapping[livekit-behavior.dtmf]",
     ),
     ConfigMapping(
         "behavior.transfer_number",
         "native cold transfer tool plus WarmTransferTask workflow",
-        "test_livekit_transfer_tools_are_native",
+        "test_config_field_mapping[livekit-behavior.transfer_number]",
     ),
     ConfigMapping(
         "behavior.end_call_phrases",
         "conversation_item_added assistant message invokes AgentSession.aclose()",
-        "test_livekit_observations_flush_incrementally_with_native_metrics",
+        "test_config_field_mapping[livekit-behavior.end_call_phrases]",
     ),
     ConfigMapping(
         "voice.fallback_language",
         "native provider update_options(language=...) on every compatible STT/TTS member",
-        "test_livekit_language_fallback_updates_all_compatible_members",
+        "test_config_field_mapping[livekit-voice.fallback_language]",
     ),
     ConfigMapping(
         "phone.record",
-        "AgentSession.start(record=...) plus CA-SID-keyed Twilio trunk recording reconciliation",
-        "test_livekit_policy_reaches_native_session",
+        "AgentSession.start(record=...) plus provider recording reconciliation",
+        "test_config_field_mapping[livekit-phone.record]",
     ),
 )
 

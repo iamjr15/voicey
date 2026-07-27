@@ -160,6 +160,32 @@ class FakeCallContext:
         self.owner.updates.append((self.sid, dict(arguments)))
         return SimpleNamespace(sid=self.sid, status=arguments.get("status", "in-progress"))
 
+    @property
+    def recordings(self) -> FakeRecordings:
+        return self.owner.recordings
+
+
+class FakeRecordings:
+    def __init__(self) -> None:
+        self.values: list[SimpleNamespace] = []
+        self.creates: list[dict[str, object]] = []
+        self.list_error: Exception | None = None
+        self.create_error: Exception | None = None
+
+    def list(self, *, limit: int) -> list[SimpleNamespace]:
+        assert limit == 2
+        if self.list_error is not None:
+            raise self.list_error
+        return self.values[:limit]
+
+    def create(self, **arguments: object) -> SimpleNamespace:
+        self.creates.append(dict(arguments))
+        if self.create_error is not None:
+            raise self.create_error
+        value = SimpleNamespace(sid=RECORDING_SID, status="in-progress")
+        self.values.append(value)
+        return value
+
 
 class FakeCalls:
     def __init__(self) -> None:
@@ -170,6 +196,7 @@ class FakeCalls:
         self.list_error: Exception | None = None
         self.created_sid = CALL_SID
         self.listed: list[SimpleNamespace] = []
+        self.recordings = FakeRecordings()
 
     def __call__(self, sid: str) -> FakeCallContext:
         return FakeCallContext(self, sid)
@@ -295,6 +322,46 @@ def test_answer_twiml_is_under_limit_uses_nested_parameters_and_no_query(
     assert parameter is not None
     assert parameter.attrib == {"name": "agent", "value": "clinic"}
     assert len(xml.encode()) <= 4096
+
+
+def test_live_call_recording_is_dual_channel_callback_bound_and_idempotent(
+    adapter_bundle: tuple[TwilioAdapter, FakeClient, TelephonyLedger],
+) -> None:
+    adapter, client, _ = adapter_bundle
+
+    first = adapter.start_recording(CALL_SID, TARGET)
+    second = adapter.start_recording(CALL_SID, TARGET)
+
+    assert first == RECORDING_SID
+    assert second == RECORDING_SID
+    assert client.calls.recordings.creates == [
+        {
+            "recording_channels": "dual",
+            "recording_status_callback": TARGET.recording_url,
+            "recording_status_callback_method": "POST",
+            "recording_status_callback_event": ["completed", "absent"],
+            "trim": "do-not-trim",
+        }
+    ]
+
+
+def test_live_call_recording_fails_closed_on_ambiguity_and_provider_error(
+    adapter_bundle: tuple[TwilioAdapter, FakeClient, TelephonyLedger],
+) -> None:
+    adapter, client, _ = adapter_bundle
+    client.calls.recordings.values = [
+        SimpleNamespace(sid=RECORDING_SID),
+        SimpleNamespace(sid="RE" + "5" * 32),
+    ]
+    with pytest.raises(VoicekitError) as ambiguous:
+        adapter.start_recording(CALL_SID, TARGET)
+    assert ambiguous.value.code == "VK-TEL-009"
+
+    client.calls.recordings.values = []
+    client.calls.recordings.list_error = ConnectionError("private")
+    with pytest.raises(VoicekitError) as unavailable:
+        adapter.start_recording(CALL_SID, TARGET)
+    assert unavailable.value.code == "VK-TEL-011"
 
 
 def test_point_and_restore_snapshot_all_precedence_fields_before_mutation(

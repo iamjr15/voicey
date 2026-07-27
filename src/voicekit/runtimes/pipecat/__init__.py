@@ -3,6 +3,7 @@
 from voicekit.runtimes.pipecat.admission import AdmissionController, AdmissionLease
 from voicekit.runtimes.pipecat.evals import run_eval_agent
 from voicekit.runtimes.pipecat.host import DrainReport, PipecatHost, PipecatHostSettings
+from voicekit.runtimes.pipecat.recording import PipecatRecordingHandler
 from voicekit.runtimes.pipecat.session import (
     PipecatCall,
     PipecatSession,
@@ -16,6 +17,7 @@ __all__ = [
     "PipecatCall",
     "PipecatHost",
     "PipecatHostSettings",
+    "PipecatRecordingHandler",
     "PipecatSession",
     "PipecatSessionBuilder",
     "run_eval_agent",

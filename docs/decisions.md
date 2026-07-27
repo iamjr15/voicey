@@ -201,3 +201,27 @@ These choices apply the documented proposals authorized in the build mandate and
   `call.recording.saved` event. Do not attach the Telnyx API key to that
   potentially provider-hosted presigned URL; disallow redirects, bound size
   and type, then copy into the configured artifact store.
+
+## 2026-07-27 — Runtime parity evidence boundary
+
+- Treat parity as equality of voicekit's externally observable contract, not
+  identical framework internals. Conversation logic remains native
+  `pipecat.flows` or native LiveKit `Agent` workflows; no translation layer or
+  custom flow DSL is introduced.
+- Require every supported feature-matrix cell to cite checked-in executable
+  evidence. A real divergence must be an explicit `declared_exclusion` with a
+  reason and target phase. Pipecat warm transfer is the sole P2 exclusion and
+  remains assigned to the P3 Twilio conference bridge.
+- Keep a separate field-level config matrix because behavioral parity alone
+  cannot prove that a canonical value reaches a native runtime mechanism.
+  Both matrices pin the installed Pipecat 1.6.0 and LiveKit 1.6.7 versions and
+  CI rejects drift.
+- Use the current carrier-native recording commands for `phone.record`:
+  Twilio live-call recording is dual-channel with signed completed/absent
+  callbacks; Telnyx uses idempotent dual-channel MP3 `record_start`. Outbound
+  CLI placement reads the actual project `Agent` so AMD and recording policy
+  are not guessed from the manifest.
+- Keep engine recording URLs credential-free. `GET` authorizes the current or
+  previous Results webhook secret as a bearer credential during rotation and
+  returns `Cache-Control: private, no-store`; carrier URLs never leave the
+  authenticated ingestion boundary.

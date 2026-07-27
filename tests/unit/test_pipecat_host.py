@@ -18,6 +18,7 @@ from voicekit.runtimes.pipecat.host import (
     LongLivedRunner,
     PipecatHost,
     PipecatHostSettings,
+    RecordingHandler,
     TelnyxRuntimeAdapter,
     TwilioRuntimeAdapter,
     WebSessionAuthorizer,
@@ -49,6 +50,7 @@ def _agent(
     max_concurrent: int = 2,
     voicemail: str = "hangup",
     provider: str = "twilio",
+    record: bool = False,
 ) -> Agent:
     return Agent(
         name="host-test",
@@ -61,7 +63,11 @@ def _agent(
         persona="Helpful.",
         flow=f"{__name__}:entry",
         tools=[identify],
-        phone=Phone(provider=cast("Any", provider), number="+14155550123"),
+        phone=Phone(
+            provider=cast("Any", provider),
+            number="+14155550123",
+            record=record,
+        ),
         web=Web(enabled=True, allowed_origins=["https://app.example"]),
         results=Results(
             webhook="https://receiver.example/results",
@@ -85,6 +91,7 @@ class _Twilio:
         self.amd_connect_machine: list[bool] = []
         self.amd_disposition = "hung_up"
         self.transfers: list[tuple[str, str]] = []
+        self.recordings: list[tuple[str, PipecatTarget]] = []
 
     def verify_request(self, _request: TelephonyRequest) -> bool:
         return self.verified
@@ -98,6 +105,16 @@ class _Twilio:
         form = cast("Any", request.form)
         call_id = str(form.get("CallSid", "call_missing"))
         answered_by = form.get("AnsweredBy")
+        recording_status = form.get("RecordingStatus")
+        if recording_status:
+            return CallEvent(
+                type=("recording_ready" if recording_status == "completed" else "recording_failed"),
+                provider_call_id=call_id,
+                provider_status=str(recording_status),
+                recording_sid=(
+                    str(form.get("RecordingSid")) if recording_status == "completed" else None
+                ),
+            )
         if answered_by:
             return CallEvent(
                 type="amd",
@@ -110,6 +127,10 @@ class _Twilio:
             provider_call_id=call_id,
             provider_status=str(form.get("CallStatus", "ringing")),
         )
+
+    def start_recording(self, call_sid: str, target: object) -> str:
+        self.recordings.append((call_sid, cast("PipecatTarget", target)))
+        return "RE" + ("2" * 32)
 
     def resume_after_amd(
         self,
@@ -135,6 +156,7 @@ class _Telnyx:
         self.transfers: list[tuple[str, str]] = []
         self.hangups: list[str] = []
         self.texml_targets: list[PipecatTarget] = []
+        self.recordings: list[str] = []
 
     def verify_request(self, _request: TelephonyRequest) -> bool:
         return self.verified
@@ -162,6 +184,8 @@ class _Telnyx:
             "call.initiated": "initiated",
             "call.answered": "answered",
             "call.hangup": "completed",
+            "call.recording.saved": "recording_ready",
+            "call.recording.failed": "recording_failed",
         }[event_type]
         return CallEvent(
             type=cast("Any", mapped),
@@ -171,6 +195,14 @@ class _Telnyx:
             direction="inbound" if payload.get("direction") == "incoming" else "outbound",
             from_number=str(payload.get("from", "")) or None,
             to_number=str(payload.get("to", "")) or None,
+            recording_sid=(
+                str(payload.get("recording_id")) if mapped == "recording_ready" else None
+            ),
+            recording_url=(
+                str(cast("dict[str, object]", payload.get("recording_urls"))["mp3"])
+                if mapped == "recording_ready"
+                else None
+            ),
         )
 
     def answer_call(self, call_control_id: str) -> None:
@@ -178,6 +210,9 @@ class _Telnyx:
 
     def start_media(self, call_control_id: str, target: object) -> None:
         self.media.append((call_control_id, cast("PipecatTarget", target)))
+
+    def start_recording(self, call_control_id: str) -> None:
+        self.recordings.append(call_control_id)
 
     def cold_transfer(self, call_control_id: str, to_number: str) -> None:
         self.transfers.append((call_control_id, to_number))
@@ -198,6 +233,23 @@ class _RunnerSpy:
     async def end(self, reason: str | None = None) -> None:
         del reason
         self.ended.set()
+
+
+class _RecordingHandler:
+    def __init__(self) -> None:
+        self.twilio: list[CallEvent] = []
+        self.telnyx: list[CallEvent] = []
+
+    async def handle_twilio(self, event: CallEvent) -> None:
+        self.twilio.append(event)
+
+    async def handle_telnyx(self, event: CallEvent) -> None:
+        self.telnyx.append(event)
+
+    async def read(self, recording_id: str, authorization: str | None) -> bytes:
+        if authorization != "Bearer whsec-test":
+            raise VoicekitError("VK-WEB-004", detail="denied")
+        return f"audio:{recording_id}".encode()
 
 
 class _Connection:
@@ -298,6 +350,7 @@ async def _host(
     request_handler: _RequestHandler | None = None,
     session_builder: _SessionBuilder | None = None,
     web_sessions: WebSessionAuthorizer | None = None,
+    recording_handler: RecordingHandler | None = None,
 ) -> tuple[PipecatHost, SQLiteRepository, _Twilio]:
     repository = SQLiteRepository(tmp_path / "host.sqlite3")
     await repository.open()
@@ -318,6 +371,7 @@ async def _host(
             cast(PipecatSessionBuilder, session_builder) if session_builder is not None else None
         ),
         web_sessions=web_sessions,
+        recording_handler=recording_handler,
     )
     return host, repository, adapter
 
@@ -328,12 +382,18 @@ async def _telnyx_host(
     telnyx: _Telnyx | None = None,
     session_builder: _SessionBuilder | None = None,
     max_concurrent: int = 2,
+    record: bool = False,
+    recording_handler: RecordingHandler | None = None,
 ) -> tuple[PipecatHost, SQLiteRepository, _Telnyx]:
     repository = SQLiteRepository(tmp_path / "telnyx-host.sqlite3")
     await repository.open()
     adapter = telnyx or _Telnyx()
     host = PipecatHost(
-        agent=_agent(provider="telnyx", max_concurrent=max_concurrent),
+        agent=_agent(
+            provider="telnyx",
+            max_concurrent=max_concurrent,
+            record=record,
+        ),
         repository=repository,
         settings=PipecatHostSettings(
             public_base="https://voice.example",
@@ -347,6 +407,7 @@ async def _telnyx_host(
         session_builder=(
             cast("PipecatSessionBuilder", session_builder) if session_builder is not None else None
         ),
+        recording_handler=recording_handler,
     )
     return host, repository, adapter
 
@@ -525,6 +586,183 @@ async def test_twilio_answer_reserves_before_returning_stream(tmp_path: Path) ->
         "provider_hangup",
     )
     await repository.close()
+
+
+async def test_pipecat_inbound_recording_starts_before_media_answer(
+    tmp_path: Path,
+) -> None:
+    host, repository, adapter = await _host(
+        tmp_path,
+        agent=_agent(record=True),
+    )
+    transport = httpx.ASGITransport(app=host.app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="https://voice.example",
+    ) as client:
+        response = await client.post(
+            "/twilio/answer",
+            data={"CallSid": "CA-record", "CallStatus": "ringing"},
+        )
+
+    assert response.status_code == 200
+    assert adapter.recordings[0][0] == "CA-record"
+    assert adapter.recordings[0][1].recording_url == ("https://voice.example/twilio/recordings")
+    recording = await repository.get_recording_for_call("CA-record")
+    assert recording is not None
+    assert recording.status == "pending"
+    await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
+        "CA-record",
+        "provider_hangup",
+    )
+    await repository.close()
+
+
+async def test_twilio_recording_callback_and_artifact_route_are_runtime_wired(
+    tmp_path: Path,
+) -> None:
+    recording_handler = _RecordingHandler()
+    host, repository, _adapter = await _host(
+        tmp_path,
+        recording_handler=recording_handler,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=host.app),
+        base_url="https://voice.example",
+    ) as client:
+        callback = await client.post(
+            "/twilio/recordings",
+            data={
+                "CallSid": "CA-recording-callback",
+                "RecordingStatus": "completed",
+                "RecordingSid": "RE-recording-callback",
+            },
+        )
+        denied = await client.get("/recordings/rec_engine")
+        artifact = await client.get(
+            "/recordings/rec_engine",
+            headers={"authorization": "Bearer whsec-test"},
+        )
+
+    assert callback.status_code == 204
+    assert len(recording_handler.twilio) == 1
+    assert recording_handler.twilio[0].recording_sid == "RE-recording-callback"
+    assert denied.status_code == 403
+    assert artifact.status_code == 200
+    assert artifact.content == b"audio:rec_engine"
+    assert artifact.headers["cache-control"] == "private, no-store"
+    await repository.close()
+
+
+async def test_recording_routes_fail_closed_and_telnyx_dispatches(
+    tmp_path: Path,
+) -> None:
+    no_handler, repository, _adapter = await _host(tmp_path / "missing")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=no_handler.app),
+        base_url="https://voice.example",
+    ) as client:
+        missing_artifact = await client.get("/recordings/rec_missing")
+        missing_ingestor = await client.post(
+            "/twilio/recordings",
+            data={
+                "CallSid": "CA-missing",
+                "RecordingStatus": "completed",
+                "RecordingSid": "RE-missing",
+            },
+        )
+        wrong_event = await client.post(
+            "/twilio/recordings",
+            data={"CallSid": "CA-wrong", "CallStatus": "ringing"},
+        )
+    assert missing_artifact.status_code == 404
+    assert missing_ingestor.status_code == 503
+    assert wrong_event.status_code == 400
+    await repository.close()
+
+    recording_handler = _RecordingHandler()
+    telnyx_host, telnyx_repository, _telnyx = await _telnyx_host(
+        tmp_path / "telnyx",
+        recording_handler=recording_handler,
+    )
+    callback_body = {
+        "data": {
+            "event_type": "call.recording.saved",
+            "payload": {
+                "call_control_id": "v3:recording-callback",
+                "recording_id": "recording-1",
+                "recording_urls": {
+                    "mp3": "https://storage.example.test/signed.mp3",
+                },
+            },
+        }
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=telnyx_host.app),
+        base_url="https://voice.example",
+    ) as client:
+        telnyx_callback = await client.post(
+            "/telnyx/recordings",
+            content=json.dumps(callback_body),
+            headers={"content-type": "application/json"},
+        )
+
+    assert telnyx_callback.status_code == 204
+    assert len(recording_handler.telnyx) == 1
+    assert recording_handler.telnyx[0].recording_sid == "recording-1"
+    await telnyx_repository.close()
+
+
+async def test_recording_callback_retry_and_signature_failures_are_visible(
+    tmp_path: Path,
+) -> None:
+    class RetryHandler(_RecordingHandler):
+        async def handle_twilio(self, event: CallEvent) -> None:
+            del event
+            raise VoicekitError("VK-RES-010", detail="terminal pending")
+
+        async def handle_telnyx(self, event: CallEvent) -> None:
+            del event
+            raise VoicekitError("VK-RES-010", detail="terminal pending")
+
+    retry, repository, _adapter = await _host(
+        tmp_path / "retry",
+        recording_handler=RetryHandler(),
+    )
+    denied, denied_repository, _ = await _host(
+        tmp_path / "denied",
+        twilio=_Twilio(verified=False),
+        recording_handler=_RecordingHandler(),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=retry.app),
+        base_url="https://voice.example",
+    ) as client:
+        retry_response = await client.post(
+            "/twilio/recordings",
+            data={
+                "CallSid": "CA-retry",
+                "RecordingStatus": "completed",
+                "RecordingSid": "RE-retry",
+            },
+        )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=denied.app),
+        base_url="https://voice.example",
+    ) as client:
+        denied_response = await client.post(
+            "/twilio/recordings",
+            data={
+                "CallSid": "CA-denied",
+                "RecordingStatus": "completed",
+                "RecordingSid": "RE-denied",
+            },
+        )
+
+    assert retry_response.status_code == 503
+    assert denied_response.status_code == 403
+    await repository.close()
+    await denied_repository.close()
 
 
 async def test_twilio_answer_is_idempotent_for_retries(tmp_path: Path) -> None:
@@ -711,7 +949,7 @@ async def test_twilio_media_rejects_wrong_transport(
 async def test_telnyx_json_events_reserve_answer_and_start_capability_media(
     tmp_path: Path,
 ) -> None:
-    host, repository, adapter = await _telnyx_host(tmp_path)
+    host, repository, adapter = await _telnyx_host(tmp_path, record=True)
     transport = httpx.ASGITransport(app=host.app)
     initiated = {
         "data": {
@@ -745,6 +983,7 @@ async def test_telnyx_json_events_reserve_answer_and_start_capability_media(
     assert first.status_code == 204
     assert second.status_code == 204
     assert adapter.answers == ["v3:telnyx-route"]
+    assert adapter.recordings == ["v3:telnyx-route"]
     assert len(adapter.media) == 1
     call_id, target = adapter.media[0]
     assert call_id == "v3:telnyx-route"

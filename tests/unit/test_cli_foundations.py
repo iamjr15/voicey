@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
+import voicekit.cli.context as cli_context
 from voicekit.capabilities import (
     DEFAULT_CAPABILITIES,
     Capability,
@@ -17,6 +20,7 @@ from voicekit.cli.checkpoint import InitCheckpoint, InitCheckpointStore
 from voicekit.cli.context import (
     ProjectContext,
     discover_project,
+    load_project_agent,
     next_step,
     require_manifest,
 )
@@ -35,7 +39,7 @@ from voicekit.config.manifest import (
     ProjectManifest,
     RecipeSelection,
 )
-from voicekit.config.models import ModelAxis
+from voicekit.config.models import Agent, ModelAxis, Models, Results, Web
 from voicekit.errors import VoicekitError
 from voicekit.recipes.registry import (
     DEFAULT_RECIPE_REGISTRY,
@@ -73,6 +77,76 @@ class RaisingHttpClient:
     ) -> httpx.Response:
         del url, headers, timeout_s
         raise httpx.ConnectError("offline")
+
+
+def test_project_agent_loader_catalogs_import_shape_and_runtime_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = ProjectManifest(
+        project_name="loader-test",
+        runtime="pipecat",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"web"}),
+        models={
+            "stt": "deepgram/nova-3",
+            "llm": "anthropic/claude-sonnet-5",
+            "tts": "cartesia/sonic-3.5",
+        },
+    )
+    context = ProjectContext(
+        root=tmp_path,
+        manifest=manifest,
+        checkpoint=False,
+        environment={},
+    )
+    sys.modules.pop(manifest.agent_module, None)
+
+    def missing(_name: str) -> object:
+        raise ImportError("missing")
+
+    monkeypatch.setattr(cli_context.importlib, "import_module", missing)
+    with pytest.raises(VoicekitError, match="must export an Agent"):
+        load_project_agent(context)
+
+    def broken(_name: str) -> object:
+        raise RuntimeError("private detail")
+
+    monkeypatch.setattr(cli_context.importlib, "import_module", broken)
+    with pytest.raises(VoicekitError, match="failed to load \\(RuntimeError\\)"):
+        load_project_agent(context)
+
+    def wrong_type(_name: str) -> object:
+        return SimpleNamespace(agent=object())
+
+    monkeypatch.setattr(cli_context.importlib, "import_module", wrong_type)
+    with pytest.raises(VoicekitError, match="is not a voicekit Agent"):
+        load_project_agent(context)
+
+    livekit_agent = Agent(
+        name="loader-test",
+        runtime="livekit",
+        models=Models(
+            stt="deepgram/nova-3",
+            llm="anthropic/claude-sonnet-5",
+            tts="cartesia/sonic-3.5",
+        ),
+        persona="Test the project loader.",
+        flow="flow:entry",
+        tools="tools",
+        web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
+        results=Results(
+            webhook="https://receiver.example.test/results",
+            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+        ),
+    )
+
+    def wrong_runtime(_name: str) -> object:
+        return SimpleNamespace(agent=livekit_agent)
+
+    monkeypatch.setattr(cli_context.importlib, "import_module", wrong_runtime)
+    with pytest.raises(VoicekitError, match="different runtimes"):
+        load_project_agent(context)
 
 
 def test_capabilities_and_recipes_report_runtime_and_recipe_availability() -> None:

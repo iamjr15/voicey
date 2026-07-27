@@ -29,6 +29,7 @@ from voicekit.errors import VoicekitError
 from voicekit.obs.latency import LatencySample
 from voicekit.obs.records import TimelineEvent, ToolCallObservation, TranscriptTurn
 from voicekit.results import CallResultBuffer
+from voicekit.runtimes.livekit.mapping import LIVEKIT_CONFIG_MAPPINGS
 from voicekit.runtimes.pipecat import session as session_module
 from voicekit.runtimes.pipecat.admission import AdmissionController
 from voicekit.runtimes.pipecat.host import LongLivedRunner
@@ -230,7 +231,12 @@ def test_config_mapping_file_matches_runtime_contract() -> None:
     assert [row["pipecat_test"] for row in rows] == [
         mapping.test for mapping in PIPECAT_CONFIG_MAPPINGS
     ]
-    assert all(row["livekit"] == "P2 pending" for row in rows)
+    assert [row["livekit"] for row in rows] == [
+        mapping.mechanism for mapping in LIVEKIT_CONFIG_MAPPINGS
+    ]
+    assert [row["livekit_test"] for row in rows] == [
+        mapping.test for mapping in LIVEKIT_CONFIG_MAPPINGS
+    ]
 
 
 @pytest.mark.parametrize(

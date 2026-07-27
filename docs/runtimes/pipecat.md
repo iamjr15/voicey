@@ -81,7 +81,10 @@ The FastAPI application exposes:
 | `POST /twilio/answer` | reserve storage/capacity and return TwiML | Twilio signature required |
 | `WS /twilio/media` | bidirectional phone audio | Twilio signature plus opaque reservation token |
 | `POST /twilio/events[/{intent_id}]` | provider lifecycle events | Twilio signature required |
+| `POST /twilio/recordings` | completion/failure ingestion | Twilio signature required |
 | `POST /twilio/amd` | async answering-machine disposition | Twilio signature required |
+| `POST /telnyx/events` / `POST /telnyx/recordings` | Call Control lifecycle and recording ingestion | Telnyx signature required |
+| `GET /recordings/{recording_id}` | engine-owned MP3 artifact | current/previous result-secret bearer |
 | `POST /api/offer` | SmallWebRTC offer/renegotiation | public web signaling |
 | `PATCH /api/offer` | SmallWebRTC ICE candidates | public web signaling |
 
@@ -132,6 +135,14 @@ Setup, provider, worker, carrier, duration, silence, transfer, voicemail, and
 caller/agent termination paths all produce cataloged terminal reasons.
 Persistence failure is fail-closed and does not silently free the slot or
 discard the fence.
+
+When `phone.record` is true, inbound carrier recording starts only after step
+1 has durably succeeded; outbound placement passes the same policy from the
+loaded project `Agent`. Verified completion callbacks copy media into the
+configured `ArtifactStore`, emit `call.recording.ready` after terminal
+persistence, and expose only the authenticated engine URL. A callback racing
+terminal persistence receives 503 so the carrier can retry; it is not
+acknowledged and dropped.
 
 ## Verification
 

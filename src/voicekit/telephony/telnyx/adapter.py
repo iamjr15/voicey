@@ -512,6 +512,19 @@ class TelnyxAdapter:
             },
         )
 
+    def start_recording(self, call_control_id: str) -> None:
+        """Start one native-idempotent dual-channel MP3 recording."""
+        call_id = _validate_provider_id(call_control_id, field_name="call control id")
+        self._call_action(
+            call_id,
+            "record_start",
+            {
+                "format": "mp3",
+                "channels": "dual",
+                "command_id": _command_id("record", call_id),
+            },
+        )
+
     def send_dtmf(self, call_control_id: str, digits: str) -> None:
         self._call_action(
             _validate_provider_id(call_control_id, field_name="call control id"),

@@ -106,6 +106,7 @@ class FakeLedger:
 class FakeTwilio:
     ledger = FakeLedger()
     events: ClassVar[list[str]] = []
+    call_options: ClassVar[list[dict[str, object]]] = []
 
     def list_numbers(self) -> list[NumberInfo]:
         return [
@@ -136,7 +137,9 @@ class FakeTwilio:
         from_number: str,
         to_number: str,
         target: PipecatTarget,
+        **options: object,
     ) -> str:
+        self.call_options.append(options)
         self.events.append(f"call:{from_number}:{to_number}:{target.https_base}")
         return "CA" + "1" * 32
 
@@ -153,9 +156,11 @@ class FakeTelnyx(FakeTwilio):
         from_number: str,
         to_number: str,
         target: PipecatTarget,
+        **options: object,
     ) -> str:
         assert target.ws_path == "/telnyx/media"
         assert target.event_path == "/telnyx/events"
+        self.call_options.append(options)
         self.events.append(f"call:{from_number}:{to_number}:{target.stream_url}")
         return "v3:telnyx-call-id"
 
@@ -191,6 +196,7 @@ def _phone_project(
     path: Path,
     *,
     carrier: Literal["twilio", "telnyx"] = "twilio",
+    record: bool = False,
 ) -> ProjectManifest:
     models: dict[ModelAxis, str] = {
         "stt": "deepgram/nova-3",
@@ -207,6 +213,37 @@ def _phone_project(
         phone_number="+14155550123",
     )
     ManifestStore(path / "voicekit.jsonc").save(manifest)
+    (path / "agent.py").write_text(
+        "\n".join(
+            [
+                "from voicekit import Agent, Models, Phone, Results, Web",
+                "",
+                "agent = Agent(",
+                "    name='phone-agent',",
+                "    runtime='pipecat',",
+                "    models=Models(",
+                "        stt='deepgram/nova-3',",
+                "        llm='anthropic/claude-sonnet-5',",
+                "        tts='cartesia/sonic-3.5',",
+                "    ),",
+                "    persona='Test phone calls.',",
+                "    flow='flow:entry',",
+                "    tools='tools',",
+                (
+                    "    phone=Phone(provider="
+                    f"'{carrier}', number='+14155550123', record={record!r}),"
+                ),
+                "    web=Web(enabled=True, allowed_origins=['https://app.example.test']),",
+                "    results=Results(",
+                "        webhook='https://receiver.example.test/results',",
+                "        secret_env='VOICEKIT_WEBHOOK_SECRET',",  # pragma: allowlist secret
+                "    ),",
+                ")",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     return manifest
 
 
@@ -471,6 +508,7 @@ def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
     monkeypatch.setattr("voicekit.cli.app.DockerSmokeVerifier", Smoke)
     monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
     FakeTwilio.events = []
+    FakeTwilio.call_options = []
 
     result = runner.invoke(
         app,
@@ -491,6 +529,7 @@ def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
     assert payload["smoke"]["storage_ready"] is True
     assert payload["call_id"].startswith("CA")
     assert FakeTwilio.events == ["call:+14155550123:+14155550199:https://voice.example"]
+    assert FakeTwilio.call_options == [{"amd": True, "record": False}]
 
 
 def test_project_status_and_non_json_read_tables(
@@ -519,12 +558,13 @@ def test_mutating_phone_commands_execute_only_with_yes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _phone_project(tmp_path)
+    _phone_project(tmp_path, record=True)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC" + "1" * 32)
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token")
     monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
     FakeTwilio.events.clear()
+    FakeTwilio.call_options.clear()
 
     commands = (
         ["numbers", "buy", "US", "--area", "415", "--yes"],
@@ -558,6 +598,7 @@ def test_mutating_phone_commands_execute_only_with_yes(
         "restore",
         "call",
     ]
+    assert FakeTwilio.call_options == [{"amd": True, "record": True}]
 
 
 def test_telnyx_phone_commands_use_telnyx_media_and_event_routes(
@@ -568,6 +609,7 @@ def test_telnyx_phone_commands_use_telnyx_media_and_event_routes(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("voicekit.cli.app._carrier", _fake_telnyx)
     FakeTelnyx.events.clear()
+    FakeTelnyx.call_options.clear()
 
     point = runner.invoke(
         app,
@@ -597,6 +639,7 @@ def test_telnyx_phone_commands_use_telnyx_media_and_event_routes(
         "point:+14155550123:wss://public.example.test/telnyx/media",
         "call:+14155550123:+14155550199:wss://public.example.test/telnyx/media",
     ]
+    assert FakeTelnyx.call_options == [{"amd": True, "record": False}]
 
 
 def test_keys_add_uses_injected_value_and_recipe_add_copies_source(

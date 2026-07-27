@@ -507,6 +507,29 @@ class SQLiteRepository(SQLiteCallRecordStore):
             created_at=update.ready_at,
         )
 
+    async def mark_recording_failed(self, call_id: str) -> None:
+        """Persist a carrier-declared failure without mutating terminal event bytes."""
+        database = self._connection()
+        async with self._write_lock:
+            cursor = await database.execute(
+                """
+                UPDATE recordings
+                SET status = 'failed'
+                WHERE call_id = ? AND status = 'pending'
+                """,
+                (call_id,),
+            )
+            if cursor.rowcount == 0:
+                row = await _fetch_one(
+                    database,
+                    "SELECT status FROM recordings WHERE call_id = ?",
+                    (call_id,),
+                )
+                if row is None:
+                    await database.rollback()
+                    raise VoicekitError("VK-RES-010", detail=call_id)
+            await database.commit()
+
     async def get_event(self, event_id: str) -> PersistedEvent:
         row = await _fetch_one(
             self._connection(),
@@ -551,19 +574,18 @@ class SQLiteRepository(SQLiteCallRecordStore):
             "SELECT * FROM recordings WHERE call_id = ?",
             (call_id,),
         )
-        if row is None:
-            return None
-        return RecordingSnapshot.model_validate(
-            {
-                "recording_id": row["recording_id"],
-                "call_id": row["call_id"],
-                "status": row["status"],
-                "access_url": row["access_url"],
-                "storage_key": row["storage_key"],
-                "created_at": _parse(str(row["created_at"])),
-                "ready_at": (None if row["ready_at"] is None else _parse(str(row["ready_at"]))),
-            }
+        return None if row is None else _recording_snapshot(row)
+
+    async def get_recording(self, recording_id: str) -> RecordingSnapshot:
+        """Resolve one engine-owned id for authenticated artifact access."""
+        row = await _fetch_one(
+            self._connection(),
+            "SELECT * FROM recordings WHERE recording_id = ?",
+            (recording_id,),
         )
+        if row is None:
+            raise VoicekitError("VK-RES-010", detail=recording_id)
+        return _recording_snapshot(row)
 
     async def claim_deliveries(
         self,
@@ -975,6 +997,20 @@ def _delivery_config(row: aiosqlite.Row) -> ResultDeliveryConfig:
             "redact": json.loads(str(row["redact_json"])),
             "purge_after_days": row["purge_after_days"],
             "recording_enabled": row["recording_id"] is not None,
+        }
+    )
+
+
+def _recording_snapshot(row: aiosqlite.Row) -> RecordingSnapshot:
+    return RecordingSnapshot.model_validate(
+        {
+            "recording_id": row["recording_id"],
+            "call_id": row["call_id"],
+            "status": row["status"],
+            "access_url": row["access_url"],
+            "storage_key": row["storage_key"],
+            "created_at": _parse(str(row["created_at"])),
+            "ready_at": None if row["ready_at"] is None else _parse(str(row["ready_at"])),
         }
     )
 
