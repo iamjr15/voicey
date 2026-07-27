@@ -14,6 +14,7 @@ from voicekit.storage.models import (
     PersistedEvent,
     PurgeItem,
     RecordingReady,
+    RecordingSnapshot,
     ResultDeliveryConfig,
     ResultSnapshot,
     TerminalRequest,
@@ -65,6 +66,10 @@ class StorageRepository(Protocol):
     async def get_event(self, event_id: str) -> PersistedEvent: ...
 
     async def get_terminal_event_for_call(self, call_id: str) -> PersistedEvent: ...
+
+    async def get_result_snapshot(self, call_id: str) -> ResultSnapshot: ...
+
+    async def get_recording_for_call(self, call_id: str) -> RecordingSnapshot | None: ...
 
     async def claim_deliveries(
         self,

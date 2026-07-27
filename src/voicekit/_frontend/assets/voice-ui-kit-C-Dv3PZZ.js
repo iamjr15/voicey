@@ -1,0 +1,1 @@
+throw Error(`Could not resolve "@pipecat-ai/websocket-transport" imported by "@pipecat-ai/voice-ui-kit". Is it installed?`);

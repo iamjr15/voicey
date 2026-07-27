@@ -271,6 +271,31 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The tunnel process or listener could not be shut down cleanly.",
         fix="Stop the reported tunnel process before starting another development session.",
     ),
+    "VK-WEB-001": ErrorDefinition(
+        code="VK-WEB-001",
+        cause="A browser session token is missing, expired, replayed, or has the wrong scope.",
+        fix="Return to the local playground and start a new browser session.",
+    ),
+    "VK-WEB-002": ErrorDefinition(
+        code="VK-WEB-002",
+        cause="A browser origin, public host, or forwarded-header chain is not trusted.",
+        fix="Use an allowed origin and configure every trusted proxy plus the exact public URL.",
+    ),
+    "VK-WEB-003": ErrorDefinition(
+        code="VK-WEB-003",
+        cause="Browser-session issuance or signaling exceeded its abuse limit.",
+        fix="Wait for the printed retry interval or end an active session before retrying.",
+    ),
+    "VK-WEB-004": ErrorDefinition(
+        code="VK-WEB-004",
+        cause="An admin or session-issuance request lacks the configured integrator credential.",
+        fix="Use the local admin listener or supply the configured integrator authorization.",
+    ),
+    "VK-WEB-005": ErrorDefinition(
+        code="VK-WEB-005",
+        cause="The embedded playground assets or development reload could not be prepared safely.",
+        fix="Rebuild the wheel assets or fix the reported project module before retrying.",
+    ),
     "VK-CLI-001": ErrorDefinition(
         code="VK-CLI-001",
         cause="A non-interactive command is missing an explicit required choice.",

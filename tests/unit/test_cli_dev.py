@@ -17,6 +17,7 @@ from voicekit.cli.dev import _load_agent, _project_environment, run_dev
 from voicekit.config.manifest import ProjectManifest, RecipeSelection
 from voicekit.config.models import ModelAxis
 from voicekit.errors import VoicekitError
+from voicekit.results.signing import encode_secret
 from voicekit.telephony.models import PipecatTarget, RollbackToken
 
 
@@ -62,6 +63,7 @@ def _context(tmp_path: Path, *, phone: bool) -> ProjectContext:
         environment={
             "TWILIO_ACCOUNT_SID": "AC" + "1" * 32,
             "TWILIO_AUTH_TOKEN": "token",  # pragma: allowlist secret
+            "VOICEKIT_WEBHOOK_SECRET": encode_secret(b"d" * 32),
         },
     )
 
@@ -126,7 +128,8 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
         def __init__(self, *, environment: Mapping[str, str]) -> None:
             assert environment["TWILIO_AUTH_TOKEN"]
 
-        async def open(self, *_args: object, **_kwargs: object) -> FakeTunnel:
+        async def open(self, port: int, **_kwargs: object) -> FakeTunnel:
+            assert port == 7860
             events.append("tunnel-opened")
             return FakeTunnel()
 
@@ -168,7 +171,11 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
         def __init__(self, **kwargs: Any) -> None:
             self.app = FastAPI()
             settings = kwargs["settings"]
+            assert settings.pending_media_timeout_s == 120
             self.target = PipecatTarget(settings.public_base)
+
+        async def reserve_web_call(self) -> str:
+            return "call_web_test"
 
     class FakeServer:
         def __init__(self, _config: object) -> None:
@@ -184,6 +191,7 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
         return _agent()
 
     def config(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        events.append(f"config:{_kwargs['port']}")
         return SimpleNamespace()
 
     monkeypatch.setattr("voicekit.cli.dev._load_agent", load_agent)
@@ -206,6 +214,10 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
 
     assert events.index("pointed") < events.index("restored")
     assert events.index("probe-verified") < events.index("pointed")
+    assert "config:7860" in events
+    assert "config:7861" in events
+    assert "notice:Playground: http://127.0.0.1:7861" in events
+    assert "notice:Tunnel scope: public listener only; admin routes stay local." in events
     assert events[-2:] == ["ledger-closed", "tunnel-closed"]
 
 
@@ -221,3 +233,17 @@ async def test_dev_rejects_phone_flag_for_web_only_project(tmp_path: Path) -> No
             notice=lambda _message: None,
         )
     assert caught.value.code == "VK-CLI-007"
+
+
+@pytest.mark.asyncio
+async def test_dev_reserves_adjacent_loopback_admin_port(tmp_path: Path) -> None:
+    with pytest.raises(VoicekitError, match="admin listener") as caught:
+        await run_dev(
+            _context(tmp_path, phone=False),
+            phone=False,
+            tunnel="auto",
+            public_url=None,
+            port=65535,
+            notice=lambda _message: None,
+        )
+    assert caught.value.code == "VK-CLI-010"

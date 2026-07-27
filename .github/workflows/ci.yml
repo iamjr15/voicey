@@ -9,6 +9,32 @@ permissions:
   contents: read
 
 jobs:
+  playground:
+    name: Playground web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: playground-web/package-lock.json
+      - name: Install locked web dependencies
+        working-directory: playground-web
+        run: npm ci --ignore-scripts
+      - name: Typecheck playground
+        working-directory: playground-web
+        run: npm run typecheck
+      - name: Test playground
+        working-directory: playground-web
+        run: npm test
+      - name: Build playground
+        working-directory: playground-web
+        run: npm run build
+      - name: Audit playground dependencies
+        working-directory: playground-web
+        run: npm audit --audit-level=high
+
   quality:
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest

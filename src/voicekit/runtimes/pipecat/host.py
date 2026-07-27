@@ -72,6 +72,31 @@ class TwilioRuntimeAdapter(Protocol):
     def cold_transfer(self, call_sid: str, to_number: str) -> None: ...
 
 
+class WebSessionAuthorizer(Protocol):
+    """Authenticate and bind browser signaling without coupling to token format."""
+
+    async def authorize(
+        self,
+        request: Request,
+        *,
+        pc_id: str | None,
+    ) -> object: ...
+
+    async def bind(
+        self,
+        identity: object,
+        *,
+        pc_id: str,
+        call_id: str,
+    ) -> None: ...
+
+    async def cancel(self, identity: object) -> None: ...
+
+    async def reserved_call_id(self, identity: object) -> str: ...
+
+    async def release(self, pc_id: str) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class PipecatHostSettings:
     """Non-secret public routing plus private media credentials."""
@@ -82,6 +107,7 @@ class PipecatHostSettings:
     pending_media_timeout_s: float = 30
     web_sample_rate: int = 16000
     twilio_sample_rate: int = 8000
+    allow_insecure_web_sessions_for_tests: bool = False
 
     @classmethod
     def from_env(cls, public_base: str) -> PipecatHostSettings:
@@ -166,6 +192,7 @@ class PipecatHost:
         runner: WorkerRunner | None = None,
         request_handler: SmallWebRTCRequestHandler | None = None,
         session_builder: PipecatSessionBuilder | None = None,
+        web_sessions: WebSessionAuthorizer | None = None,
     ) -> None:
         if agent.runtime != "pipecat":
             raise VoicekitError("VK-RUN-001", detail="PipecatHost requires runtime='pipecat'.")
@@ -173,6 +200,15 @@ class PipecatHost:
             raise VoicekitError(
                 "VK-RUN-001",
                 detail="Twilio phone config requires the voicekit[twilio] adapter.",
+            )
+        if (
+            agent.web.enabled
+            and web_sessions is None
+            and not settings.allow_insecure_web_sessions_for_tests
+        ):
+            raise VoicekitError(
+                "VK-WEB-001",
+                detail="web signaling requires the P1.9 scoped session authorizer.",
             )
         self.agent = agent
         self.repository = repository
@@ -187,12 +223,46 @@ class PipecatHost:
             repository,
             transfer_handler=None if twilio is None else _TwilioTransfer(twilio),
         )
+        self.web_sessions = web_sessions
         self._pending: dict[str, _PendingCall] = {}
         self._active: dict[str, PipecatSession] = {}
         self._web_sessions: dict[str, str] = {}
         self._session_tasks: set[asyncio.Task[object]] = set()
         self._state_lock = asyncio.Lock()
         self.app = self._build_app()
+
+    async def reload_agent(self, agent: Agent, *, restart_runner: bool) -> bool:
+        """Atomically apply a revision only when no call owns runtime capacity."""
+        if agent.runtime != "pipecat":
+            raise VoicekitError(
+                "VK-WEB-005",
+                detail="hot reload cannot change the runtime away from Pipecat.",
+            )
+        if (
+            agent.name != self.agent.name
+            or agent.phone != self.agent.phone
+            or agent.results != self.agent.results
+            or agent.web.enabled != self.agent.web.enabled
+        ):
+            raise VoicekitError(
+                "VK-WEB-005",
+                detail=(
+                    "agent identity, phone, results, and channel changes require "
+                    "restarting voicekit dev."
+                ),
+            )
+        async with self._state_lock:
+            if self.admission.active_count:
+                return False
+            runner_was_running = self.runner_host.running
+            if restart_runner and runner_was_running:
+                await self.runner_host.stop()
+            self.agent = agent
+            self.admission = AdmissionController(agent.limits.max_concurrent)
+            self.lifecycle = PipecatLifecycleManager(self.repository, self.admission)
+            if restart_runner and runner_was_running:
+                await self.runner_host.start()
+            return True
 
     async def reserve_call(self, call: PipecatCall) -> _PendingCall:
         """Reserve capacity and durable storage before returning an answer."""
@@ -213,6 +283,16 @@ class PipecatHost:
             )
             self._pending[call.call_id] = pending
             return pending
+
+    async def reserve_web_call(self) -> str:
+        """Create the durable web call before its browser token is returned."""
+        call = PipecatCall(
+            call_id=f"call_web_{uuid.uuid4().hex}",
+            channel="web",
+            direction="inbound",
+        )
+        await self.reserve_call(call)
+        return call.call_id
 
     async def _expire_pending(self, pending: _PendingCall) -> None:
         await asyncio.sleep(self.settings.pending_media_timeout_s)
@@ -257,7 +337,13 @@ class PipecatHost:
             _request: Request,
             error: VoicekitError,
         ) -> JSONResponse:
-            status = 429 if error.code == "VK-RUN-004" else 400
+            status = {
+                "VK-RUN-004": 429,
+                "VK-WEB-001": 401,
+                "VK-WEB-002": 403,
+                "VK-WEB-003": 429,
+                "VK-WEB-004": 403,
+            }.get(error.code, 400)
             return JSONResponse(
                 status_code=status,
                 content={"error": {"code": error.code, "message": str(error)}},
@@ -413,6 +499,7 @@ class PipecatHost:
 
         @app.post("/api/offer")
         async def web_offer(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
             body: dict[str, Any],
         ) -> dict[str, str]:
             try:
@@ -422,71 +509,88 @@ class PipecatHost:
                     "VK-RUN-007",
                     detail="invalid SmallWebRTC offer payload.",
                 ) from exc
+            identity = await self._authorize_web(request, pc_id=offer.pc_id)
             if offer.pc_id is not None and offer.pc_id in self._web_sessions:
                 answer = await self.request_handler.handle_web_request(offer, _no_new_connection)
                 if answer is None:
                     raise VoicekitError("VK-RUN-007", detail="WebRTC renegotiation had no answer.")
                 return answer
 
-            call = PipecatCall(
-                call_id=f"call_web_{uuid.uuid4().hex}",
-                channel="web",
-                direction="inbound",
-            )
-            pending = await self.reserve_call(call)
-            callback_error: list[Exception] = []
+            pending: _PendingCall | None = None
+            try:
+                if identity is None:
+                    call_id = await self.reserve_web_call()
+                else:
+                    call_id = await self._reserved_web_call(identity)
+                async with self._state_lock:
+                    pending = self._pending.get(call_id)
+                if pending is None:
+                    raise VoicekitError(
+                        "VK-RUN-005",
+                        detail=f"no pending browser reservation for {call_id}.",
+                    )
+                call = pending.call
+                callback_error: list[Exception] = []
 
-            async def start_connection(connection: Any) -> None:
-                try:
-                    transport = SmallWebRTCTransport(
-                        connection,
-                        TransportParams(
-                            audio_in_enabled=True,
-                            audio_out_enabled=True,
-                            audio_in_sample_rate=self.settings.web_sample_rate,
-                            audio_out_sample_rate=self.settings.web_sample_rate,
-                        ),
-                    )
-                    claimed = await self._claim_pending(
-                        call.call_id,
-                        pending.admission.token,
-                    )
-                    session = self.session_builder.build(
-                        agent=self.agent,
-                        call=call,
-                        lifecycle=claimed.lifecycle,
-                        transport=transport,
-                        sample_rate=self.settings.web_sample_rate,
-                    )
-                    async with self._state_lock:
-                        self._active[call.call_id] = session
-                        self._web_sessions[str(connection.pc_id)] = call.call_id
-                    await session.start(self.runner_host.runner)
-                    self._track_session(
-                        asyncio.create_task(
-                            self._wait_web_session(str(connection.pc_id), session),
-                            name=f"voicekit-web-{call.call_id}",
+                async def start_connection(connection: Any) -> None:
+                    pc_id = str(connection.pc_id)
+                    try:
+                        transport = SmallWebRTCTransport(
+                            connection,
+                            TransportParams(
+                                audio_in_enabled=True,
+                                audio_out_enabled=True,
+                                audio_in_sample_rate=self.settings.web_sample_rate,
+                                audio_out_sample_rate=self.settings.web_sample_rate,
+                            ),
                         )
-                    )
-                except Exception as exc:
-                    callback_error.append(exc)
-                    await pending.lifecycle.fail_setup()
-                    with suppress(Exception):
-                        await connection.disconnect()
+                        claimed = await self._claim_pending(
+                            call.call_id,
+                            pending.admission.token,
+                        )
+                        session = self.session_builder.build(
+                            agent=self.agent,
+                            call=call,
+                            lifecycle=claimed.lifecycle,
+                            transport=transport,
+                            sample_rate=self.settings.web_sample_rate,
+                        )
+                        await self._bind_web(identity, pc_id=pc_id, call_id=call.call_id)
+                        async with self._state_lock:
+                            self._active[call.call_id] = session
+                            self._web_sessions[pc_id] = call.call_id
+                        await session.start(self.runner_host.runner)
+                        self._track_session(
+                            asyncio.create_task(
+                                self._wait_web_session(pc_id, session),
+                                name=f"voicekit-web-{call.call_id}",
+                            )
+                        )
+                    except Exception as exc:
+                        callback_error.append(exc)
+                        await pending.lifecycle.fail_setup()
+                        await self._release_web(pc_id)
+                        with suppress(Exception):
+                            await connection.disconnect()
 
-            answer = await self.request_handler.handle_web_request(offer, start_connection)
-            if callback_error:
-                raise VoicekitError(
-                    "VK-RUN-006",
-                    detail=f"web session setup failed: {type(callback_error[0]).__name__}.",
-                )
-            if answer is None:
-                await pending.lifecycle.fail_setup()
-                raise VoicekitError("VK-RUN-007", detail="WebRTC offer produced no answer.")
-            return answer
+                answer = await self.request_handler.handle_web_request(offer, start_connection)
+                if callback_error:
+                    raise VoicekitError(
+                        "VK-RUN-006",
+                        detail=f"web session setup failed: {type(callback_error[0]).__name__}.",
+                    )
+                if answer is None:
+                    raise VoicekitError("VK-RUN-007", detail="WebRTC offer produced no answer.")
+                return answer
+            except Exception:
+                await self._cancel_web(identity)
+                if pending is not None:
+                    await self._fail_pending_setup(pending)
+                raise
 
         @app.patch("/api/offer")
         async def web_ice_patch(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
             body: dict[str, Any],
         ) -> Response:
             try:
@@ -512,6 +616,7 @@ class PipecatHost:
                     "VK-RUN-007",
                     detail="invalid SmallWebRTC ICE payload.",
                 ) from exc
+            await self._authorize_web(request, pc_id=patch.pc_id)
             await self.request_handler.handle_patch_request(patch)
             return Response(status_code=204)
 
@@ -524,10 +629,53 @@ class PipecatHost:
             async with self._state_lock:
                 self._active.pop(session.call.call_id, None)
                 self._web_sessions.pop(pc_id, None)
+            await self._release_web(pc_id)
 
     def _track_session(self, task: asyncio.Task[object]) -> None:
         self._session_tasks.add(task)
         task.add_done_callback(self._session_tasks.discard)
+
+    async def _authorize_web(self, request: Request, *, pc_id: str | None) -> object | None:
+        if self.web_sessions is None:
+            if self.settings.allow_insecure_web_sessions_for_tests:
+                return None
+            raise VoicekitError("VK-WEB-001", detail="browser session security is unavailable.")
+        return await self.web_sessions.authorize(request, pc_id=pc_id)
+
+    async def _bind_web(
+        self,
+        identity: object | None,
+        *,
+        pc_id: str,
+        call_id: str,
+    ) -> None:
+        if self.web_sessions is not None and identity is not None:
+            await self.web_sessions.bind(identity, pc_id=pc_id, call_id=call_id)
+
+    async def _cancel_web(self, identity: object | None) -> None:
+        if self.web_sessions is not None and identity is not None:
+            await self.web_sessions.cancel(identity)
+
+    async def _reserved_web_call(self, identity: object) -> str:
+        if self.web_sessions is None:
+            raise VoicekitError("VK-WEB-001", detail="browser session security is unavailable.")
+        return await self.web_sessions.reserved_call_id(identity)
+
+    async def _fail_pending_setup(self, pending: _PendingCall) -> None:
+        async with self._state_lock:
+            if self._pending.get(pending.call.call_id) is not pending:
+                return
+            del self._pending[pending.call.call_id]
+        if pending.expires is not None:
+            pending.expires.cancel()
+            with suppress(asyncio.CancelledError):
+                await pending.expires
+            pending.expires = None
+        await pending.lifecycle.fail_setup()
+
+    async def _release_web(self, pc_id: str) -> None:
+        if self.web_sessions is not None:
+            await self.web_sessions.release(pc_id)
 
     async def _end_from_provider(self, event: CallEvent) -> None:
         async with self._state_lock:

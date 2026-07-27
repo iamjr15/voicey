@@ -164,6 +164,18 @@ class RecordingReady(StorageValue):
         return value
 
 
+class RecordingSnapshot(StorageValue):
+    """Protected recording metadata returned only by an admin/read surface."""
+
+    recording_id: str
+    call_id: str
+    status: Literal["pending", "ready", "failed"]
+    access_url: str | None
+    storage_key: str | None
+    created_at: datetime
+    ready_at: datetime | None
+
+
 class PurgeItem(StorageValue):
     """Durable artifact deletion still owed after database retention."""
 

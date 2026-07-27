@@ -10,6 +10,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 inbound audio/transcript loopback | not-ready (P1.10 dependency) | Added to the same harness after the recipe endpoint lands | Running Pipecat pipeline, physical handset and provisioned number |
 | P1 full guided-wizard usability | ready-to-run, pending human/credentials | Command below | Interactive terminal, a human, provider keys |
 | P1 doctor on deliberately broken project | ready-to-run, pending human observation | Commands below | Interactive terminal; disposable fixture only |
+| P1 playground real microphone/provider call | ready-to-run, pending human/credentials | Command below | Valid reference-provider keys, browser microphone grant, a person speaking |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
@@ -122,3 +123,36 @@ the safe subset and verify that secrets are not printed:
 ```
 
 These remain `pending human` until a person records the observed outcome.
+
+## P1 playground microphone/provider gate
+
+The automated suite proves token scope/replay/rate limits, two-listener
+isolation, WebRTC signaling authorization, durable reads, hot reload, the
+embedded-wheel build, and frontend accessibility. Desktop and mobile visual
+review also ran through the required browser automation workflow. A real
+microphone/provider conversation still requires a human permission grant and
+speech. With the three reference provider credentials already present in the
+environment, run from the repository root:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_PLAYGROUND_PARENT="$(mktemp -d)"
+VOICEKIT_PLAYGROUND_PROJECT="$VOICEKIT_PLAYGROUND_PARENT/browser-call"
+uv run voicekit init "$VOICEKIT_PLAYGROUND_PROJECT" \
+  --name browser-call \
+  --recipe scratch \
+  --description "Greet the caller and help them schedule an appointment." \
+  --channels web \
+  --runtime pipecat \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+(cd "$VOICEKIT_PLAYGROUND_PROJECT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" dev --port 7860)
+```
+
+Open `http://127.0.0.1:7861`, grant microphone access, speak at least two turns,
+end the session, and verify transcript, latency, events, and the terminal-event
+preview. Also confirm browser network URLs contain no bearer token. This gate
+remains pending until that physical input and credentialed provider path run
+green.

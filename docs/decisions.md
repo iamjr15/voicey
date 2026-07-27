@@ -41,3 +41,21 @@ These choices apply the documented proposals authorized in the build mandate and
   the status-callback path and bind only a unique reconciliation candidate.
 - Require an expected public base for signature validation; forwarded headers
   are accepted only from configured proxies and must reconstruct that origin.
+
+## 2026-07-27 — P1 playground listener and media boundary
+
+- `voicekit dev --port N` binds the public runtime/signaling listener to
+  loopback port `N` and the admin playground/read API to loopback port `N + 1`.
+  Only the public listener is eligible for tunneling.
+- Browser sessions use one-use, short-lived bearer tokens derived with domain
+  separation from the configured Standard Webhooks secret. Admission and the
+  durable call row are reserved before the token response; a successful offer
+  binds that call to its peer before PATCH signaling proceeds, while a failed
+  authenticated offer consumes the token and terminalizes the reservation.
+- Use the installed Pipecat small-WebRTC transport with `WavMediaManager`.
+  Its default `DailyMediaManager` dynamically loads a Daily call-machine bundle;
+  the audio-only playground does not need that external dependency. This keeps
+  the CSP self-hosted except for the configured public signaling origin.
+- Serve the embedded SPA with FastAPI 0.140's verified `app.frontend()` API.
+  The hatch build hook is the source of wheel assets; its skip variable is for
+  verified prebuilt artifacts only.

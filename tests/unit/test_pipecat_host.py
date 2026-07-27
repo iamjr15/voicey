@@ -9,12 +9,16 @@ from pipecat.runner.types import CallData
 from starlette.datastructures import URL
 
 from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Web, tool
+from voicekit.errors import VoicekitError
+from voicekit.playground.security import OriginPolicy, SessionTokenManager, WebSessionSecurity
+from voicekit.results.signing import encode_secret
 from voicekit.runtimes.pipecat import host as host_module
 from voicekit.runtimes.pipecat.host import (
     LongLivedRunner,
     PipecatHost,
     PipecatHostSettings,
     TwilioRuntimeAdapter,
+    WebSessionAuthorizer,
     twilio_transport_params,
 )
 from voicekit.runtimes.pipecat.lifecycle import PipecatCall, PipecatCallLifecycle
@@ -168,11 +172,18 @@ class _WebSocket:
 
 
 class _RequestHandler:
-    def __init__(self) -> None:
+    def __init__(self, *, answer: bool = True) -> None:
         self.connection = _Connection()
+        self.answer = answer
 
-    async def handle_web_request(self, request: object, callback: Any) -> dict[str, str]:
+    async def handle_web_request(
+        self,
+        request: object,
+        callback: Any,
+    ) -> dict[str, str] | None:
         del request
+        if not self.answer:
+            return None
         await callback(self.connection)
         return {"sdp": "answer", "type": "answer", "pc_id": self.connection.pc_id}
 
@@ -223,6 +234,7 @@ async def _host(
     twilio: _Twilio | None = None,
     request_handler: _RequestHandler | None = None,
     session_builder: _SessionBuilder | None = None,
+    web_sessions: WebSessionAuthorizer | None = None,
 ) -> tuple[PipecatHost, SQLiteRepository, _Twilio]:
     repository = SQLiteRepository(tmp_path / "host.sqlite3")
     await repository.open()
@@ -235,12 +247,14 @@ async def _host(
             twilio_account_sid=adapter.account_sid,
             twilio_auth_token="secret",
             pending_media_timeout_s=60,
+            allow_insecure_web_sessions_for_tests=web_sessions is None,
         ),
         twilio=cast(TwilioRuntimeAdapter, adapter),
         request_handler=cast(Any, request_handler) if request_handler else None,
         session_builder=(
             cast(PipecatSessionBuilder, session_builder) if session_builder is not None else None
         ),
+        web_sessions=web_sessions,
     )
     return host, repository, adapter
 
@@ -648,4 +662,177 @@ async def test_invalid_web_offer_is_cataloged(tmp_path: Path) -> None:
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "VK-RUN-007"
+    await repository.close()
+
+
+async def test_web_signaling_requires_scoped_token_origin_and_peer_binding(
+    tmp_path: Path,
+) -> None:
+    tokens = SessionTokenManager(
+        encode_secret(b"w" * 32),
+        audience="https://voice.example",
+        agent_name="host-test",
+    )
+    security = WebSessionSecurity(
+        tokens,
+        OriginPolicy(
+            allowed_origins=frozenset({"https://app.example"}),
+            expected_public_origin="https://voice.example",
+        ),
+    )
+    request_handler = _RequestHandler()
+    host, repository, _ = await _host(
+        tmp_path,
+        request_handler=request_handler,
+        session_builder=_SessionBuilder(),
+        web_sessions=security,
+    )
+    transport = httpx.ASGITransport(app=host.app)
+    issued = await tokens.issue_for_call(
+        client_key="browser",
+        reserve_call=host.reserve_web_call,
+    )
+    authorization = {"authorization": f"Bearer {issued.token}"}
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="https://voice.example",
+    ) as client:
+        missing = await client.post(
+            "/api/offer",
+            headers={"origin": "https://app.example"},
+            json={"sdp": "offer", "type": "offer"},
+        )
+        wrong_origin = await client.post(
+            "/api/offer",
+            headers={**authorization, "origin": "https://attacker.example"},
+            json={"sdp": "offer", "type": "offer"},
+        )
+        connected = await client.post(
+            "/api/offer",
+            headers={**authorization, "origin": "https://app.example"},
+            json={"sdp": "offer", "type": "offer"},
+        )
+        replay = await client.post(
+            "/api/offer",
+            headers={**authorization, "origin": "https://app.example"},
+            json={"sdp": "offer", "type": "offer"},
+        )
+        admin_records = await client.get("/api/admin/calls")
+        token_mint = await client.post("/api/playground/sessions")
+
+    assert missing.status_code == 401
+    assert wrong_origin.status_code == 403
+    assert connected.status_code == 200
+    assert replay.status_code == 401
+    assert admin_records.status_code == 404
+    assert token_mint.status_code == 404
+    snapshot = await tokens.snapshot(issued.identity.session_id)
+    assert snapshot.call_id is not None
+    assert snapshot.call_id == issued.identity.call_id
+    assert snapshot.pc_id == "pc_test"
+    await repository.close()
+
+
+async def test_failed_authenticated_offer_consumes_token_and_terminalizes_reservation(
+    tmp_path: Path,
+) -> None:
+    tokens = SessionTokenManager(
+        encode_secret(b"f" * 32),
+        audience="https://voice.example",
+        agent_name="host-test",
+    )
+    security = WebSessionSecurity(
+        tokens,
+        OriginPolicy(
+            allowed_origins=frozenset({"https://app.example"}),
+            expected_public_origin="https://voice.example",
+        ),
+    )
+    host, repository, _ = await _host(
+        tmp_path,
+        request_handler=_RequestHandler(answer=False),
+        web_sessions=security,
+    )
+    issued = await tokens.issue_for_call(
+        client_key="browser",
+        reserve_call=host.reserve_web_call,
+    )
+    assert issued.identity.call_id is not None
+    before = await repository.get_call(issued.identity.call_id)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=host.app),
+        base_url="https://voice.example",
+    ) as client:
+        failed = await client.post(
+            "/api/offer",
+            headers={
+                "authorization": f"Bearer {issued.token}",
+                "origin": "https://app.example",
+            },
+            json={"sdp": "offer", "type": "offer"},
+        )
+        replay = await client.post(
+            "/api/offer",
+            headers={
+                "authorization": f"Bearer {issued.token}",
+                "origin": "https://app.example",
+            },
+            json={"sdp": "offer", "type": "offer"},
+        )
+
+    after = await repository.get_call(issued.identity.call_id)
+    terminal = await repository.get_terminal_event_for_call(issued.identity.call_id)
+    assert before.status == "active"
+    assert failed.status_code == 400
+    assert failed.json()["error"]["code"] == "VK-RUN-007"
+    assert replay.status_code == 401
+    assert after.status == "failed"
+    assert terminal.event_type == "call.failed"
+    await repository.close()
+
+
+async def test_host_refuses_ungated_web_channel_by_default(tmp_path: Path) -> None:
+    repository = SQLiteRepository(tmp_path / "host.sqlite3")
+    await repository.open()
+    adapter = _Twilio()
+    with pytest.raises(Exception, match="VK-WEB-001"):
+        PipecatHost(
+            agent=_agent(),
+            repository=repository,
+            settings=PipecatHostSettings(
+                public_base="https://voice.example",
+                twilio_account_sid=adapter.account_sid,
+                twilio_auth_token="secret",
+            ),
+            twilio=cast(TwilioRuntimeAdapter, adapter),
+        )
+    await repository.close()
+
+
+async def test_host_reload_is_fenced_at_call_boundary(tmp_path: Path) -> None:
+    host, repository, _ = await _host(tmp_path)
+    await host.reserve_call(
+        PipecatCall(
+            call_id="call_reload",
+            channel="web",
+            direction="inbound",
+        )
+    )
+
+    updated = _agent(max_concurrent=4)
+    assert not await host.reload_agent(updated, restart_runner=True)
+    assert host.agent.limits.max_concurrent == 2
+
+    await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
+        "call_reload",
+        "agent_hangup",
+    )
+    assert await host.reload_agent(updated, restart_runner=True)
+    assert host.agent.limits.max_concurrent == 4
+    assert host.admission.max_concurrent == 4
+
+    renamed = updated.model_copy(update={"name": "renamed"})
+    with pytest.raises(VoicekitError, match="require restarting"):
+        await host.reload_agent(renamed, restart_runner=False)
     await repository.close()

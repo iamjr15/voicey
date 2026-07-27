@@ -203,7 +203,6 @@ def dev_command(
     ] = False,
 ) -> None:
     """Run the local agent; Ctrl-C restores any temporary phone route."""
-    del no_open
     if tunnel not in {"auto", "cloudflared", "ngrok", "url"}:
         _fail(VoicekitError("VK-CLI-010", detail=f"unknown tunnel {tunnel!r}."))
 
@@ -217,6 +216,7 @@ def dev_command(
             public_url=public_url,
             port=port,
             notice=console.print,
+            open_browser=not no_open,
         )
         console.print("Next: voicekit calls list")
 

@@ -552,3 +552,4 @@ def test_successful_init_and_dev_command_adapters(
     assert "voicekit dev" in initialized.stdout
     assert developed.exit_code == 0
     assert dev_calls[0]["port"] == 9000
+    assert dev_calls[0]["open_browser"] is False

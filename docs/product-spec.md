@@ -315,6 +315,8 @@ Every raised error carries a stable code (`VK-TEL-021`), a plain-language cause,
 ## 8. Browser playground (`voicekit dev`)
 
 - Serves a local web app; **Pipecat projects** connect via RTVI client SDKs; **LiveKit projects** via livekit-client — internal detail, identical UX.
+- Uses two loopback listeners: `--port` is the public runtime/signaling listener and `--port + 1` is the admin playground/read-API listener. A tunnel may forward only the public listener; the admin listener is never a tunnel target. Non-local admin deployment requires an integrator authentication hook.
+- Browser signaling requires a short-lived, one-use bearer token bound to the agent, audience, session, and resulting peer/call. Tokens are sent in the `Authorization` header, never in a URL; origin/host policy, trusted-proxy reconstruction, issuance limits, and signaling rate limits are enforced server-side.
 - Surface: mic button + live conversation; streaming transcript with per-turn latency badges; event feed (tool calls with args/results/duration, state transitions, interruptions); captured `data` panel updating live; the exact webhook payload preview at call end ("what your server will receive"); latency breakdown per subsystem (STT/LLM/TTS/e2e) per turn.
 - Hot reload: prompts and config apply next session; flow code restarts the runtime worker between calls with a visible "reloaded" marker.
 - Also serves the local read API used by `calls show` — playground and CLI read the same store.

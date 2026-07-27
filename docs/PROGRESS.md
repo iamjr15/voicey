@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P1 — engine spine, Pipecat, Twilio, CLI/playground, recipe #1, Docker
-- **Current unit:** P1.9 `playground/` + web-channel security
-- **Next task:** build the wheel-embedded Vite/React RTVI playground, two-listener public/admin architecture, scoped session tokens, abuse controls, hot reload, live event/data/result surfaces, and tunneled-admin negative suite
-- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI, doctor, capability/recipe registry, safe scaffolding/key management, operational commands, error catalog, and manual runbooks
+- **Current unit:** P1.10 appointment-booking recipe + Pipecat Evals
+- **Next task:** implement the native pipecat-flows appointment recipe, text/audio Pipecat Evals suites, local-Ollama judge path, latency assertions, and cold-transfer scenario
+- **Completed:** all P0 units; P1.1 configuration; P1.2 observability; P1.3 repository/results reliability; P1.4 tools; P1.5 Twilio; P1.6 Pipecat runtime; P1.7 tunnels; P1.8 guided production CLI; P1.9 wheel-embedded playground, two-listener security boundary, scoped web sessions, safe hot reload, and protected live/durable diagnostic surfaces
 
 ## Gate status
 
@@ -31,6 +31,8 @@ Last updated: 2026-07-27
 | P1.8 CLI implementation/local verification | green | Capability-gated zero-default wizard, secret-free resume, live key validation, atomic 0600 `.env`, native-flow scratch scaffold, supervised dev/phone rollback, operational command tree, full doctor, JSON reads, confirmations, next-step engine, error-doc anchors, and static error-catalog coverage; `uv run pytest` → 309 passed, 5 honest live skips, 90.13% branch coverage |
 | P1.8 full human wizard | pending-live | Disposable interactive runbook in `docs/GAPS.md`; requires a human and provider credentials |
 | P1.8 doctor broken-machine usability | pending-live | Safe disposable broken-project harness and exact commands in `docs/GAPS.md`; requires human observation |
+| P1.9 playground implementation/local verification | green | Two-listener public/admin isolation, pre-token durable reservation, scoped one-use session tokens, failed-offer terminalization, Origin/Host/proxy validation, abuse limits, exact durable payload reads, safe two-tier reload, FastAPI `app.frontend()`, wheel build, React/RTVI UI, axe scan, desktop/mobile browser QA, and npm/pip audits green; `uv run pytest` → 334 passed, 5 honest live skips, 90.32% branch coverage |
+| P1.9 real microphone/provider browser call | pending-live | Exact disposable-project command in `docs/GAPS.md`; requires reference-provider credentials, a human microphone grant, and speech |
 | Physical handset/manual gates | pending-live | Outbound handset command is ready; inbound pipeline is implemented and joins the live recipe harness in P1.10 |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

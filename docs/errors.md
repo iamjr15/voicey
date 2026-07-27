@@ -314,6 +314,44 @@ infrastructure error.
 
 **Fix:** Stop the reported tunnel process before starting another session.
 
+## VK-WEB-001
+
+**Cause:** A browser session token is missing, expired, replayed, or has the
+wrong scope.
+
+**Fix:** Return to the local playground and start a new browser session.
+
+## VK-WEB-002
+
+**Cause:** A browser origin, public host, or forwarded-header chain is not
+trusted.
+
+**Fix:** Use an allowed origin and configure every trusted proxy plus the exact
+public URL.
+
+## VK-WEB-003
+
+**Cause:** Browser-session issuance or signaling exceeded its abuse limit.
+
+**Fix:** Wait for the printed retry interval or end an active session before
+retrying.
+
+## VK-WEB-004
+
+**Cause:** An admin or session-issuance request lacks the configured integrator
+credential.
+
+**Fix:** Use the local admin listener or supply the configured integrator
+authorization.
+
+## VK-WEB-005
+
+**Cause:** The embedded playground assets or development reload could not be
+prepared safely.
+
+**Fix:** Rebuild the wheel assets or fix the reported project module before
+retrying.
+
 ## VK-CLI-001
 
 **Cause:** A non-interactive command lacks an explicit required choice.

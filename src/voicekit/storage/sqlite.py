@@ -23,6 +23,7 @@ from voicekit.storage.models import (
     PersistedEvent,
     PurgeItem,
     RecordingReady,
+    RecordingSnapshot,
     ResultDeliveryConfig,
     ResultSnapshot,
     TerminalRequest,
@@ -483,6 +484,44 @@ class SQLiteRepository(SQLiteCallRecordStore):
         if row is None:
             raise VoicekitError("VK-RES-009", detail=call_id)
         return _event_from_row(row)
+
+    async def get_result_snapshot(self, call_id: str) -> ResultSnapshot:
+        """Return incrementally flushed data for the local/admin playground."""
+        row = await _fetch_one(
+            self._connection(),
+            "SELECT outcome, results_json, interruptions FROM calls WHERE call_id = ?",
+            (call_id,),
+        )
+        if row is None:
+            raise VoicekitError("VK-OBS-003", detail=call_id)
+        return ResultSnapshot.model_validate(
+            {
+                "outcome": row["outcome"],
+                "data": json.loads(str(row["results_json"])),
+                "interruptions": row["interruptions"],
+            }
+        )
+
+    async def get_recording_for_call(self, call_id: str) -> RecordingSnapshot | None:
+        """Return engine-owned metadata without exposing a carrier recording URL."""
+        row = await _fetch_one(
+            self._connection(),
+            "SELECT * FROM recordings WHERE call_id = ?",
+            (call_id,),
+        )
+        if row is None:
+            return None
+        return RecordingSnapshot.model_validate(
+            {
+                "recording_id": row["recording_id"],
+                "call_id": row["call_id"],
+                "status": row["status"],
+                "access_url": row["access_url"],
+                "storage_key": row["storage_key"],
+                "created_at": _parse(str(row["created_at"])),
+                "ready_at": (None if row["ready_at"] is None else _parse(str(row["ready_at"]))),
+            }
+        )
 
     async def claim_deliveries(
         self,

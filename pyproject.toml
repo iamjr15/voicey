@@ -56,6 +56,7 @@ twilio = "voicekit.telephony.twilio:TwilioAdapter"
 [dependency-groups]
 dev = [
   "detect-secrets>=1.5,<2",
+  "hatchling>=1.28,<2",
   "pip-audit>=2.9,<3",
   "pre-commit>=4.3,<5",
   "pyright>=1.1.403,<2",
@@ -68,6 +69,9 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/voicekit"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.ruff]
 target-version = "py311"

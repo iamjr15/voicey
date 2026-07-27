@@ -75,8 +75,17 @@ voicekit call +14155550199 --url https://public.example.test --yes
 `dev` starts the actual Pipecat host and supervised Uvicorn server. Phone mode
 probes the public tunnel before temporarily changing the selected Twilio route.
 Exit and interruption restore the prior route and environment/import state.
-The visual browser surface lands in P1.9; until then the web signaling endpoint
-is available without the packaged UI.
+The public runtime/signaling listener binds to `127.0.0.1:<port>` and the
+playground/admin listener binds separately to `127.0.0.1:<port + 1>`. For the
+default `--port 7860`, open `http://127.0.0.1:7861`. A tunnel receives only the
+public listener; records, recordings, and session issuance remain on the local
+admin listener. `--no-open` suppresses the browser launch without changing
+either listener.
+
+The playground is embedded in the installed wheel. It shows live transcript,
+turn latency, runtime events, tool calls, captured data, and the exact durable
+terminal payload. See the [playground guide](playground.md) for its security
+and reload contracts.
 
 Outbound creation is protected by the durable carrier intent ledger. Since it
 can spend money, `call` requires interactive confirmation or `--yes`.
