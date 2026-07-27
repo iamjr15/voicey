@@ -10,6 +10,7 @@ import stat
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar, cast
 
 import httpx
@@ -19,6 +20,7 @@ from voicekit.cli.context import ProjectContext
 from voicekit.cli.doctor import (
     Doctor,
     DoctorCheck,
+    LiveKitSipInspector,
     _disk_check,
     _env_check,
     _port_check,
@@ -67,6 +69,33 @@ class InvalidKeys:
             detail="rejected",
             fix="replace key",
         )
+
+
+class ValidLiveKit:
+    async def validate(self, values: Mapping[str, str]) -> KeyCheck:
+        del values
+        return KeyCheck(
+            provider="livekit",
+            env_names=("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"),
+            status="valid",
+            detail="valid",
+            fix="none",
+        )
+
+
+class ValidSipInspector:
+    def __init__(self) -> None:
+        self.names: list[str] = []
+
+    async def inspect(
+        self,
+        values: Mapping[str, str],
+        *,
+        expected_name: str,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        assert values["LIVEKIT_URL"]
+        self.names.append(expected_name)
+        return (), ()
 
 
 def _context(tmp_path: Path) -> ProjectContext:
@@ -497,6 +526,66 @@ results = Results(
     )
     assert not (await livekit._livekit()).ok
 
+    web_livekit_context = ProjectContext(
+        tmp_path,
+        livekit_manifest,
+        False,
+        {
+            "LIVEKIT_URL": "wss://project.livekit.cloud",
+            "LIVEKIT_API_KEY": "key",  # pragma: allowlist secret
+            "LIVEKIT_API_SECRET": "secret",  # pragma: allowlist secret
+        },
+    )
+    web_livekit = Doctor(
+        web_livekit_context,
+        key_validator=ValidKeys(),
+        livekit_validator=ValidLiveKit(),
+    )
+    assert (await web_livekit._livekit()).ok
+
+    phone_livekit_manifest = livekit_manifest.model_copy(
+        update={
+            "channels": frozenset({"phone"}),
+            "carriers": ["twilio"],
+            "phone_number": "+14155550123",
+        }
+    )
+    phone_livekit = Doctor(
+        ProjectContext(
+            tmp_path,
+            phone_livekit_manifest,
+            False,
+            web_livekit_context.environment,
+        ),
+        key_validator=ValidKeys(),
+        livekit_validator=ValidLiveKit(),
+    )
+    phone_check = await phone_livekit._livekit()
+    assert not phone_check.ok
+    assert "VOICEKIT_LIVEKIT_SIP_URI" in phone_check.issues[0]
+
+    complete_phone_environment = {
+        **web_livekit_context.environment,
+        "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+        "VOICEKIT_TWILIO_SIP_DOMAIN": "voicekit.pstn.twilio.com",
+        "VOICEKIT_TWILIO_SIP_USERNAME": "voicekit-user",
+        "VOICEKIT_TWILIO_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+    }
+    sip_inspector = ValidSipInspector()
+    complete_phone = Doctor(
+        ProjectContext(
+            tmp_path,
+            phone_livekit_manifest,
+            False,
+            complete_phone_environment,
+        ),
+        key_validator=ValidKeys(),
+        livekit_validator=ValidLiveKit(),
+        livekit_sip_inspector=cast("LiveKitSipInspector", sip_inspector),
+    )
+    assert (await complete_phone._livekit()).ok
+    assert sip_inspector.names == ["voicekit-livekit-agent-14155550123"]
+
     class FakeRepository:
         def __init__(self, _path: Path) -> None:
             return
@@ -560,3 +649,58 @@ def test_doctor_local_negative_branches(
         invalid_manifest,
     )
     assert not invalid_carrier.ok
+
+
+@pytest.mark.asyncio
+async def test_livekit_sip_inspector_reads_exact_managed_resources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = "voicekit-livekit-agent-14155550123"
+    names = {
+        "inbound": expected,
+        "outbound": expected,
+        "dispatch": expected,
+    }
+    closed: list[bool] = []
+
+    class FakeSip:
+        async def list_sip_inbound_trunk(self, _request: object) -> object:
+            return SimpleNamespace(items=[SimpleNamespace(name=names["inbound"])])
+
+        async def list_sip_outbound_trunk(self, _request: object) -> object:
+            return SimpleNamespace(items=[SimpleNamespace(name=names["outbound"])])
+
+        async def list_sip_dispatch_rule(self, _request: object) -> object:
+            return SimpleNamespace(items=[SimpleNamespace(name=names["dispatch"])])
+
+    class FakeLiveKitAPI:
+        sip = FakeSip()
+
+        def __init__(self, **_values: str) -> None:
+            return
+
+        async def aclose(self) -> None:
+            closed.append(True)
+
+    monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
+    inspector = LiveKitSipInspector()
+    values = {
+        "LIVEKIT_URL": "wss://project.livekit.cloud",
+        "LIVEKIT_API_KEY": "key",  # pragma: allowlist secret
+        "LIVEKIT_API_SECRET": "secret",  # pragma: allowlist secret
+    }
+
+    assert await inspector.inspect(values, expected_name=expected) == ((), ())
+    names["outbound"] = "other"
+    issues, advice = await inspector.inspect(values, expected_name=expected)
+    assert "outbound trunk" in issues[0]
+    assert "voicekit dev --phone" in advice[0]
+    assert closed == [True, True]
+
+    async def rejected(_self: object, _request: object) -> object:
+        raise RuntimeError("rejected")
+
+    monkeypatch.setattr(FakeSip, "list_sip_inbound_trunk", rejected)
+    failure, fix = await inspector.inspect(values, expected_name=expected)
+    assert "unreachable or rejected" in failure[0]
+    assert "project permissions" in fix[0]

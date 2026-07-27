@@ -17,12 +17,30 @@ export type Bootstrap = {
   reload: ReloadStatus;
 };
 
-export type IssuedSession = {
+type IssuedSessionBase = {
   session_id: string;
   token: string;
   expires_at: number;
-  webrtc_url: string;
   poll_url: string;
+};
+
+export type PipecatIssuedSession = IssuedSessionBase & {
+  runtime: "pipecat";
+  webrtc_url: string;
+};
+
+export type LiveKitIssuedSession = IssuedSessionBase & {
+  runtime: "livekit";
+  token_url: string;
+};
+
+export type IssuedSession = PipecatIssuedSession | LiveKitIssuedSession;
+
+export type LiveKitRoomToken = {
+  server_url: string;
+  participant_token: string;
+  room_name: string;
+  participant_identity: string;
 };
 
 export type TimelineEvent = {
@@ -139,6 +157,17 @@ export function getBootstrap(): Promise<Bootstrap> {
 export function issueSession(signal?: AbortSignal): Promise<IssuedSession> {
   return requestJson<IssuedSession>("/api/playground/sessions", {
     method: "POST",
+    signal,
+  });
+}
+
+export function exchangeLiveKitToken(
+  session: LiveKitIssuedSession,
+  signal?: AbortSignal,
+): Promise<LiveKitRoomToken> {
+  return requestJson<LiveKitRoomToken>(session.token_url, {
+    method: "POST",
+    headers: { authorization: `Bearer ${session.token}` },
     signal,
   });
 }

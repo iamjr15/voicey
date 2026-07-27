@@ -1,9 +1,9 @@
 # Browser playground
 
-`voicekit dev` serves the same Pipecat engine used by phone calls and places a
-protected browser console beside it. The console is a diagnostic surface, not
-a second conversation implementation: flows and tools remain native Pipecat
-code.
+`voicekit dev` serves the selected Pipecat or LiveKit engine used by phone
+calls and places a protected browser console beside it. The console is a
+diagnostic surface, not a second conversation implementation: flows and tools
+remain native runtime code.
 
 ## Start it
 
@@ -17,12 +17,14 @@ The default addresses are:
 
 | Listener | Address | Contents |
 |---|---|---|
-| Public runtime | `http://127.0.0.1:7860` | carrier routes and token-gated WebRTC signaling |
+| Public runtime | `http://127.0.0.1:7860` | Pipecat signaling or LiveKit room-token exchange |
 | Local admin | `http://127.0.0.1:7861` | playground, session issuance, call/result/recording reads |
+| LiveKit worker health | `http://127.0.0.1:7862` | LiveKit projects only; native worker health |
 
-`--port N` moves the public listener to `N` and admin to `N + 1`; the highest
-valid value is therefore `65534`. `--no-open` leaves both servers running but
-does not launch a browser.
+`--port N` moves the public listener to `N`, admin to `N + 1`, and LiveKit
+worker health to `N + 2`. The highest valid value is `65534` for Pipecat and
+`65533` for LiveKit. `--no-open` leaves the processes running without opening
+a browser.
 
 Phone development preserves the boundary:
 
@@ -45,20 +47,25 @@ local.
 - the exact immutable terminal-event JSON that webhook delivery signs;
 - the active reload revision from the protected repository.
 
-The media bundle loads only after **Start talking**. Provider credentials never
-enter the page.
+The runtime-specific media bundle loads only after **Start talking**. Provider
+API keys never enter the page.
 
 ## Browser-session security
 
 Before returning a browser token, the admin listener reserves runtime capacity
 and creates the durable call row. It then mints a short-lived token carrying
 issuer, audience, agent, session, durable call, nonce, issued-at, and expiry
-claims. The page sends it as `Authorization: Bearer …` on signaling requests;
-it never appears in a query string or fragment. The first authenticated offer
-consumes the token and binds the pre-reserved call to the Pipecat peer. PATCH
-signaling must match that binding. A failed authenticated offer consumes the
-token and terminalizes the reservation as `call.failed`. Expiry, replay,
-tampering, cross-agent/audience use, and peer changes fail with `VK-WEB-001`.
+claims. The page sends this **voicekit token** as
+`Authorization: Bearer …`; it never appears in a query string or fragment.
+
+For Pipecat, the first authenticated offer consumes the token and binds the
+pre-reserved call to the peer; PATCH signaling must match that binding. For
+LiveKit, public `POST /api/livekit/token` consumes it and returns a distinct,
+short-lived room credential. The pinned official client uses that credential
+with LiveKit's native signaling protocol, which may include provider-native
+query fields. A failed authenticated exchange consumes the voicekit token and
+terminalizes the reservation as `call.failed`. Expiry, replay, tampering,
+cross-agent/audience use, and peer changes fail with `VK-WEB-001`.
 
 Issuance has per-client, active-session, and global limits. Signaling has a
 bounded rate. Origins must be the local admin origin or an explicit
@@ -66,10 +73,12 @@ bounded rate. Origins must be the local admin origin or an explicit
 headers only from configured proxy CIDRs and must equal the configured public
 origin.
 
-The public application has no token-mint, call-record, result, or recording
-route. Local admin requests require the exact listener Host and reject foreign
-Origin values. An integrator that exposes the admin application outside
-loopback must supply an authentication hook; startup fails closed otherwise.
+The public application has no admin session-issuance, call-record, result, or
+recording route. Its LiveKit-only room-token exchange accepts only a previously
+issued one-use voicekit bearer. Local admin requests require the exact listener
+Host and reject foreign Origin values. An integrator that exposes the admin
+application outside loopback must supply an authentication hook; startup fails
+closed otherwise.
 
 Responses use no-store, nosniff, no-referrer, restrictive Permissions Policy,
 and a self-hosted Content Security Policy. The Pipecat audio path uses the
@@ -92,8 +101,9 @@ No active call changes revision mid-session.
 
 ## Assets and packaging
 
-The Vite/React source is in `playground-web/`. The application uses the pinned
-Pipecat client, small-WebRTC transport, and voice-ui-kit packages. Build and
+The Vite/React source is in `playground-web/`. The application lazy-loads the
+pinned Pipecat client/small-WebRTC/voice-ui-kit path or
+`livekit-client==2.21.0` from the session's runtime discriminator. Build and
 test it directly with:
 
 ```bash

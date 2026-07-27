@@ -427,7 +427,7 @@ async def test_livekit_token_reserves_before_dispatch_and_mints_agent_claim() ->
 
     issuer = LiveKitTokenIssuer(
         server_url="wss://project.livekit.cloud",
-        api_key="test-key",
+        api_key="test-key",  # pragma: allowlist secret
         api_secret="test-secret-that-is-more-than-long-enough",  # pragma: allowlist secret
         agent_name="livekit-test",
     )

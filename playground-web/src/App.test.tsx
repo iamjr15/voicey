@@ -17,6 +17,14 @@ vi.mock("./PipecatSession", () => ({
   ),
 }));
 
+vi.mock("./LiveKitSession", () => ({
+  default: ({ onEnd }: { onEnd: () => void }) => (
+    <button type="button" onClick={onEnd}>
+      End LiveKit session
+    </button>
+  ),
+}));
+
 const bootstrap = {
   agent: "support-desk",
   runtime: "pipecat",
@@ -34,6 +42,7 @@ const session = {
   session_id: "web_test",
   token: "header.payload.signature",
   expires_at: 4_102_444_800,
+  runtime: "pipecat",
   webrtc_url: "http://127.0.0.1:7861/api/offer",
   poll_url: "/api/playground/sessions/web_test",
 };
@@ -162,6 +171,41 @@ describe("App", () => {
     expect(screen.getByText("1 interruptions")).toBeInTheDocument();
     expect(screen.getByText("revision 2 loaded")).toBeInTheDocument();
     expect(screen.getByText(/requested_action/)).toBeInTheDocument();
+  });
+
+  it("selects the LiveKit media adapter behind the identical console", async () => {
+    const livekitBootstrap = { ...bootstrap, runtime: "livekit" };
+    const livekitSession = {
+      session_id: "web_livekit",
+      token: "header.payload.signature",
+      expires_at: 4_102_444_800,
+      runtime: "livekit",
+      token_url: "http://127.0.0.1:7861/api/livekit/token",
+      poll_url: "/api/playground/sessions/web_livekit",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockImplementation(async (input) => {
+        const path = String(input);
+        if (path.endsWith("/bootstrap")) return jsonResponse(livekitBootstrap);
+        if (path.endsWith("/sessions")) return jsonResponse(livekitSession);
+        if (path === livekitSession.poll_url) {
+          return jsonResponse({
+            ...snapshot,
+            session: { ...snapshot.session, session_id: "web_livekit" },
+          });
+        }
+        return new Response("not found", { status: 404 });
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start talking" }));
+    expect(
+      await screen.findByRole("button", { name: "End LiveKit session" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("livekit")).toBeInTheDocument();
+    expect(screen.getByText("Provider keys never enter this page.")).toBeInTheDocument();
   });
 
   it("ends a session and offers a fresh token", async () => {

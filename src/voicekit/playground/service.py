@@ -27,6 +27,46 @@ from voicekit.storage.models import (
 AdminAuthorizer = Callable[[Request], Awaitable[bool]]
 ReloadStatus = Callable[[], Mapping[str, object]]
 WebCallReserver = Callable[[], Awaitable[str]]
+WebCallCanceler = Callable[[str], Awaitable[None]]
+
+
+class PublicSessionSecurity(Protocol):
+    """One-use public-listener authorization shared by both browser runtimes."""
+
+    async def authorize(self, request: Request, *, pc_id: str | None) -> object: ...
+
+    async def bind(self, identity: object, *, pc_id: str, call_id: str) -> None: ...
+
+    async def cancel(self, identity: object) -> None: ...
+
+    async def reserved_call_id(self, identity: object) -> str: ...
+
+
+class BrowserRoomToken(Protocol):
+    @property
+    def server_url(self) -> str: ...
+
+    @property
+    def participant_token(self) -> str: ...
+
+    @property
+    def room_name(self) -> str: ...
+
+    @property
+    def participant_identity(self) -> str: ...
+
+
+class BrowserRoomTokenIssuer(Protocol):
+    """Runtime-neutral shape implemented by the pinned LiveKit token issuer."""
+
+    def issue(
+        self,
+        *,
+        call_id: str,
+        room_name: str,
+        participant_identity: str,
+        metadata: dict[str, str],
+    ) -> BrowserRoomToken: ...
 
 
 class PlaygroundRepository(Protocol):
@@ -56,6 +96,7 @@ class PlaygroundSettings:
     public_origin: str
     frontend_dir: Path
     local_only: bool = True
+    connect_origins: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if _origin(self.admin_origin) != self.admin_origin:
@@ -71,6 +112,8 @@ class PlaygroundSettings:
                 "VK-WEB-004",
                 detail="local admin listener must use a loopback origin.",
             )
+        for value in self.connect_origins:
+            _connect_origin(value)
 
 
 class PlaygroundService:
@@ -87,6 +130,9 @@ class PlaygroundService:
         reserve_web_call: WebCallReserver,
         admin_authorizer: AdminAuthorizer | None = None,
         reload_status: ReloadStatus | None = None,
+        public_security: PublicSessionSecurity | None = None,
+        room_token_issuer: BrowserRoomTokenIssuer | None = None,
+        cancel_web_call: WebCallCanceler | None = None,
     ) -> None:
         if not settings.local_only and admin_authorizer is None:
             raise VoicekitError(
@@ -100,6 +146,16 @@ class PlaygroundService:
         self.settings = settings
         self.reserve_web_call = reserve_web_call
         self.admin_authorizer = admin_authorizer
+        self.public_security = public_security
+        self.room_token_issuer = room_token_issuer
+        self.cancel_web_call = cancel_web_call
+        if agent.runtime == "livekit" and (
+            public_security is None or room_token_issuer is None or cancel_web_call is None
+        ):
+            raise VoicekitError(
+                "VK-WEB-005",
+                detail="LiveKit playground requires public session security and room tokens.",
+            )
         self.reload_status = reload_status or (
             lambda: {"revision": 0, "state": "ready", "message": None}
         )
@@ -121,6 +177,13 @@ class PlaygroundService:
         return self.settings.frontend_dir
 
     def _install_public_browser_boundary(self) -> None:
+        @self.public_app.exception_handler(VoicekitError)
+        async def public_voicekit_error_handler(  # pyright: ignore[reportUnusedFunction]
+            _request: Request,
+            error: VoicekitError,
+        ) -> JSONResponse:
+            return _voicekit_error_response(error)
+
         @self.public_app.middleware("http")
         async def browser_cors(  # pyright: ignore[reportUnusedFunction]
             request: Request,
@@ -158,6 +221,46 @@ class PlaygroundService:
                 response.headers["vary"] = "Origin"
             return response
 
+        if self.agent.runtime == "livekit":
+
+            @self.public_app.post("/api/livekit/token")
+            async def livekit_token(  # pyright: ignore[reportUnusedFunction]
+                request: Request,
+            ) -> dict[str, str]:
+                assert self.public_security is not None
+                assert self.room_token_issuer is not None
+                assert self.cancel_web_call is not None
+                identity = await self.public_security.authorize(request, pc_id=None)
+                call_id = await self.public_security.reserved_call_id(identity)
+                room_name = f"web-{call_id.removeprefix('call_web_')}"
+                participant_identity = f"caller-{call_id.removeprefix('call_web_')}"
+                try:
+                    issued = self.room_token_issuer.issue(
+                        call_id=call_id,
+                        room_name=room_name,
+                        participant_identity=participant_identity,
+                        metadata={
+                            "channel": "web",
+                            "direction": "inbound",
+                            "provider": "livekit",
+                        },
+                    )
+                    await self.public_security.bind(
+                        identity,
+                        pc_id=room_name,
+                        call_id=call_id,
+                    )
+                except Exception:
+                    await self.public_security.cancel(identity)
+                    await self.cancel_web_call(call_id)
+                    raise
+                return {
+                    "server_url": issued.server_url,
+                    "participant_token": issued.participant_token,
+                    "room_name": issued.room_name,
+                    "participant_identity": issued.participant_identity,
+                }
+
     def _build_admin_app(self) -> FastAPI:
         app = FastAPI(
             title=f"voicekit playground:{self.agent.name}",
@@ -181,7 +284,8 @@ class PlaygroundService:
                 "script-src 'self' blob:; "
                 "style-src 'self'; "
                 "font-src 'self'; "
-                f"connect-src 'self' {self.settings.public_origin}; "
+                f"connect-src 'self' {self.settings.public_origin}"
+                f"{''.join(f' {value}' for value in self.settings.connect_origins)}; "
                 "media-src 'self' blob:; "
                 "img-src 'self' data:; "
                 "worker-src 'self' blob:; "
@@ -196,26 +300,7 @@ class PlaygroundService:
             _request: Request,
             error: VoicekitError,
         ) -> JSONResponse:
-            status = {
-                "VK-WEB-001": 404,
-                "VK-WEB-002": 403,
-                "VK-WEB-003": 429,
-                "VK-WEB-004": 403,
-                "VK-RUN-004": 429,
-                "VK-OBS-003": 404,
-                "VK-RES-009": 404,
-            }.get(error.code, 400)
-            return JSONResponse(
-                status_code=status,
-                content={
-                    "error": {
-                        "code": error.code,
-                        "message": error.definition.cause,
-                        "detail": error.detail,
-                        "fix": error.definition.fix,
-                    }
-                },
-            )
+            return _voicekit_error_response(error)
 
         @app.get("/api/playground/bootstrap")
         async def bootstrap(  # pyright: ignore[reportUnusedFunction]
@@ -243,7 +328,12 @@ class PlaygroundService:
                 "session_id": issued.identity.session_id,
                 "token": issued.token,
                 "expires_at": issued.identity.expires_at,
-                "webrtc_url": f"{self.settings.public_origin}/api/offer",
+                "runtime": self.agent.runtime,
+                **(
+                    {"webrtc_url": f"{self.settings.public_origin}/api/offer"}
+                    if self.agent.runtime == "pipecat"
+                    else {"token_url": f"{self.settings.public_origin}/api/livekit/token"}
+                ),
                 "poll_url": f"/api/playground/sessions/{issued.identity.session_id}",
             }
 
@@ -265,6 +355,9 @@ class PlaygroundService:
                 if call.status != "active":
                     event = await self.repository.get_terminal_event_for_call(session.call_id)
                     terminal = _event_payload(event)
+                    if session.pc_id is not None and session.active:
+                        await self.tokens.release(session.pc_id)
+                        session = await self.tokens.snapshot(session_id)
             return {
                 "session": {
                     "session_id": session.session_id,
@@ -341,6 +434,29 @@ def _event_payload(event: PersistedEvent) -> dict[str, object]:
     return dict(cast("dict[str, object]", value))
 
 
+def _voicekit_error_response(error: VoicekitError) -> JSONResponse:
+    status = {
+        "VK-WEB-001": 404,
+        "VK-WEB-002": 403,
+        "VK-WEB-003": 429,
+        "VK-WEB-004": 403,
+        "VK-RUN-004": 429,
+        "VK-OBS-003": 404,
+        "VK-RES-009": 404,
+    }.get(error.code, 400)
+    return JSONResponse(
+        status_code=status,
+        content={
+            "error": {
+                "code": error.code,
+                "message": error.definition.cause,
+                "detail": error.detail,
+                "fix": error.definition.fix,
+            }
+        },
+    )
+
+
 def _client_key(request: Request) -> str:
     address = request.client.host if request.client else "local"
     user_agent = request.headers.get("user-agent", "")
@@ -359,4 +475,19 @@ def _origin(value: str) -> str:
         or parsed.password
     ):
         raise VoicekitError("VK-WEB-002", detail=f"{value!r} is not an origin.")
+    return value.removesuffix("/")
+
+
+def _connect_origin(value: str) -> str:
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https", "ws", "wss"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise VoicekitError("VK-WEB-002", detail=f"{value!r} is not a connect origin.")
     return value.removesuffix("/")

@@ -20,6 +20,7 @@ from voicekit.errors import VoicekitError
 
 KeyStatus = Literal["valid", "invalid", "indeterminate", "missing"]
 _TEMPLATE = re.compile(r"\$\{(?P<name>[A-Z][A-Z0-9_]*)\}")
+LIVEKIT_ENV_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,10 @@ class KeyValidator(Protocol):
         identifier: str,
         values: Mapping[str, str],
     ) -> KeyCheck: ...
+
+
+class RuntimeKeyValidator(Protocol):
+    async def validate(self, values: Mapping[str, str]) -> KeyCheck: ...
 
 
 class _HttpxKeyClient:
@@ -169,6 +174,76 @@ class ProviderKeyValidator:
                 "Check account state and provider status, then retry "
                 "without rotating speculatively."
             ),
+        )
+
+
+class LiveKitKeyValidator:
+    """Validate a LiveKit project using an authenticated, read-only API call."""
+
+    async def validate(self, values: Mapping[str, str]) -> KeyCheck:
+        missing = tuple(name for name in LIVEKIT_ENV_VARS if not values.get(name))
+        if missing:
+            return KeyCheck(
+                provider="livekit",
+                env_names=LIVEKIT_ENV_VARS,
+                status="missing",
+                detail=f"{', '.join(missing)} is missing.",
+                fix="Run `voicekit keys add livekit`.",
+            )
+        try:
+            from livekit import api
+        except ImportError:
+            return KeyCheck(
+                provider="livekit",
+                env_names=LIVEKIT_ENV_VARS,
+                status="indeterminate",
+                detail="The LiveKit API package is not installed.",
+                fix='Install with `uv pip install "voicekit[livekit]"`, then retry.',
+            )
+
+        client: api.LiveKitAPI | None = None
+        try:
+            client = api.LiveKitAPI(
+                url=values["LIVEKIT_URL"],
+                api_key=values["LIVEKIT_API_KEY"],
+                api_secret=values["LIVEKIT_API_SECRET"],
+            )
+            await client.room.list_rooms(api.ListRoomsRequest())
+        except ValueError:
+            return KeyCheck(
+                provider="livekit",
+                env_names=LIVEKIT_ENV_VARS,
+                status="invalid",
+                detail="The LiveKit URL, API key, or API secret is malformed.",
+                fix="Replace the project credentials with `voicekit keys add livekit`.",
+            )
+        except Exception as exc:
+            status_code = getattr(exc, "status", None)
+            invalid = status_code in {401, 403}
+            return KeyCheck(
+                provider="livekit",
+                env_names=LIVEKIT_ENV_VARS,
+                status="invalid" if invalid else "indeterminate",
+                detail=(
+                    "The LiveKit project rejected the credentials."
+                    if invalid
+                    else "The LiveKit project endpoint was unreachable or inconclusive."
+                ),
+                fix=(
+                    "Replace the project credentials with `voicekit keys add livekit`."
+                    if invalid
+                    else "Check the project URL and network, then rerun validation."
+                ),
+            )
+        finally:
+            if client is not None:
+                await client.aclose()
+        return KeyCheck(
+            provider="livekit",
+            env_names=LIVEKIT_ENV_VARS,
+            status="valid",
+            detail="Authenticated LiveKit room-list read succeeded.",
+            fix="No action required.",
         )
 
 

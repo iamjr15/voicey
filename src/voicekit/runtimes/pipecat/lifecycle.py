@@ -242,6 +242,40 @@ class PipecatLifecycleManager:
         except Exception:
             await self.admission.release(admission_lease)
             raise
+        return await self._activate(call, admission_lease, lease)
+
+    async def claim_reserved(
+        self,
+        call: PipecatCall,
+        admission_lease: AdmissionLease,
+        *,
+        expected_owner_id: str,
+    ) -> PipecatCallLifecycle:
+        """Fence a durable browser reservation into the dispatched worker."""
+        if admission_lease.call_id != call.call_id:
+            await self.admission.release(admission_lease)
+            raise VoicekitError(
+                "VK-RUN-005",
+                detail="admission lease does not match reserved call metadata.",
+            )
+        try:
+            lease = await self.repository.handoff_call(
+                call.call_id,
+                expected_owner_id=expected_owner_id,
+                owner_id=self.owner_id,
+                lease_ttl=self.lease_ttl,
+            )
+        except Exception:
+            await self.admission.release(admission_lease)
+            raise
+        return await self._activate(call, admission_lease, lease)
+
+    async def _activate(
+        self,
+        call: PipecatCall,
+        admission_lease: AdmissionLease,
+        lease: CallLease,
+    ) -> PipecatCallLifecycle:
         lifecycle = PipecatCallLifecycle(
             repository=self.repository,
             admission=self.admission,

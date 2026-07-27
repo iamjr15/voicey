@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  exchangeLiveKitToken,
   getBootstrap,
   getSessionSnapshot,
   issueSession,
@@ -34,6 +35,7 @@ describe("playground API", () => {
             session_id: "web_1",
             token: "header.payload.signature",
             expires_at: 1000,
+            runtime: "pipecat",
             webrtc_url: "http://127.0.0.1:7861/api/offer",
             poll_url: "/api/playground/sessions/web_1",
           }),
@@ -66,6 +68,37 @@ describe("playground API", () => {
     const session = await issueSession();
     expect(session.token).toBe("header.payload.signature");
     expect((await getSessionSnapshot(session.poll_url)).session.session_id).toBe("web_1");
+  });
+
+  it("exchanges a one-use Voicekit token in an authorization header", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      expect(String(input)).toBe("http://127.0.0.1:7861/api/livekit/token");
+      expect(String(input)).not.toContain("header.payload.signature");
+      expect(init?.method).toBe("POST");
+      expect(init?.headers).toEqual(expect.objectContaining({
+        authorization: "Bearer header.payload.signature",
+      }));
+      return new Response(
+        JSON.stringify({
+          server_url: "wss://project.livekit.cloud",
+          participant_token: "lk-token",
+          room_name: "web-room",
+          participant_identity: "caller-id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const token = await exchangeLiveKitToken({
+      session_id: "web_1",
+      token: "header.payload.signature",
+      expires_at: 1000,
+      runtime: "livekit",
+      token_url: "http://127.0.0.1:7861/api/livekit/token",
+      poll_url: "/api/playground/sessions/web_1",
+    });
+    expect(token.room_name).toBe("web-room");
   });
 
   it("surfaces catalog codes, details, and fixes", async () => {

@@ -21,7 +21,12 @@ from voicekit.cli.context import (
     require_manifest,
 )
 from voicekit.cli.environment import EnvFileStore, ensure_env_ignored, merged_environment
-from voicekit.cli.keys import ProviderKeyValidator, mask_value, required_entries
+from voicekit.cli.keys import (
+    LiveKitKeyValidator,
+    ProviderKeyValidator,
+    mask_value,
+    required_entries,
+)
 from voicekit.cli.scaffold import ScaffoldWriter, ScratchScaffold
 from voicekit.config.catalog import ProviderCatalog, ProviderCatalogEntry
 from voicekit.config.manifest import (
@@ -70,11 +75,9 @@ class RaisingHttpClient:
         raise httpx.ConnectError("offline")
 
 
-def test_capabilities_and_recipes_refuse_unimplemented_choices() -> None:
+def test_capabilities_and_recipes_report_runtime_and_recipe_availability() -> None:
     assert DEFAULT_CAPABILITIES.require("runtime", "pipecat").enabled
-    with pytest.raises(VoicekitError, match="P2") as caught:
-        DEFAULT_CAPABILITIES.require("runtime", "livekit")
-    assert caught.value.code == "VK-CLI-005"
+    assert DEFAULT_CAPABILITIES.require("runtime", "livekit").enabled
 
     available = DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False)
     assert [recipe.name for recipe in available] == ["appointment-booking"]
@@ -82,6 +85,95 @@ def test_capabilities_and_recipes_refuse_unimplemented_choices() -> None:
     with pytest.raises(VoicekitError) as recipe_error:
         DEFAULT_RECIPE_REGISTRY.require("appointment-booking", "livekit")
     assert recipe_error.value.code == "VK-CLI-005"
+
+
+@pytest.mark.asyncio
+async def test_livekit_key_validator_uses_read_only_room_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class Room:
+        async def list_rooms(self, _request: object) -> object:
+            calls.append("list_rooms")
+            return object()
+
+    class FakeLiveKitAPI:
+        room = Room()
+
+        def __init__(self, *, url: str, api_key: str, api_secret: str) -> None:
+            calls.extend((url, api_key, api_secret))
+
+        async def aclose(self) -> None:
+            calls.append("close")
+
+    monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
+    validator = LiveKitKeyValidator()
+
+    missing = await validator.validate({})
+    valid = await validator.validate(
+        {
+            "LIVEKIT_URL": "wss://project.livekit.cloud",
+            "LIVEKIT_API_KEY": "key",  # pragma: allowlist secret
+            "LIVEKIT_API_SECRET": "secret",  # pragma: allowlist secret
+        }
+    )
+
+    assert missing.status == "missing"
+    assert valid.status == "valid"
+    assert calls == [
+        "wss://project.livekit.cloud",
+        "key",
+        "secret",
+        "list_rooms",
+        "close",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure_kind", "expected"),
+    [
+        ("value", "invalid"),
+        ("auth", "invalid"),
+        ("network", "indeterminate"),
+    ],
+)
+async def test_livekit_key_validator_classifies_safe_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_kind: str,
+    expected: str,
+) -> None:
+    class ProviderError(RuntimeError):
+        status = 401
+
+    class Room:
+        async def list_rooms(self, _request: object) -> object:
+            if failure_kind == "value":
+                raise ValueError("bad settings")
+            if failure_kind == "auth":
+                raise ProviderError("provider rejection")
+            raise RuntimeError("offline")
+
+    class FailingLiveKitAPI:
+        room = Room()
+
+        def __init__(self, **_values: str) -> None:
+            return
+
+        async def aclose(self) -> None:
+            return
+
+    monkeypatch.setattr("livekit.api.LiveKitAPI", FailingLiveKitAPI)
+    result = await LiveKitKeyValidator().validate(
+        {
+            "LIVEKIT_URL": "wss://project.livekit.cloud",
+            "LIVEKIT_API_KEY": "key",  # pragma: allowlist secret
+            "LIVEKIT_API_SECRET": "secret",  # pragma: allowlist secret
+        }
+    )
+
+    assert result.status == expected
 
 
 def test_capability_registry_indexes_filters_and_catalogs_bad_entries() -> None:
@@ -552,6 +644,34 @@ def test_scaffold_refuses_to_overwrite_user_content(tmp_path: Path) -> None:
     assert json.loads(
         json.dumps({"user_file": (tmp_path / "agent.py").read_text(encoding="utf-8")})
     ) == {"user_file": "# mine\n"}
+
+
+def test_scaffold_rejects_manifest_runtime_mismatch(tmp_path: Path) -> None:
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    manifest = ProjectManifest(
+        project_name="mismatch",
+        runtime="livekit",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"web"}),
+        models=models,
+    )
+    scaffold = ScratchScaffold(
+        project_name="mismatch",
+        description="Mismatch.",
+        stt=models["stt"],
+        llm=models["llm"],
+        tts=models["tts"],
+        phone_provider=None,
+        phone_number=None,
+        web_enabled=True,
+    )
+
+    with pytest.raises(VoicekitError, match="does not match"):
+        ScaffoldWriter().write(tmp_path, scaffold, manifest)
 
 
 def test_scaffold_merges_gitignore_is_idempotent_and_supports_web_off(

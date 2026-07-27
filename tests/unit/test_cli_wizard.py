@@ -126,6 +126,37 @@ class RejectingKeyValidator:
         )
 
 
+class AcceptingLiveKitValidator:
+    async def validate(self, values: Mapping[str, str]) -> KeyCheck:
+        status = (
+            "valid"
+            if all(
+                values.get(name)
+                for name in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
+            )
+            else "missing"
+        )
+        return KeyCheck(
+            provider="livekit",
+            env_names=("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"),
+            status=status,
+            detail="checked",
+            fix="paste LiveKit project credentials",
+        )
+
+
+class RejectingLiveKitValidator:
+    async def validate(self, values: Mapping[str, str]) -> KeyCheck:
+        del values
+        return KeyCheck(
+            provider="livekit",
+            env_names=("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"),
+            status="invalid",
+            detail="rejected",
+            fix="replace project credentials",
+        )
+
+
 class FakeDrafter(PromptDrafter):
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
@@ -150,6 +181,12 @@ REFERENCE_ENV = {
     "DEEPGRAM_API_KEY": "dg-key",  # pragma: allowlist secret
     "ANTHROPIC_API_KEY": "ant-key",  # pragma: allowlist secret
     "CARTESIA_API_KEY": "car-key",  # pragma: allowlist secret
+}
+LIVEKIT_ENV = {
+    **REFERENCE_ENV,
+    "LIVEKIT_URL": "wss://project.livekit.cloud",
+    "LIVEKIT_API_KEY": "livekit-key",  # pragma: allowlist secret
+    "LIVEKIT_API_SECRET": "livekit-secret",  # pragma: allowlist secret
 }
 
 
@@ -310,7 +347,7 @@ async def test_resume_uses_checkpoint_without_reasking_saved_answers(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_unavailable_runtime_fails_before_key_or_scaffold_writes(tmp_path: Path) -> None:
+async def test_unknown_runtime_fails_before_key_or_scaffold_writes(tmp_path: Path) -> None:
     wizard = InitWizard(
         prompt=ScriptedPrompt(interactive=False),
         key_validator=AcceptingKeyValidator(),
@@ -326,7 +363,7 @@ async def test_unavailable_runtime_fails_before_key_or_scaffold_writes(tmp_path:
                 recipe="scratch",
                 description="Do a thing.",
                 channels=("web",),
-                runtime="livekit",
+                runtime="missing",
                 models=REFERENCE_MODELS,
                 draft_prompts=False,
             ),
@@ -335,6 +372,133 @@ async def test_unavailable_runtime_fails_before_key_or_scaffold_writes(tmp_path:
     assert caught.value.code == "VK-CLI-005"
     assert not (project_dir / ".env").exists()
     assert not (project_dir / "agent.py").exists()
+
+
+@pytest.mark.asyncio
+async def test_livekit_web_wizard_produces_native_quickstart(tmp_path: Path) -> None:
+    wizard = InitWizard(
+        prompt=ScriptedPrompt(interactive=False),
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=AcceptingLiveKitValidator(),
+        environment=LIVEKIT_ENV,
+    )
+
+    result = await wizard.run(
+        tmp_path / "livekit-agent",
+        InitOptions(
+            project_name="livekit-agent",
+            recipe="scratch",
+            description="Help callers with product questions.",
+            channels=("web",),
+            runtime="livekit",
+            models=REFERENCE_MODELS,
+            draft_prompts=False,
+        ),
+    )
+
+    assert result.manifest.runtime == "livekit"
+    assert "runtime='livekit'" in (result.project_dir / "agent.py").read_text(encoding="utf-8")
+    flow = (result.project_dir / "flow.py").read_text(encoding="utf-8")
+    assert "from livekit.agents import Agent, FunctionTool" in flow
+    assert "pipecat.flows" not in flow
+    assert "voicekit[livekit]" in (result.project_dir / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+    env_example = (result.project_dir / ".env.example").read_text(encoding="utf-8")
+    assert "LIVEKIT_URL=" in env_example
+    assert "LIVEKIT_API_SECRET=" in env_example
+    env_payload = (result.project_dir / ".env").read_text(encoding="utf-8")
+    assert "livekit-secret" not in env_payload
+
+
+@pytest.mark.asyncio
+async def test_livekit_wizard_collects_valid_credentials_in_flow(tmp_path: Path) -> None:
+    prompt = ScriptedPrompt(
+        texts=["wss://project.livekit.cloud"],
+        secrets=["livekit-key", "livekit-secret"],  # pragma: allowlist secret
+    )
+    wizard = InitWizard(
+        prompt=prompt,
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=AcceptingLiveKitValidator(),
+        environment=REFERENCE_ENV,
+    )
+
+    result = await wizard.run(
+        tmp_path / "livekit-collected",
+        InitOptions(
+            project_name="livekit-collected",
+            recipe="scratch",
+            description="Collect credentials.",
+            channels=("web",),
+            runtime="livekit",
+            models=REFERENCE_MODELS,
+            draft_prompts=False,
+        ),
+    )
+
+    env = (result.project_dir / ".env").read_text(encoding="utf-8")
+    assert "LIVEKIT_URL" in env
+    assert "LIVEKIT_API_KEY" in env
+    assert "LIVEKIT_API_SECRET" in env
+    assert any("livekit credentials validated" in notice for notice in prompt.notices)
+
+
+@pytest.mark.asyncio
+async def test_livekit_wizard_key_failures_are_actionable(tmp_path: Path) -> None:
+    options = InitOptions(
+        project_name="livekit-bad",
+        recipe="scratch",
+        description="Reject credentials.",
+        channels=("web",),
+        runtime="livekit",
+        models=REFERENCE_MODELS,
+        draft_prompts=False,
+    )
+    noninteractive = InitWizard(
+        prompt=ScriptedPrompt(interactive=False),
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=RejectingLiveKitValidator(),
+        environment=REFERENCE_ENV,
+    )
+    with pytest.raises(VoicekitError, match="keys add livekit"):
+        await noninteractive.run(tmp_path / "livekit-noninteractive", options)
+
+    process_values = {
+        **REFERENCE_ENV,
+        "LIVEKIT_URL": "wss://bad.livekit.cloud",
+        "LIVEKIT_API_KEY": "bad",  # pragma: allowlist secret
+        "LIVEKIT_API_SECRET": "bad",  # pragma: allowlist secret
+    }
+    process = InitWizard(
+        prompt=ScriptedPrompt(),
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=RejectingLiveKitValidator(),
+        environment=process_values,
+    )
+    with pytest.raises(VoicekitError, match="process environment"):
+        await process.run(tmp_path / "livekit-process", options)
+
+    blank = InitWizard(
+        prompt=ScriptedPrompt(texts=[""], secrets=["key", "secret"]),
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=RejectingLiveKitValidator(),
+        environment=REFERENCE_ENV,
+    )
+    with pytest.raises(VoicekitError, match="cannot be blank"):
+        await blank.run(tmp_path / "livekit-blank", options)
+
+    exhausted = InitWizard(
+        prompt=ScriptedPrompt(
+            texts=["wss://bad"] * 3,
+            secrets=["bad"] * 6,
+        ),
+        key_validator=AcceptingKeyValidator(),
+        livekit_validator=RejectingLiveKitValidator(),
+        environment=REFERENCE_ENV,
+    )
+    with pytest.raises(VoicekitError, match="failed three validation attempts"):
+        await exhausted.run(tmp_path / "livekit-exhausted", options)
 
 
 @pytest.mark.asyncio

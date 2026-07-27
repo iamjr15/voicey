@@ -19,7 +19,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
 | Pipecat SmallWebRTC | `@pipecat-ai/small-webrtc-transport==1.10.6` | npm registry checked 2026-07-26 |
 | Pipecat Voice UI Kit | `@pipecat-ai/voice-ui-kit==0.13.0` | npm registry checked 2026-07-26 |
-| LiveKit client JS | `livekit-client==2.21.0` | npm registry checked 2026-07-26 |
+| LiveKit client JS | `livekit-client==2.21.0` | Installed 2026-07-27; `Room`, `RoomEvent`, microphone enablement, remote audio attachment, transcription, and disconnect surfaces inspected and exercised |
 
 ## Verified volatile API points
 
@@ -32,6 +32,11 @@ This table records versions empirically installed and inspected during P0. Runti
 - Pipecat transports: per-provider websocket and SmallWebRTC paths; `FastAPIWebsocketParams` and base `TransportParams` do not accept `vad_analyzer`.
 - Twilio serializer: `TwilioFrameSerializer(..., base_url=..., params=TwilioFrameSerializer.InputParams(...))`.
 - LiveKit worker: `AgentServer`, `@server.rtc_session`, `setup_fnc`, `AgentSession(turn_handling=TurnHandlingOptions(...))`.
+- LiveKit project validation: `LiveKitAPI(url, api_key, api_secret)` then
+  `room.list_rooms(ListRoomsRequest())`; always `await aclose()`.
+- LiveKit browser: construct `Room`, subscribe to `RoomEvent`, connect with the
+  short-lived participant token, attach remote `AudioTrack` publications, call
+  `setMicrophoneEnabled()`, and `disconnect()` during cleanup.
 - LiveKit turn detection: the installed 1.6.7 `livekit.plugins.turn_detector` path is deprecated; use `livekit.agents.inference.TurnDetector(version="v1-mini")` locally.
 - LiveKit's 1.6.7 OpenAI plugin requires `websockets<16`; the shared supported range is `>=13.1,<17`, with the lock selecting 15.x when all runtime extras are installed. Voicekit uses APIs present throughout that range and tests both runtime extras together.
 - LiveKit SIP: current trunk/rule methods are `create_inbound_trunk` and `create_dispatch_rule`; their `create_sip_*` aliases are deprecated. `create_sip_participant` and `transfer_sip_participant` remain current.

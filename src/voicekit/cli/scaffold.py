@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from voicekit.config.manifest import ManifestStore, ProjectManifest
+from voicekit.config.models import RuntimeName
 from voicekit.errors import VoicekitError
 
 
@@ -23,6 +24,7 @@ class ScratchScaffold:
     phone_provider: str | None
     phone_number: str | None
     web_enabled: bool
+    runtime: RuntimeName = "pipecat"
     recipe_name: str = "scratch"
     recipe_version: str = "1.0.0"
 
@@ -36,6 +38,14 @@ class ScaffoldWriter:
         scaffold: ScratchScaffold,
         manifest: ProjectManifest,
     ) -> tuple[Path, ...]:
+        if scaffold.runtime != manifest.runtime:
+            raise VoicekitError(
+                "VK-CLI-007",
+                detail=(
+                    f"scaffold runtime {scaffold.runtime!r} does not match "
+                    f"manifest runtime {manifest.runtime!r}."
+                ),
+            )
         rendered = _render(scaffold)
         gitignore = project_dir / ".gitignore"
         if gitignore.is_symlink():
@@ -128,7 +138,7 @@ def _render(scaffold: ScratchScaffold) -> dict[str, str]:
 
 agent = Agent(
     name={scaffold.project_name!r},
-    runtime="pipecat",
+    runtime={scaffold.runtime!r},
     models=Models(
         stt={scaffold.stt!r},
         llm={scaffold.llm!r},
@@ -145,7 +155,8 @@ agent = Agent(
     ),
 )
 '''
-    flow = '''"""Native Pipecat Flows entrypoint."""
+    if scaffold.runtime == "pipecat":
+        flow = '''"""Native Pipecat Flows entrypoint."""
 
 from pathlib import Path
 
@@ -166,6 +177,34 @@ def entry(_flow_manager: FlowManager) -> NodeConfig:
         respond_immediately=True,
     )
 '''
+        flow_reference = "flow:entry"
+        flow_assertion = 'assert entry.__name__ == "entry"'
+        flow_import = "from flow import entry"
+        runtime_label = "Pipecat Flows"
+    else:
+        flow = '''"""Native LiveKit agent-workflow entrypoint."""
+
+from pathlib import Path
+
+from livekit.agents import Agent, FunctionTool
+
+
+def entrypoint(tools: list[FunctionTool]) -> Agent:
+    system = Path("prompts/system.md").read_text(encoding="utf-8")
+    return Agent(
+        instructions=(
+            system
+            + "\\nGreet the caller and help with the stated task. "
+            "Use the supplied tools when they are useful."
+        ),
+        tools=tools,
+    )
+'''
+        flow_reference = "flow:entrypoint"
+        flow_assertion = 'assert entrypoint.__name__ == "entrypoint"'
+        flow_import = "from flow import entrypoint"
+        runtime_label = "LiveKit agent workflow"
+    agent = agent.replace('flow="flow:entry"', f"flow={flow_reference!r}")
     tools = '''"""TODO: replace this example with your real integration."""
 
 from voicekit import tool
@@ -176,16 +215,16 @@ def example_lookup(query: str) -> dict[str, str]:
     """Return a deterministic placeholder result for a caller query."""
     return {"query": query, "status": "TODO: connect your service"}
 '''
-    test = '''"""Generated scaffold smoke test."""
+    test = f'''"""Generated scaffold smoke test."""
 
 from agent import agent
-from flow import entry
+{flow_import}
 
 
 def test_generated_agent_is_ready_to_start() -> None:
-    assert agent.runtime == "pipecat"
-    assert entry.__name__ == "entry"
-    assert agent.flow == "flow:entry"
+    assert agent.runtime == {scaffold.runtime!r}
+    {flow_assertion}
+    assert agent.flow == {flow_reference!r}
 '''
     scenario = '''"""TODO: expand this into the P1 Pipecat Evals scenario suite."""
 
@@ -194,7 +233,7 @@ def test_example_conversation_goal() -> None:
     goal = "The agent greets the caller and addresses the configured task."
     assert goal
 '''
-    extras = ["pipecat"]
+    extras = [scaffold.runtime]
     if scaffold.phone_provider is not None:
         extras.append(scaffold.phone_provider)
     extra_list = ",".join(extras)
@@ -217,6 +256,17 @@ testpaths = ["tests"]
     }
     if scaffold.phone_provider == "twilio":
         env_names.update({"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"})
+    if scaffold.runtime == "livekit":
+        env_names.update({"LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"})
+        if scaffold.phone_provider == "twilio":
+            env_names.update(
+                {
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_TWILIO_SIP_DOMAIN",
+                    "VOICEKIT_TWILIO_SIP_PASSWORD",
+                    "VOICEKIT_TWILIO_SIP_USERNAME",
+                }
+            )
     if is_recipe:
         env_names.add("VOICEKIT_TRANSFER_NUMBER")
     env_example = "\n".join(f"{name}=" for name in sorted(env_names)) + "\n"
@@ -224,7 +274,7 @@ testpaths = ["tests"]
 
 {description}
 
-Generated as native Pipecat Flows code. Start with `voicekit doctor`, then run
+Generated as a native {runtime_label}. Start with `voicekit doctor`, then run
 `voicekit dev`. Search for `TODO` before connecting production systems.
 """
     rendered = {
@@ -249,7 +299,7 @@ Generated as native Pipecat Flows code. Start with `voicekit doctor`, then run
             "README.md",
         ):
             rendered.pop(generated_only)
-        rendered.update(recipe_files(scaffold.recipe_name, "pipecat"))
+        rendered.update(recipe_files(scaffold.recipe_name, scaffold.runtime))
     return rendered
 
 

@@ -62,7 +62,7 @@ def _agent() -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",
+            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -239,8 +239,8 @@ def test_livekit_token_issuer_rejects_unsafe_configuration(
 ) -> None:
     defaults: dict[str, object] = {
         "server_url": "wss://project.livekit.cloud",
-        "api_key": "api-key",
-        "api_secret": "api-secret",
+        "api_key": "api-key",  # pragma: allowlist secret
+        "api_secret": "api-secret",  # pragma: allowlist secret
         "agent_name": "agent",
     }
     with pytest.raises(VoicekitError) as caught:

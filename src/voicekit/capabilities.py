@@ -96,8 +96,7 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
             kind="runtime",
             id="livekit",
             description=("Open-source agent framework on LiveKit WebRTC and SIP infrastructure."),
-            enabled=False,
-            unavailable_reason="the production bootstrap and parity suite land in P2",
+            enabled=True,
             install_extra="livekit",
         ),
         Capability(

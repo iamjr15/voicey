@@ -17,6 +17,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P1 Docker public deployment + paid smoke | ready-to-run, pending public ingress/credentials/PSTN | Commands below | Public HTTPS ingress, live Twilio credentials, owned number, paid destination |
 | P2 Twilio–LiveKit automated provisioning | ready-to-run, pending credentials/account mutation | Commands below | LiveKit project, owned Twilio number, Elastic SIP domain, explicit mutation acknowledgement |
 | P2 Twilio–LiveKit PSTN certification | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded LiveKit/Twilio accounts, deployed agent, two physical endpoints |
+| P2 LiveKit playground real microphone/provider call | ready-to-run, pending credentials/human | Command below | LiveKit project, reference-provider keys, browser microphone grant, a person speaking |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
@@ -26,6 +27,47 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+## P2 LiveKit playground microphone/provider gate
+
+The local suite proves one-use voicekit token exchange, durable reservation,
+room-token scope, replay rejection, exchange-failure terminalization, native
+client state/audio/transcript wiring, the three-process supervisor, and native
+scratch import. Desktop and 390×844 browser automation completed the exchange
+against the credentialless fixture. The SDK then reported its real provider
+connection failure; no media success was inferred.
+
+With valid reference-provider and LiveKit project credentials exported, create
+and run a disposable project:
+
+```bash
+VOICEKIT_REPO_ROOT="$PWD"
+VOICEKIT_LIVEKIT_PARENT="$(mktemp -d)"
+VOICEKIT_LIVEKIT_PROJECT="$VOICEKIT_LIVEKIT_PARENT/livekit-browser"
+uv run voicekit init "$VOICEKIT_LIVEKIT_PROJECT" \
+  --name livekit-browser \
+  --recipe scratch \
+  --description "Greet the caller and answer concise product questions." \
+  --channels web \
+  --runtime livekit \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+(cd "$VOICEKIT_LIVEKIT_PROJECT" && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor && \
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" dev --port 7860)
+```
+
+Required process variables are `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`,
+`CARTESIA_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and
+`LIVEKIT_API_SECRET`. Open `http://127.0.0.1:7861`, grant microphone access,
+speak at least two turns, end the session, and confirm remote audio, streaming
+and durable transcript, latency/event panels, and exactly one terminal event.
+In browser network inspection, confirm the voicekit bearer appears only in the
+`Authorization` header of `/api/livekit/token`; the separate scoped provider
+room credential may appear only inside the official LiveKit client's native
+signaling exchange. This gate remains pending until the credentialed media call
+and human speech genuinely pass.
 
 ## P2 Twilio–LiveKit SIP certification
 

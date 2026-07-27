@@ -127,3 +127,20 @@ These choices apply the documented proposals authorized in the build mandate and
   carrier supports it, or documented authenticated-ID reconciliation when it
   does not. This preserves the external result contract while matching the
   real carrier API.
+
+## 2026-07-27 — LiveKit browser credential boundary
+
+- Keep the one-use voicekit session token on the authenticated HTTP exchange:
+  the browser sends it only as `Authorization: Bearer …` to the public token
+  endpoint after the admin listener has durably reserved the call.
+- Return a distinct, short-lived, least-privilege LiveKit room credential only
+  after that exchange succeeds. Hand it directly to pinned
+  `livekit-client==2.21.0`; do not wrap or replace LiveKit's native signaling
+  protocol.
+- The official client currently carries its scoped room credential during the
+  WebSocket join using provider-native query/protocol fields. This is permitted
+  and documented explicitly. The voicekit token and LiveKit API key/secret
+  never enter a URL or browser bundle.
+- Validate LiveKit project credentials during `init`, `keys`, and `doctor`
+  through `LiveKitAPI.room.list_rooms(ListRoomsRequest())`, an authenticated
+  read-only request verified against installed `livekit-api==1.2.0`.

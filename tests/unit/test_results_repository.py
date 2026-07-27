@@ -242,6 +242,43 @@ async def test_generation_fences_delayed_heartbeat_and_late_completion(
 
 
 @pytest.mark.asyncio
+async def test_reserved_call_handoff_is_atomic_and_fences_the_reserver(
+    tmp_path: Path,
+) -> None:
+    now = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
+    async with SQLiteRepository(tmp_path / "calls.sqlite3") as repository:
+        reserved = await repository.begin_call(
+            _call("call_reserved", started_at=now),
+            owner_id="browser_reservation",
+            delivery=_delivery(),
+            lease_ttl=LEASE_TTL,
+            now=now,
+        )
+        worker = await repository.handoff_call(
+            "call_reserved",
+            expected_owner_id="browser_reservation",
+            owner_id="livekit_worker",
+            lease_ttl=LEASE_TTL,
+            now=now + timedelta(seconds=1),
+        )
+        with pytest.raises(VoicekitError) as duplicate:
+            await repository.handoff_call(
+                "call_reserved",
+                expected_owner_id="browser_reservation",
+                owner_id="other_worker",
+                lease_ttl=LEASE_TTL,
+                now=now + timedelta(seconds=2),
+            )
+        with pytest.raises(VoicekitError) as stale:
+            await repository.flush_results(reserved, ResultSnapshot())
+        await repository.flush_results(worker, ResultSnapshot(outcome="connected"))
+
+    assert worker.generation == reserved.generation + 1
+    assert duplicate.value.code == "VK-RES-006"
+    assert stale.value.code == "VK-RES-006"
+
+
+@pytest.mark.asyncio
 async def test_lease_renewal_succeeds_for_current_generation(tmp_path: Path) -> None:
     now = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
     async with SQLiteRepository(tmp_path / "calls.sqlite3") as repository:

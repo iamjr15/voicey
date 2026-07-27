@@ -55,9 +55,10 @@ Resume it with:
 voicekit init ./my-agent --resume
 ```
 
-The completed scratch project is native Pipecat Flows Python: `agent.py`,
-`flow.py`, typed `tools.py`, prompts, tests, and a pinned-extra `pyproject.toml`.
-There is no voicekit conversation DSL.
+The completed scratch project contains `agent.py`, native runtime `flow.py`,
+typed `tools.py`, prompts, tests, and a runtime-extra `pyproject.toml`.
+Pipecat emits a native `NodeConfig` entry; LiveKit emits a native
+`livekit.agents.Agent` factory. There is no voicekit conversation DSL.
 
 P1.10 also enables `appointment-booking@1.0.0` for Pipecat. Its authored
 prompts, calendar stub, native flow, and direct Pipecat text/audio Evals are
@@ -77,15 +78,17 @@ voicekit dev --phone --tunnel auto
 voicekit call +14155550199 --url https://public.example.test --yes
 ```
 
-`dev` starts the actual Pipecat host and supervised Uvicorn server. Phone mode
-probes the public tunnel before temporarily changing the selected Twilio route.
-Exit and interruption restore the prior route and environment/import state.
+`dev` starts the selected production runtime. Pipecat phone mode probes the
+public tunnel before temporarily changing the selected Twilio route. LiveKit
+supervises its native worker and, with `--phone`, temporarily provisions the
+Twilio↔LiveKit SIP chain. Exit and interruption restore the prior route/SIP
+resources and environment/import state.
 The public runtime/signaling listener binds to `127.0.0.1:<port>` and the
 playground/admin listener binds separately to `127.0.0.1:<port + 1>`. For the
 default `--port 7860`, open `http://127.0.0.1:7861`. A tunnel receives only the
 public listener; records, recordings, and session issuance remain on the local
-admin listener. `--no-open` suppresses the browser launch without changing
-either listener.
+admin listener. LiveKit additionally reserves `<port + 2>` for native worker
+health. `--no-open` suppresses browser launch without changing the listeners.
 
 The playground is embedded in the installed wheel. It shows live transcript,
 turn latency, runtime events, tool calls, captured data, and the exact durable
@@ -100,6 +103,7 @@ can spend money, `call` requires interactive confirmation or `--yes`.
 ```bash
 voicekit keys list
 voicekit keys add deepgram
+voicekit keys add livekit
 voicekit keys validate
 
 voicekit numbers list
@@ -114,7 +118,9 @@ voicekit calls show <call-id>
 voicekit calls redeliver <call-id-or-event-id> --yes
 ```
 
-Key output is masked. Number purchases, releases, production route changes,
+LiveKit project credentials are validated by an authenticated, read-only
+room-list request and are collected in the same in-flow `.env` path. Key output
+is masked. Number purchases, releases, production route changes,
 restores, outbound calls, and result redelivery require explicit confirmation.
 Call reads and redelivery use the same protected SQLite repository and immutable
 terminal-event/outbox contract as the runtime.

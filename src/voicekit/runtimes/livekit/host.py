@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Protocol, cast
 
 from livekit import rtc
@@ -16,7 +17,7 @@ from livekit.plugins import silero
 
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
-from voicekit.obs.records import Channel, Direction
+from voicekit.obs.records import Channel, Direction, NewCall, TimelineEvent
 from voicekit.runtimes.livekit.lifecycle import (
     LiveKitCall,
     LiveKitCallLifecycle,
@@ -31,6 +32,7 @@ from voicekit.runtimes.livekit.session import (
     SessionReportFactory,
 )
 from voicekit.runtimes.pipecat.admission import AdmissionController
+from voicekit.storage.models import ResultDeliveryConfig, ResultSnapshot, TerminalRequest
 
 
 class LiveKitRepositoryFactory(Protocol):
@@ -57,14 +59,22 @@ class LiveKitHostSettings:
     drain_timeout_s: int = 3600
     session_end_timeout_s: float = 300.0
     health_port: int = 8081
+    browser_reservation_ttl_s: float = 120.0
 
     def __post_init__(self) -> None:
         if self.num_idle_processes < 0:
             raise VoicekitError("VK-RUN-002", detail="num_idle_processes cannot be negative.")
-        if self.drain_timeout_s <= 0 or self.session_end_timeout_s <= 0:
+        if (
+            self.drain_timeout_s <= 0
+            or self.session_end_timeout_s <= 0
+            or self.browser_reservation_ttl_s < 30
+        ):
             raise VoicekitError(
                 "VK-RUN-002",
-                detail="LiveKit drain and session-end timeouts must be positive.",
+                detail=(
+                    "LiveKit drain/session timeouts must be positive and the browser "
+                    "reservation TTL must be at least 30 seconds."
+                ),
             )
         if not 1 <= self.health_port <= 65535:
             raise VoicekitError("VK-RUN-002", detail="LiveKit health port is invalid.")
@@ -180,7 +190,10 @@ class LiveKitHost:
         self.agent = agent
         self.repository_factory = repository_factory
         self.settings = settings or LiveKitHostSettings()
-        self.gate = LiveKitAdmissionGate(agent.limits.max_concurrent)
+        self.gate = LiveKitAdmissionGate(
+            agent.limits.max_concurrent,
+            reservation_ttl_s=self.settings.browser_reservation_ttl_s,
+        )
         self._builder_factory = session_builder_factory
         self._recording_reconciler_factory = recording_reconciler_factory
         self.server = server or AgentServer(
@@ -226,11 +239,19 @@ class LiveKitHost:
         session: LiveKitSession | None = None
         try:
             lease = await admission.acquire(call.call_id)
-            lifecycle = await LiveKitLifecycleManager(
+            lifecycle_manager = LiveKitLifecycleManager(
                 repository,
                 admission,
                 owner_id=f"livekit_{context.job.id}_{uuid.uuid4().hex}",
-            ).begin(self.agent, call, lease)
+            )
+            if call.channel == "web":
+                lifecycle = await lifecycle_manager.claim_reserved(
+                    call,
+                    lease,
+                    expected_owner_id=_reservation_owner(call.call_id),
+                )
+            else:
+                lifecycle = await lifecycle_manager.begin(self.agent, call, lease)
             control = JobCallControl(
                 context,
                 participant_identity=_participant_identity(context),
@@ -346,9 +367,107 @@ class LiveKitHost:
         """Run the installed AgentServer; ``start`` mode owns SIGTERM drain."""
         await self.server.run(devmode=devmode)
 
+    async def reload_agent(self, agent: Agent, *, restart_runner: bool) -> bool:
+        """Apply the next-call revision once process-per-call work is idle."""
+        del restart_runner
+        if self.gate.occupied:
+            return False
+        if agent.runtime != "livekit" or agent.name != self.agent.name:
+            raise VoicekitError(
+                "VK-WEB-005",
+                detail="LiveKit reload cannot change the runtime or registered agent name.",
+            )
+        self.agent = agent
+        return True
+
+    async def drain(self) -> None:
+        """Stop dispatch, wait for active jobs, and close the native worker."""
+        await self.server.drain(timeout=self.settings.drain_timeout_s)
+        await self.server.aclose()
+
+    async def reserve_web_call(self) -> str:
+        """Persist a browser call before any Voicekit or LiveKit token is exposed."""
+        call_id = f"call_web_{uuid.uuid4().hex}"
+        await self.gate.reserve(call_id)
+        repository = await self.repository_factory()
+        try:
+            await repository.begin_call(
+                NewCall(
+                    call_id=call_id,
+                    agent_name=self.agent.name,
+                    runtime="livekit",
+                    channel="web",
+                    direction="inbound",
+                    config_hash=self.agent.config_hash,
+                ),
+                owner_id=_reservation_owner(call_id),
+                delivery=_delivery_config(self.agent),
+                lease_ttl=timedelta(seconds=self.settings.browser_reservation_ttl_s),
+            )
+            await repository.append_timeline(
+                call_id,
+                TimelineEvent(event_type="runtime.reserved"),
+            )
+        except Exception:
+            await self.gate.release(call_id)
+            raise
+        finally:
+            await _close_repository(repository)
+        return call_id
+
+    async def fail_web_reservation(self, call_id: str) -> None:
+        """Terminalize a token-exchange failure without waiting for stale recovery."""
+        repository = await self.repository_factory()
+        try:
+            owner_id = f"livekit_reservation_cleanup_{uuid.uuid4().hex}"
+            lease = await repository.handoff_call(
+                call_id,
+                expected_owner_id=_reservation_owner(call_id),
+                owner_id=owner_id,
+                lease_ttl=timedelta(seconds=30),
+            )
+            await repository.append_timeline(
+                call_id,
+                TimelineEvent(event_type="runtime.setup_failed"),
+            )
+            await repository.flush_results(lease, ResultSnapshot())
+            await repository.terminalize(
+                lease,
+                TerminalRequest(
+                    event_type="call.failed",
+                    ended_reason="setup_error",
+                ),
+            )
+        finally:
+            await self.gate.release(call_id)
+            await _close_repository(repository)
+
 
 def _prewarm_process(process: JobProcess) -> None:
     process.userdata["voicekit_vad"] = silero.VAD.load()
+
+
+def _reservation_owner(call_id: str) -> str:
+    return f"livekit_reservation_{call_id}"
+
+
+def _delivery_config(agent: Agent) -> ResultDeliveryConfig:
+    return ResultDeliveryConfig(
+        endpoint=agent.results.webhook,
+        include=tuple(agent.results.include),
+        redact=tuple(agent.results.redact),
+        purge_after_days=agent.results.purge_after_days,
+        recording_enabled=False,
+    )
+
+
+async def _close_repository(repository: LiveKitRepository) -> None:
+    close = getattr(repository, "close", None)
+    if close is None:
+        return
+    result = close()
+    if isinstance(result, Awaitable):
+        await result
 
 
 def _metadata(raw: str) -> dict[str, str]:

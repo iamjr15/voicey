@@ -86,6 +86,18 @@ class AlwaysValidKeys:
         )
 
 
+class AlwaysValidLiveKit:
+    async def validate(self, values: Mapping[str, str]) -> KeyCheck:
+        del values
+        return KeyCheck(
+            provider="livekit",
+            env_names=("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"),
+            status="valid",
+            detail="Authenticated LiveKit room-list read succeeded.",
+            fix="No action required.",
+        )
+
+
 class FakeLedger:
     def close(self) -> None:
         return
@@ -545,6 +557,40 @@ def test_keys_add_uses_injected_value_and_recipe_add_copies_source(
     assert ManifestStore(tmp_path / "voicekit.jsonc").load().recipe.name == ("appointment-booking")
     assert unknown.exit_code == 1
     assert "unknown provider" in unknown.stderr
+
+
+def test_livekit_keys_are_listed_validated_and_runtime_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _project(tmp_path).model_copy(update={"runtime": "livekit"})
+    ManifestStore(tmp_path / "voicekit.jsonc").save(manifest)
+    with (tmp_path / ".env").open("a", encoding="utf-8") as env:
+        env.write(
+            'LIVEKIT_URL="wss://project.livekit.cloud"\n'
+            'LIVEKIT_API_KEY="livekit-key"\n'  # pragma: allowlist secret
+            'LIVEKIT_API_SECRET="livekit-secret"\n'  # pragma: allowlist secret
+        )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.ProviderKeyValidator", AlwaysValidKeys)
+    monkeypatch.setattr("voicekit.cli.app.LiveKitKeyValidator", AlwaysValidLiveKit)
+
+    listed = runner.invoke(app, ["keys", "list", "--json"])
+    added = runner.invoke(app, ["keys", "add", "livekit", "--yes"])
+
+    assert listed.exit_code == 0
+    items = json.loads(listed.stdout)["items"]
+    assert items[-1]["provider"] == "livekit"
+    assert items[-1]["keys"]["LIVEKIT_API_SECRET"].startswith("••••")
+    assert added.exit_code == 0
+    assert "livekit credentials validated" in added.stdout
+
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"runtime": "pipecat"})
+    )
+    wrong_runtime = runner.invoke(app, ["keys", "add", "livekit", "--yes"])
+    assert wrong_runtime.exit_code == 1
+    assert "apply only to a LiveKit-runtime project" in wrong_runtime.stderr
 
 
 def test_calls_list_show_and_redeliver_real_repository(

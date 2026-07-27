@@ -17,7 +17,14 @@ from voicekit.capabilities import DEFAULT_CAPABILITIES, CapabilityRegistry
 from voicekit.cli.checkpoint import InitCheckpoint, InitCheckpointStore
 from voicekit.cli.drafting import PromptDrafter, ProviderPromptDrafter
 from voicekit.cli.environment import EnvFileStore, ensure_env_ignored, merged_environment
-from voicekit.cli.keys import KeyValidator, ProviderKeyValidator, required_entries
+from voicekit.cli.keys import (
+    LIVEKIT_ENV_VARS,
+    KeyValidator,
+    LiveKitKeyValidator,
+    ProviderKeyValidator,
+    RuntimeKeyValidator,
+    required_entries,
+)
 from voicekit.cli.prompts import PromptChoice, PromptIO
 from voicekit.cli.scaffold import ScaffoldWriter, ScratchScaffold
 from voicekit.config.catalog import (
@@ -73,6 +80,7 @@ class InitWizard:
         *,
         prompt: PromptIO,
         key_validator: KeyValidator | None = None,
+        livekit_validator: RuntimeKeyValidator | None = None,
         drafter: PromptDrafter | None = None,
         capabilities: CapabilityRegistry = DEFAULT_CAPABILITIES,
         recipes: RecipeRegistry = DEFAULT_RECIPE_REGISTRY,
@@ -82,6 +90,7 @@ class InitWizard:
     ) -> None:
         self._prompt = prompt
         self._key_validator = key_validator or ProviderKeyValidator()
+        self._livekit_validator = livekit_validator or LiveKitKeyValidator()
         self._drafter = drafter or ProviderPromptDrafter()
         self._capabilities = capabilities
         self._recipes = recipes
@@ -131,6 +140,12 @@ class InitWizard:
             env_store=env_store,
         )
         all_values.update(collected)
+        if runtime == "livekit":
+            runtime_collected = await self._collect_livekit_keys(
+                values=all_values,
+                env_store=env_store,
+            )
+            all_values.update(runtime_collected)
         if not all_values.get("VOICEKIT_WEBHOOK_SECRET"):
             webhook_secret = encode_secret(secrets.token_bytes(32))
             env_store.update({"VOICEKIT_WEBHOOK_SECRET": webhook_secret})
@@ -183,6 +198,7 @@ class InitWizard:
             phone_provider=carrier,
             phone_number=phone_number,
             web_enabled="web" in channels,
+            runtime=runtime,
             recipe_name=recipe,
             recipe_version=("1.0.0" if recipe_definition is None else recipe_definition.version),
         )
@@ -499,6 +515,61 @@ class InitWizard:
                 env_store.update(pending)
                 collected.update(pending)
         return collected
+
+    async def _collect_livekit_keys(
+        self,
+        *,
+        values: dict[str, str],
+        env_store: EnvFileStore,
+    ) -> dict[str, str]:
+        pending: dict[str, str] = {}
+        for attempt in range(4):
+            check = await self._livekit_validator.validate(values)
+            if check.status == "valid":
+                self._prompt.notice("✓ livekit credentials validated.")
+                break
+            self._prompt.notice(f"✖ livekit: {check.detail} {check.fix}")
+            if attempt == 3:
+                raise VoicekitError(
+                    "VK-CLI-004",
+                    detail="livekit credentials failed three validation attempts.",
+                )
+            process_names = tuple(
+                name for name in LIVEKIT_ENV_VARS if self._process_environment.get(name)
+            )
+            if process_names:
+                raise VoicekitError(
+                    "VK-CLI-004",
+                    detail=(
+                        f"{', '.join(process_names)} comes from the process environment "
+                        "and failed validation; replace it there, then resume."
+                    ),
+                )
+            if not self._prompt.interactive:
+                raise VoicekitError(
+                    "VK-CLI-004",
+                    detail=(
+                        f"{', '.join(LIVEKIT_ENV_VARS)} must be valid. "
+                        "Run `voicekit keys add livekit`."
+                    ),
+                )
+            pasted = {
+                "LIVEKIT_URL": self._prompt.text("Paste LIVEKIT_URL:"),
+                "LIVEKIT_API_KEY": self._prompt.secret("Paste LIVEKIT_API_KEY:"),
+                "LIVEKIT_API_SECRET": self._prompt.secret("Paste LIVEKIT_API_SECRET:"),
+            }
+            if any(not value for value in pasted.values()):
+                raise VoicekitError(
+                    "VK-CLI-004",
+                    detail=f"{', '.join(LIVEKIT_ENV_VARS)} cannot be blank.",
+                )
+            values.update(pasted)
+            pending.update(pasted)
+        else:
+            raise AssertionError("credential attempt loop did not terminate")
+        if pending:
+            env_store.update(pending)
+        return pending
 
     def _answer_drafting(
         self,

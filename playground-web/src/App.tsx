@@ -39,6 +39,7 @@ type Phase = "idle" | "requesting" | "connecting" | "listening" | "ended" | "err
 
 const POLL_INTERVAL_MS = 450;
 const PipecatSession = lazy(() => import("./PipecatSession"));
+const LiveKitSession = lazy(() => import("./LiveKitSession"));
 
 function displayModel(model: string): string {
   return model.includes("/") ? model.split("/").slice(1).join("/") : model;
@@ -450,6 +451,9 @@ export function App() {
     setLiveTurns([]);
     try {
       const issued = await issueSession();
+      if (bootstrap !== null && issued.runtime !== bootstrap.runtime) {
+        throw new Error("The issued browser session does not match the configured runtime.");
+      }
       setSession(issued);
       addEvent("Session authorized", "short-lived browser scope", "positive");
       setPhase("connecting");
@@ -459,13 +463,31 @@ export function App() {
     }
   };
   const endSession = useCallback(() => setPhase("ended"), []);
-  const mediaError = useCallback(() => {
+  const mediaError = useCallback((error?: unknown) => {
     setPhase("error");
-    setSessionError({
-      code: "VK-WEB-005",
-      message: "The browser media connection could not start.",
-      fix: "Run voicekit doctor, then retry the session.",
-    });
+    setSessionError(
+      error === undefined
+        ? {
+            code: "VK-WEB-005",
+            message: "The browser media connection could not start.",
+            fix: "Run voicekit doctor, then retry the session.",
+          }
+        : catalogError(error),
+    );
+  }, []);
+  const liveKitState = useCallback(
+    (state: string) => {
+      if (state === "connecting" || state === "reconnecting") setPhase("connecting");
+      if (state === "connected") setPhase("listening");
+      if (state === "disconnected") setPhase("ended");
+      addEvent("Transport", state);
+    },
+    [addEvent],
+  );
+  const liveKitTranscript = useCallback((turn: TranscriptTurn) => {
+    setLiveTurns((current) =>
+      current.some((item) => item.turn_id === turn.turn_id) ? current : [...current, turn],
+    );
   }, []);
 
   const visibleError = bootstrapError ?? sessionError;
@@ -543,13 +565,25 @@ export function App() {
                   </button>
                 }
               >
-                <PipecatSession
-                  key={session.session_id}
-                  session={session}
-                  callbacks={callbacks}
-                  onEnd={endSession}
-                  onError={mediaError}
-                />
+                {session.runtime === "pipecat" ? (
+                  <PipecatSession
+                    key={session.session_id}
+                    session={session}
+                    callbacks={callbacks}
+                    onEnd={endSession}
+                    onError={mediaError}
+                  />
+                ) : (
+                  <LiveKitSession
+                    key={session.session_id}
+                    session={session}
+                    onState={liveKitState}
+                    onEvent={addEvent}
+                    onTranscript={liveKitTranscript}
+                    onEnd={endSession}
+                    onError={mediaError}
+                  />
+                )}
               </Suspense>
             )}
             <p className="privacy-note">

@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P2 — LiveKit parity, unified testing, Telnyx
-- **Current unit:** P2.2 shared playground LiveKit client path
-- **Next task:** add the LiveKit token/session endpoint and `livekit-client` frontend adapter behind the existing two-listener playground security contract, wire `voicekit dev` to the production LiveKit host, and prove the runtime-specific five-minute quickstart path
-- **Completed:** all P0 and P1 units plus P2.1. The production LiveKit runtime, current provider/fallback mapping, native tools/workflows, fenced incremental lifecycle, actual-SIGKILL recovery, Twilio Elastic SIP provisioning/controls/recording reconciliation, and complete local certification harness are green. Credentialed/PSTN P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
+- **Current unit:** P2.3 appointment-booking LiveKit recipe variant
+- **Next task:** author the native LiveKit appointment workflow and its runtime-specific tests while preserving the existing recipe contract
+- **Completed:** all P0 and P1 units plus P2.1–P2.2. The production LiveKit runtime, browser client/token path, three-process local supervisor, native scratch quickstart, current provider/fallback mapping, fenced incremental lifecycle, actual-SIGKILL recovery, and Twilio Elastic SIP provisioning/controls/recording reconciliation are green. Credentialed/PSTN/microphone P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -42,6 +42,8 @@ Last updated: 2026-07-27
 | P1 phase overall | pending-live | All local automation green; reference providers, Twilio/PSTN, public edge/Docker, and human wizard/doctor/microphone/handset evidence remain unpromoted; see `docs/verification/p1-gates.md` |
 | P2.1 LiveKit runtime/local certification | green | Native `AgentServer`/`rtc_session`, current 1.6.7 session APIs, provider fallbacks, complete config policy, least-privilege token, incremental persistence, heartbeat/fencing, actual SIGKILL recovery, native DTMF/cold+warm transfer, TLS/auth-correct Twilio SIP provision/reuse/rollback/ambiguity, outbound SIP mapping, and CA-SID recording reconciliation; full suite 447 passed, 8 honest live skips, 90.06% branch coverage; ruff/format/strict pyright green |
 | P2.1 Twilio–LiveKit account/PSTN certification | pending-live | Three guarded account/PSTN commands plus the physical inbound/outbound, DTMF, hangup, recording, transfer, terminal-delivery, and rollback checklist are ready in `docs/GAPS.md`; no required account variables exist locally |
+| P2.2 LiveKit playground + quickstart | green | Pinned native client, Authorization-only one-use voicekit token exchange, durable pre-token reservation, least-privilege room credential, remote audio/mic/transcription/state mapping, failure terminalization, three-process `dev`, in-flow read-only credential validation, exact managed SIP resource inspection, native scratch scaffold import, desktop/mobile browser QA; frontend 11 tests/build/audit green; full Python suite 466 passed, 8 honest live skips, 90.01% branch coverage |
+| P2.2 real LiveKit microphone/provider browser call | pending-live | Exact disposable-project command in `docs/GAPS.md`; requires a LiveKit project, reference-provider credentials, browser microphone permission, and human speech |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

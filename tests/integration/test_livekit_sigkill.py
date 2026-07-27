@@ -65,7 +65,7 @@ async def main():
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",
+            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
     admission = AdmissionController(1)

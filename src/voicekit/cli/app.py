@@ -27,7 +27,13 @@ from voicekit.cli.context import (
 )
 from voicekit.cli.doctor import Doctor, DoctorCheck
 from voicekit.cli.environment import EnvFileStore, ensure_env_ignored
-from voicekit.cli.keys import ProviderKeyValidator, mask_value, required_entries
+from voicekit.cli.keys import (
+    LIVEKIT_ENV_VARS,
+    LiveKitKeyValidator,
+    ProviderKeyValidator,
+    mask_value,
+    required_entries,
+)
 from voicekit.cli.prompts import PromptChoice, QuestionaryPromptIO
 from voicekit.cli.wizard import InitOptions, InitWizard
 from voicekit.config.catalog import DEFAULT_PROVIDER_CATALOG, ProviderCatalogEntry
@@ -352,6 +358,19 @@ def keys_list(
                     "detail": check.detail,
                 }
             )
+        if manifest.runtime == "livekit":
+            check = await LiveKitKeyValidator().validate(context.environment)
+            rows.append(
+                {
+                    "provider": check.provider,
+                    "status": check.status,
+                    "keys": {
+                        name: mask_value(context.environment.get(name, ""))
+                        for name in check.env_names
+                    },
+                    "detail": check.detail,
+                }
+            )
         _rows_or_table(
             rows,
             columns=("provider", "status", "keys"),
@@ -382,14 +401,35 @@ def keys_add(
 
     async def operation() -> None:
         context = _context()
-        entry = _provider_entry(context, provider)
+        manifest = require_manifest(context)
         prompt = QuestionaryPromptIO(interactive=sys.stdin.isatty() and not yes)
         values = dict(context.environment)
         pasted: dict[str, str] = {}
-        if prompt.interactive:
-            pasted = {name: prompt.secret(f"Paste {name}:") for name in entry.key_env_vars}
-            values.update(pasted)
-        check = await ProviderKeyValidator().validate(entry.kind, entry.id, values)
+        if provider == "livekit":
+            if manifest.runtime != "livekit":
+                raise VoicekitError(
+                    "VK-CLI-005",
+                    detail="livekit project credentials apply only to a LiveKit-runtime project.",
+                )
+            if prompt.interactive:
+                pasted = {
+                    "LIVEKIT_URL": prompt.text("Paste LIVEKIT_URL:"),
+                    "LIVEKIT_API_KEY": prompt.secret("Paste LIVEKIT_API_KEY:"),
+                    "LIVEKIT_API_SECRET": prompt.secret("Paste LIVEKIT_API_SECRET:"),
+                }
+                if any(not value for value in pasted.values()):
+                    raise VoicekitError(
+                        "VK-CLI-004",
+                        detail=f"{', '.join(LIVEKIT_ENV_VARS)} cannot be blank.",
+                    )
+                values.update(pasted)
+            check = await LiveKitKeyValidator().validate(values)
+        else:
+            entry = _provider_entry(context, provider)
+            if prompt.interactive:
+                pasted = {name: prompt.secret(f"Paste {name}:") for name in entry.key_env_vars}
+                values.update(pasted)
+            check = await ProviderKeyValidator().validate(entry.kind, entry.id, values)
         if check.status != "valid":
             raise VoicekitError(
                 "VK-CLI-004",

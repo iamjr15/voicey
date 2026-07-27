@@ -14,7 +14,11 @@ from fastapi import FastAPI, Request
 from voicekit import Agent, Behavior, Limits, Models, Results, Web, tool
 from voicekit.errors import VoicekitError
 from voicekit.obs import NewCall
-from voicekit.playground.security import SessionTokenManager
+from voicekit.playground.security import (
+    OriginPolicy,
+    SessionTokenManager,
+    WebSessionSecurity,
+)
 from voicekit.playground.service import PlaygroundService, PlaygroundSettings
 from voicekit.results.signing import encode_secret
 from voicekit.storage import (
@@ -54,6 +58,28 @@ def _agent() -> Agent:
         limits=Limits(max_duration_s=60, max_concurrent=2, silence_hangup_s=10),
         behavior=Behavior(),
     )
+
+
+def _livekit_agent() -> Agent:
+    return _agent().model_copy(update={"runtime": "livekit"})
+
+
+class FakeRoomTokenIssuer:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def issue(self, **values: object) -> Any:
+        self.calls.append(values)
+        return type(
+            "IssuedRoomToken",
+            (),
+            {
+                "server_url": "wss://project.livekit.cloud",
+                "participant_token": "livekit-participant-token",
+                "room_name": values["room_name"],
+                "participant_identity": values["participant_identity"],
+            },
+        )()
 
 
 def _frontend(tmp_path: Path) -> Path:
@@ -203,6 +229,90 @@ async def test_playground_serves_assets_bootstrap_and_one_use_session(
     assert issued["webrtc_url"] == "http://127.0.0.1:7861/api/offer"
     assert issued["token"].count(".") == 2
     assert reserved_call.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_livekit_token_exchange_stays_on_public_listener_and_is_one_use(
+    tmp_path: Path,
+) -> None:
+    public = FastAPI()
+    tokens = _tokens()
+    issuer = FakeRoomTokenIssuer()
+    canceled: list[str] = []
+    security = WebSessionSecurity(
+        tokens,
+        OriginPolicy(
+            allowed_origins=frozenset({"http://127.0.0.1:7860"}),
+            expected_public_origin="http://127.0.0.1:7861",
+        ),
+    )
+    async with SQLiteRepository(tmp_path / "calls.sqlite3") as repository:
+        service = PlaygroundService(
+            agent=_livekit_agent(),
+            public_app=public,
+            repository=repository,
+            tokens=tokens,
+            settings=PlaygroundSettings(
+                admin_origin="http://127.0.0.1:7860",
+                public_origin="http://127.0.0.1:7861",
+                frontend_dir=_frontend(tmp_path),
+                connect_origins=("wss://project.livekit.cloud",),
+            ),
+            reserve_web_call=_reserver(repository),
+            public_security=security,
+            room_token_issuer=issuer,
+            cancel_web_call=lambda call_id: _record_cancel(canceled, call_id),
+        )
+        session_response = await _request(
+            service.admin_app,
+            "POST",
+            "/api/playground/sessions",
+        )
+        session = cast("dict[str, Any]", session_response.json())
+        exchanged = await _request(
+            service.public_app,
+            "POST",
+            "/api/livekit/token",
+            base_url="http://127.0.0.1:7861",
+            headers={
+                "origin": "http://127.0.0.1:7860",
+                "authorization": f"Bearer {session['token']}",
+            },
+        )
+        replay = await _request(
+            service.public_app,
+            "POST",
+            "/api/livekit/token",
+            base_url="http://127.0.0.1:7861",
+            headers={
+                "origin": "http://127.0.0.1:7860",
+                "authorization": f"Bearer {session['token']}",
+            },
+        )
+        admin_token_route = await _request(
+            service.admin_app,
+            "POST",
+            "/api/livekit/token",
+        )
+        page = await _request(service.admin_app, "GET", "/")
+
+    body = exchanged.json()
+    assert session["runtime"] == "livekit"
+    assert session["token_url"] == "http://127.0.0.1:7861/api/livekit/token"
+    assert "webrtc_url" not in session
+    assert body["server_url"] == "wss://project.livekit.cloud"
+    assert body["participant_token"] == "livekit-participant-token"
+    assert body["room_name"].startswith("web-")
+    assert issuer.calls[0]["call_id"] == "call_web_reserved_1"
+    assert replay.status_code == 404
+    assert replay.json()["error"]["code"] == "VK-WEB-001"
+    assert admin_token_route.status_code == 404
+    assert "wss://project.livekit.cloud" in page.headers["content-security-policy"]
+    assert canceled == []
+
+
+async def _record_cancel(values: list[str], call_id: str) -> None:
+    values.append(call_id)
 
 
 @pytest.mark.asyncio

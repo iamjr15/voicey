@@ -11,7 +11,7 @@ import secrets
 import shutil
 import socket
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +22,14 @@ import httpx
 
 from voicekit.cli.context import ProjectContext, require_manifest
 from voicekit.cli.environment import EnvFileStore, ensure_env_ignored
-from voicekit.cli.keys import KeyValidator, ProviderKeyValidator, required_entries
+from voicekit.cli.keys import (
+    LIVEKIT_ENV_VARS,
+    KeyValidator,
+    LiveKitKeyValidator,
+    ProviderKeyValidator,
+    RuntimeKeyValidator,
+    required_entries,
+)
 from voicekit.config.manifest import ProjectManifest
 from voicekit.errors import VoicekitError
 from voicekit.results.signing import WebhookSigner, encode_secret
@@ -52,6 +59,55 @@ CheckCallback = Callable[[DoctorCheck], None]
 DoctorCheckFactory = Callable[[], Awaitable[DoctorCheck]]
 
 
+class LiveKitSipInspector:
+    """Read current SIP resources without mutating the LiveKit project."""
+
+    async def inspect(
+        self,
+        values: Mapping[str, str],
+        *,
+        expected_name: str,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        from livekit import api
+
+        client: api.LiveKitAPI | None = None
+        try:
+            client = api.LiveKitAPI(
+                url=values["LIVEKIT_URL"],
+                api_key=values["LIVEKIT_API_KEY"],
+                api_secret=values["LIVEKIT_API_SECRET"],
+            )
+            inbound, outbound, dispatch = await asyncio.gather(
+                client.sip.list_sip_inbound_trunk(api.ListSIPInboundTrunkRequest()),
+                client.sip.list_sip_outbound_trunk(api.ListSIPOutboundTrunkRequest()),
+                client.sip.list_sip_dispatch_rule(api.ListSIPDispatchRuleRequest()),
+            )
+        except Exception:
+            return (
+                ("LiveKit SIP trunk and dispatch reads were unreachable or rejected.",),
+                ("Check project permissions and network, then rerun `voicekit doctor`.",),
+            )
+        finally:
+            if client is not None:
+                await client.aclose()
+        missing: list[str] = []
+        if not any(item.name == expected_name for item in inbound.items):
+            missing.append("inbound trunk")
+        if not any(item.name == expected_name for item in outbound.items):
+            missing.append("outbound trunk")
+        if not any(item.name == expected_name for item in dispatch.items):
+            missing.append("dispatch rule")
+        if not missing:
+            return (), ()
+        return (
+            (f"LiveKit is missing {', '.join(missing)} named {expected_name!r}.",),
+            (
+                "Run `voicekit dev --phone` for a temporary provisioned route "
+                "or provision the documented persistent SIP chain.",
+            ),
+        )
+
+
 class Doctor:
     """Run independent checks concurrently and stream each completed result."""
 
@@ -60,6 +116,8 @@ class Doctor:
         context: ProjectContext,
         *,
         key_validator: KeyValidator | None = None,
+        livekit_validator: RuntimeKeyValidator | None = None,
+        livekit_sip_inspector: LiveKitSipInspector | None = None,
         port: int = 7860,
         send_test: bool = False,
     ) -> None:
@@ -68,6 +126,8 @@ class Doctor:
         self.context = context
         self.manifest = require_manifest(context)
         self.key_validator = key_validator or ProviderKeyValidator()
+        self.livekit_validator = livekit_validator or LiveKitKeyValidator()
+        self.livekit_sip_inspector = livekit_sip_inspector or LiveKitSipInspector()
         self.port = port
         self.send_test = send_test
 
@@ -209,11 +269,40 @@ class Doctor:
                 [],
                 ["Not required for the Pipecat runtime."],
             )
+        issues: list[str] = []
+        advice: list[str] = []
+        check = await self.livekit_validator.validate(self.context.environment)
+        if check.status != "valid":
+            issues.append(check.detail)
+            advice.append(check.fix)
+        if "phone" in self.manifest.channels:
+            sip_names = (
+                "VOICEKIT_LIVEKIT_SIP_URI",
+                "VOICEKIT_TWILIO_SIP_DOMAIN",
+                "VOICEKIT_TWILIO_SIP_USERNAME",
+                "VOICEKIT_TWILIO_SIP_PASSWORD",
+            )
+            missing = [name for name in sip_names if not self.context.environment.get(name)]
+            if missing:
+                issues.append(f"Missing LiveKit SIP provisioning values: {', '.join(missing)}.")
+                advice.append("Add the Twilio↔LiveKit SIP values, then rerun `voicekit doctor`.")
+            elif check.status == "valid" and self.manifest.phone_number is not None:
+                digits = self.manifest.phone_number.removeprefix("+")
+                sip_issues, sip_advice = await self.livekit_sip_inspector.inspect(
+                    self.context.environment,
+                    expected_name=f"voicekit-{self.manifest.project_name}-{digits}",
+                )
+                issues.extend(sip_issues)
+                advice.extend(sip_advice)
+        else:
+            advice.append("SIP trunk and dispatch are not required for this web-only project.")
+        if any(not self.context.environment.get(name) for name in LIVEKIT_ENV_VARS):
+            advice.append("Run `voicekit keys add livekit`.")
         return _result(
             "livekit",
             "LiveKit project, SIP trunk, and dispatch",
-            ["LiveKit production bootstrap is unavailable in this P1 build."],
-            ["Use Pipecat now or install the P2 build when released."],
+            issues,
+            advice,
         )
 
     async def _receiver(self) -> DoctorCheck:

@@ -42,6 +42,16 @@ class StorageRepository(Protocol):
         now: datetime | None = None,
     ) -> CallLease: ...
 
+    async def handoff_call(
+        self,
+        call_id: str,
+        *,
+        expected_owner_id: str,
+        owner_id: str,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> CallLease: ...
+
     async def takeover_expired_call(
         self,
         call_id: str,

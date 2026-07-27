@@ -154,6 +154,48 @@ class SQLiteRepository(SQLiteCallRecordStore):
             raise VoicekitError("VK-RES-006", detail=lease.call_id)
         return lease.model_copy(update={"expires_at": expires_at})
 
+    async def handoff_call(
+        self,
+        call_id: str,
+        *,
+        expected_owner_id: str,
+        owner_id: str,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> CallLease:
+        """Fence a pre-media reservation into its dispatched runtime owner."""
+        current = _utc(now)
+        expires_at = _expires(current, lease_ttl)
+        database = self._connection()
+        async with self._write_lock:
+            cursor = await database.execute(
+                """
+                UPDATE calls
+                SET owner_id = ?, generation = generation + 1,
+                    lease_expires_at = ?, updated_at = ?
+                WHERE call_id = ? AND status = 'active' AND owner_id = ?
+                RETURNING generation
+                """,
+                (
+                    owner_id,
+                    _iso(expires_at),
+                    _iso(current),
+                    call_id,
+                    expected_owner_id,
+                ),
+            )
+            row = await cursor.fetchone()
+            await cursor.close()
+            await database.commit()
+        if row is None:
+            raise VoicekitError("VK-RES-006", detail=call_id)
+        return CallLease(
+            call_id=call_id,
+            owner_id=owner_id,
+            generation=int(row["generation"]),
+            expires_at=expires_at,
+        )
+
     async def takeover_expired_call(
         self,
         call_id: str,

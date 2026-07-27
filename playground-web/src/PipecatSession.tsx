@@ -3,7 +3,7 @@ import { WavMediaManager } from "@pipecat-ai/small-webrtc-transport";
 import { PipecatAppBase, type PipecatBaseChildProps } from "@pipecat-ai/voice-ui-kit";
 import { memo, useCallback, useEffect, useMemo } from "react";
 
-import type { IssuedSession } from "./api";
+import type { PipecatIssuedSession } from "./api";
 
 function SessionConsole({
   connection,
@@ -42,7 +42,7 @@ function PipecatSession({
   onEnd,
   onError,
 }: {
-  session: IssuedSession;
+  session: PipecatIssuedSession;
   callbacks: RTVIEventCallbacks;
   onEnd: () => void;
   onError: () => void;

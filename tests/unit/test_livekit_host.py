@@ -17,7 +17,10 @@ from voicekit.runtimes.livekit.host import (
     LiveKitHost,
     LiveKitHostSettings,
     _call_from_context,  # pyright: ignore[reportPrivateUsage]
+    _close_repository,  # pyright: ignore[reportPrivateUsage]
     _metadata,  # pyright: ignore[reportPrivateUsage]
+    _prewarm_process,  # pyright: ignore[reportPrivateUsage]
+    _twilio_call_sid,  # pyright: ignore[reportPrivateUsage]
 )
 from voicekit.storage.sqlite import SQLiteRepository
 
@@ -37,7 +40,7 @@ def _agent() -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",
+            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -46,12 +49,20 @@ class FakeAgentServer:
     def __init__(self) -> None:
         self.registration: dict[str, object] = {}
         self.runs: list[bool] = []
+        self.drains: list[float] = []
+        self.closed = False
 
     def rtc_session(self, entrypoint: object, **values: object) -> None:
         self.registration = {"entrypoint": entrypoint, **values}
 
     async def run(self, *, devmode: bool) -> None:
         self.runs.append(devmode)
+
+    async def drain(self, *, timeout: float) -> None:  # noqa: ASYNC109
+        self.drains.append(timeout)
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class FakeJobRequest:
@@ -125,6 +136,7 @@ class FakeJobContext:
         {"drain_timeout_s": 0},
         {"session_end_timeout_s": 0},
         {"health_port": 0},
+        {"browser_reservation_ttl_s": 29},
     ],
 )
 def test_livekit_host_settings_reject_invalid_values(
@@ -133,6 +145,21 @@ def test_livekit_host_settings_reject_invalid_values(
     with pytest.raises(VoicekitError) as caught:
         LiveKitHostSettings(**settings)  # type: ignore[arg-type]
     assert caught.value.code == "VK-RUN-002"
+
+
+def test_livekit_host_and_gate_reject_wrong_runtime_or_capacity() -> None:
+    with pytest.raises(VoicekitError, match="capacity"):
+        LiveKitAdmissionGate(0)
+
+    async def repository_factory() -> Any:
+        raise AssertionError("no job should run")
+
+    with pytest.raises(VoicekitError, match="requires runtime"):
+        LiveKitHost(
+            agent=_agent().model_copy(update={"runtime": "pipecat"}),
+            repository_factory=repository_factory,
+            server=cast(Any, FakeAgentServer()),
+        )
 
 
 @pytest.mark.asyncio
@@ -151,6 +178,8 @@ async def test_livekit_admission_request_accept_reject_release_and_run() -> None
     assert server.registration["agent_name"] == _agent().name
 
     await host.gate.reserve("call-browser")
+    with pytest.raises(VoicekitError, match="duplicate call id"):
+        await host.gate.reserve("call-browser")
     accepted = FakeJobRequest(
         "job-browser",
         json.dumps({"call_id": "call-browser"}),
@@ -167,6 +196,90 @@ async def test_livekit_admission_request_accept_reject_release_and_run() -> None
 
     await host.run(devmode=True)
     assert server.runs == [True]
+
+
+@pytest.mark.asyncio
+async def test_livekit_reload_drain_prewarm_and_optional_repository_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = FakeAgentServer()
+
+    async def repository_factory() -> Any:
+        raise AssertionError("no job should run")
+
+    host = LiveKitHost(
+        agent=_agent(),
+        repository_factory=repository_factory,
+        server=cast(Any, server),
+    )
+    await host.gate.reserve("occupied")
+    assert not await host.reload_agent(_agent(), restart_runner=True)
+    await host.gate.release("occupied")
+    assert await host.reload_agent(_agent(), restart_runner=False)
+    with pytest.raises(VoicekitError, match="registered agent name"):
+        await host.reload_agent(
+            _agent().model_copy(update={"name": "different"}),
+            restart_runner=False,
+        )
+
+    await host.drain()
+    assert server.drains == [3600]
+    assert server.closed
+
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.host.silero.VAD.load",
+        lambda: "prewarmed-vad",
+    )
+    process = SimpleNamespace(userdata={})
+    _prewarm_process(cast(Any, process))
+    assert process.userdata["voicekit_vad"] == "prewarmed-vad"
+
+    closed: list[str] = []
+
+    class AsyncClose:
+        async def close(self) -> None:
+            closed.append("async")
+
+    class SyncClose:
+        def close(self) -> None:
+            closed.append("sync")
+
+    await _close_repository(cast(Any, object()))
+    await _close_repository(cast(Any, AsyncClose()))
+    await _close_repository(cast(Any, SyncClose()))
+    assert closed == ["async", "sync"]
+
+
+@pytest.mark.asyncio
+async def test_livekit_browser_reservation_is_durable_before_token_and_fails_cleanly(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calls.sqlite3"
+
+    async def repository_factory() -> SQLiteRepository:
+        return await SQLiteRepository(database).open()
+
+    host = LiveKitHost(
+        agent=_agent(),
+        repository_factory=repository_factory,
+        server=cast(Any, FakeAgentServer()),
+    )
+    call_id = await host.reserve_web_call()
+    async with SQLiteRepository(database) as reader:
+        reserved = await reader.get_call(call_id)
+    assert reserved.runtime == "livekit"
+    assert reserved.channel == "web"
+    assert reserved.status == "active"
+    assert reserved.timeline[-1].event_type == "runtime.reserved"
+
+    await host.fail_web_reservation(call_id)
+    async with SQLiteRepository(database) as reader:
+        failed = await reader.get_call(call_id)
+        terminal = await reader.get_terminal_event_for_call(call_id)
+    assert failed.status == "failed"
+    assert failed.terminal_reason == "setup_error"
+    assert terminal.event_type == "call.failed"
+    assert host.gate.occupied == 0
 
 
 @pytest.mark.asyncio
@@ -228,6 +341,11 @@ def test_livekit_metadata_and_job_mapping_are_strict() -> None:
     with pytest.raises(VoicekitError):
         _call_from_context(cast(Any, invalid))
 
+    web.job.participant.attributes = None
+    assert _twilio_call_sid(cast(Any, web)) is None
+    web.job.participant.attributes = {"sip.twilio.callSid": "not-a-call-sid"}
+    assert _twilio_call_sid(cast(Any, web)) is None
+
 
 @pytest.mark.asyncio
 async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
@@ -254,7 +372,10 @@ async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
         def __init__(self, lifecycle: Any, call: Any) -> None:
             self.lifecycle = lifecycle
             self.call = call
-            self.policy = SimpleNamespace(dtmf=True, record=True)
+            self.policy = SimpleNamespace(
+                dtmf=True,
+                record=call.channel == "phone",
+            )
             self.observations = FakeObservations()
             self.started = False
             self.ended_reason = None
@@ -277,7 +398,7 @@ async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
     class FakeBuilder:
         async def build(self, *, agent: object, call: object, lifecycle: object) -> Any:
             assert agent is host.agent
-            assert cast(Any, call).call_id == "call-host-entry"
+            assert cast(Any, call).call_id == expected_call_id
             return FakeSession(lifecycle, call)
 
     recording_reconciliations: list[tuple[str, str, float]] = []
@@ -320,6 +441,7 @@ async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
             }
         )
     )
+    expected_call_id = "call-host-entry"
 
     await host.entrypoint(cast(Any, context))
     callback = cast(Any, context.room.listeners["sip_dtmf_received"])
@@ -335,6 +457,26 @@ async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
     async with SQLiteRepository(database) as repository:
         event = await repository.get_terminal_event_for_call("call-host-entry")
     assert event.event_type == "call.completed"
+
+    expected_call_id = await host.reserve_web_call()
+    context = FakeJobContext(
+        metadata=json.dumps(
+            {
+                "call_id": expected_call_id,
+                "channel": "web",
+                "direction": "inbound",
+                "provider": "livekit",
+            }
+        ),
+        kind=rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD,
+    )
+    await host.entrypoint(cast(Any, context))
+    async with SQLiteRepository(database) as repository:
+        web_event = await repository.get_terminal_event_for_call(expected_call_id)
+        web_call = await repository.get_call(expected_call_id)
+    assert web_event.event_type == "call.completed"
+    assert web_call.timeline[0].event_type == "runtime.reserved"
+    assert web_call.timeline[1].event_type == "runtime.admitted"
 
 
 @pytest.mark.asyncio

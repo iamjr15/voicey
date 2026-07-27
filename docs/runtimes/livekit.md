@@ -14,7 +14,8 @@ uv sync --extra livekit
 The resolved runtime is `livekit-agents==1.6.7` with
 `livekit-api==1.2.0`. Configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and
 `LIVEKIT_API_SECRET`, along with credentials for the selected STT, LLM, and TTS
-providers.
+providers. `voicekit init`, `voicekit keys add livekit`, and `voicekit doctor`
+validate the project with an authenticated, read-only room-list request.
 
 An agent points `flow` at either a native `Agent` object or a zero/one-argument
 factory. A one-argument factory receives voicekit’s native LiveKit tool list:
@@ -67,12 +68,22 @@ source, downloads through the existing authenticated media path, and emits
 
 ## Browser tokens
 
-`LiveKitTokenIssuer` mints a short-lived, least-privilege room token with an
+The admin listener first reserves runtime capacity and the durable call, then
+mints a one-use voicekit session bearer. The browser sends that bearer only in
+the `Authorization` header of public `POST /api/livekit/token`. The exchange
+consumes it once and `LiveKitTokenIssuer` mints a short-lived, least-privilege
+room token with an
 explicit `RoomAgentDispatch`. It grants join, publish, subscribe, and data
 publish for one room and does not grant room administration or metadata
-mutation. The call capacity reservation must exist before returning the token.
+mutation. A failed exchange terminalizes the reservation.
 
-The shared visual playground uses this token path in P2.2.
+The pinned official client receives the provider room credential and uses
+LiveKit's native signaling protocol. The voicekit bearer and LiveKit API
+key/secret never enter a URL or browser bundle.
+
+`voicekit dev --port N` supervises the public token listener on `N`, the local
+admin playground on `N+1`, and native worker health on `N+2`. Prompt/config
+reload applies to the next call; identity-level changes require restart.
 
 ## SIP behavior
 
@@ -114,5 +125,5 @@ Credentialed Twilio–LiveKit commands are listed in
 [`docs/GAPS.md`](../GAPS.md). They remain pending until their exact guarded
 commands run against funded accounts and real PSTN endpoints.
 
-Next step: configure a LiveKit project and run the P2.2 browser path through
-`voicekit dev`.
+Next step: run `voicekit doctor`, then `voicekit dev` and open the printed
+playground URL.
