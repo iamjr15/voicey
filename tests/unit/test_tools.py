@@ -1,5 +1,7 @@
 import asyncio
+import sys
 import threading
+from types import ModuleType
 from typing import cast
 
 import httpx
@@ -13,6 +15,7 @@ from voicekit.tools import (
     RepositoryToolObservationSink,
     ToolExecutor,
     get_tool_metadata,
+    load_tools,
     tool_execution_context,
 )
 
@@ -71,6 +74,61 @@ def test_bare_tool_decorator() -> None:
 
     assert get_tool_metadata(ping).name == "ping"
     assert get_tool_metadata(ping).is_async
+
+
+def test_tool_discovery_supports_modules_and_explicit_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = ModuleType("voicekit_test_discovery")
+
+    @tool
+    def zebra() -> str:
+        """Return the last alphabetical tool."""
+        return "z"
+
+    @tool
+    def alpha() -> str:
+        """Return the first alphabetical tool."""
+        return "a"
+
+    module.__dict__.update(
+        {
+            "zebra": zebra,
+            "alpha": alpha,
+            "undecorated": lambda: None,
+        }
+    )
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    discovered = load_tools(module.__name__)
+    explicit = load_tools([zebra, alpha])
+
+    assert [get_tool_metadata(item).name for item in discovered] == ["alpha", "zebra"]
+    assert [get_tool_metadata(item).name for item in explicit] == ["alpha", "zebra"]
+
+
+def test_tool_discovery_catalogs_import_and_duplicate_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = ModuleType("voicekit_test_duplicate_tools")
+
+    def first() -> str:
+        """Return the first value."""
+        return "first"
+
+    def second() -> str:
+        """Return the second value."""
+        return "second"
+
+    first.__name__ = "duplicate"
+    second.__name__ = "duplicate"
+    module.__dict__.update({"first": tool(first), "second": tool(second)})
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    with pytest.raises(VoicekitError, match="VK-TOL-002"):
+        load_tools(module.__name__)
+    with pytest.raises(VoicekitError, match="VK-TOL-001"):
+        load_tools("voicekit_module_that_does_not_exist")
 
 
 def test_undecorated_callable_is_rejected() -> None:

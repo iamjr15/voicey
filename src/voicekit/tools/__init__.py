@@ -1,6 +1,7 @@
 """Typed Python/HTTP tool declarations and safe execution."""
 
 from voicekit.tools.core import ToolMetadata, get_tool_metadata, tool
+from voicekit.tools.discovery import load_tools
 from voicekit.tools.execution import (
     RepositoryToolObservationSink,
     ToolErrorResult,
@@ -22,6 +23,7 @@ __all__ = [
     "ToolObservationSink",
     "ToolObservationStore",
     "get_tool_metadata",
+    "load_tools",
     "tool",
     "tool_execution_context",
 ]

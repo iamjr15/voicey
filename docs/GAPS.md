@@ -6,7 +6,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 |---|---|---|---|
 | P1 Twilio carrier/API certification | ready-to-run, pending credentials/PSTN | Commands below | Twilio test/live credentials, funded number, public target, PSTN |
 | P1 physical-handset outbound check | ready-to-run, pending credentials/human | Paid PSTN command below | Physical handset, answering person, provisioned carrier numbers |
-| P1 inbound audio/transcript loopback | not-ready (P1.6/P1.10 dependency) | Added to the same harness after the runtime/recipe endpoints land | Running Pipecat pipeline, physical handset and provisioned number |
+| P1 inbound audio/transcript loopback | not-ready (P1.10 dependency) | Added to the same harness after the recipe endpoint lands | Running Pipecat pipeline, physical handset and provisioned number |
 | P2 Twilio–LiveKit certification | not-ready | Added with the P2 certification harness | LiveKit project, Twilio Elastic SIP trunk, PSTN |
 | P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
@@ -54,7 +54,7 @@ Statuses change to `ready-to-run, pending credentials/time` only after the harne
     tests/live/test_twilio_live.py::test_twilio_live_paid_pstn_dtmf_recording_and_cold_transfer
   ```
 
-The inbound handset/audio-transcript loopback joins this suite after the P1
-Pipecat runtime and recipe endpoints exist. Mocked carrier protocol and local
-codec/tone-loopback evidence is green independently; it is not represented as
-live carrier evidence.
+The inbound Pipecat runtime path now exists; the handset/audio-transcript
+loopback joins this suite with the P1.10 recipe endpoint and Evals harness.
+Mocked carrier protocol and local codec/tone-loopback evidence is green
+independently; it is not represented as live carrier evidence.

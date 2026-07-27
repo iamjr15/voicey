@@ -207,6 +207,43 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The carrier API is unavailable or returned an indeterminate infrastructure error.",
         fix="Check carrier status and connectivity; reconcile mutations before any explicit retry.",
     ),
+    "VK-RUN-001": ErrorDefinition(
+        code="VK-RUN-001",
+        cause="The selected runtime or one of its pinned optional dependencies is unavailable.",
+        fix="Install the runtime extra printed by the command and rerun `voicekit doctor`.",
+    ),
+    "VK-RUN-002": ErrorDefinition(
+        code="VK-RUN-002",
+        cause="A runtime provider model, credential, or voice setting cannot be constructed.",
+        fix="Correct the reported provider setting or key, then rerun `voicekit doctor`.",
+    ),
+    "VK-RUN-003": ErrorDefinition(
+        code="VK-RUN-003",
+        cause="The native runtime flow entrypoint is missing, invalid, or failed to initialize.",
+        fix="Export the documented native flow entrypoint and run its runtime tests.",
+    ),
+    "VK-RUN-004": ErrorDefinition(
+        code="VK-RUN-004",
+        cause="The runtime cannot admit another call at the configured concurrency limit.",
+        fix=(
+            "Wait for an active call to finish or raise limits.max_concurrent with enough capacity."
+        ),
+    ),
+    "VK-RUN-005": ErrorDefinition(
+        code="VK-RUN-005",
+        cause="A media connection is not bound to a valid answer-time call reservation.",
+        fix="Reject the connection and verify the signed carrier or web-session handshake.",
+    ),
+    "VK-RUN-006": ErrorDefinition(
+        code="VK-RUN-006",
+        cause="The runtime call lifecycle could not be started, renewed, or finalized safely.",
+        fix="Stop admitting calls, restore durable storage, then run the recovery command.",
+    ),
+    "VK-RUN-007": ErrorDefinition(
+        code="VK-RUN-007",
+        cause="The runtime host received a malformed or unauthenticated signaling request.",
+        fix="Verify the expected public URL, proxy trust, signature, and signaling payload.",
+    ),
 }
 
 
