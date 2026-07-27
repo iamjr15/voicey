@@ -5,9 +5,9 @@ Last updated: 2026-07-27
 ## Current checkpoint
 
 - **Phase:** P2 — LiveKit parity, unified testing, Telnyx
-- **Current unit:** P2.5 Telnyx adapter, both Pipecat and LiveKit paths
-- **Next task:** implement the Telnyx Call Control/TeXML bidirectional-streaming adapter and the LiveKit FQDN/credential SIP provisioning backend, then add rollback and certification harnesses for both
-- **Completed:** all P0 and P1 units plus P2.1–P2.4. The unified strict scenario API now compiles and executes through installed native Pipecat Evals or LiveKit AgentSession workflows, including real PCM audio bridges, hard result checks, cited judging, deterministic reruns, JSON/JUnit reporting, seven both-runtime appointment cases, and a fail-closed live tier. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact guarded commands in `docs/GAPS.md`
+- **Current unit:** P2.6 runtime parity and complete config-mapping matrices
+- **Next task:** build the runtime-parameterized behavioral suite and checked-in feature/config matrices, enforce every declared parity row in CI, then run the P2 exit aggregator without promoting pending live gates
+- **Completed:** all P0 and P1 units plus P2.1–P2.5. Telnyx now has certified local implementations on both required paths: signed Call Control/TeXML + native Pipecat media and ledgered Telnyx FQDN/credential SIP + LiveKit inbound/outbound wiring. Number orders, native-command intents, route/provision rollback, recording ingestion, CLI/doctor/scaffold/Docker integration, and six guarded live tests are complete. Credentialed/PSTN/microphone/conversation P1 and P2 gates remain pending with exact commands in `docs/GAPS.md`
 
 ## Gate status
 
@@ -48,6 +48,8 @@ Last updated: 2026-07-27
 | P2.3 credentialed spoken appointment conversation | pending-live | Exact disposable recipe command and all-handoffs behavior checklist in `docs/GAPS.md`; requires a LiveKit project, reference providers, microphone permission, and human speech |
 | P2.4 unified native testing/local verification | green | Strict persona/scenario/profile schema, deterministic discovery/planning, hard durable-result assertions, cited judging, installed Pipecat EvalSuite text/audio compilation, native LiveKit text assertions, real PCM LiveKit audio bridge, four-attempt stability, JSON/JUnit/exit/next-step contracts, seven appointment cases on both compilers, fail-closed live tier, and wheel/CI wiring green; full suite 497 passed, 8 honest live skips, 90.18% branch coverage; ruff/format/strict pyright, pre-commit, wheel build, and dependency audit green |
 | P2.4 reference-provider text/audio suites | pending-live | Exact both-runtime disposable-project commands in `docs/GAPS.md`; current environment lacks Deepgram/Anthropic/Cartesia variables and Ollama |
+| P2.5 Telnyx dual-path local certification | green | Signed Call Control/TeXML, native one-use PCMU/8 kHz Pipecat media, DTMF/AMD/hangup/transfer/recording, async number ownership, durable callback-only intent reconciliation, CAS route restore, current Telnyx FQDN + LiveKit trunks/dispatch, idempotent reuse/reverse rollback/ambiguity fencing, and CLI/doctor/scaffold/Docker selection green; full suite 581 passed, 14 honest live skips, 90.06% branch coverage; ruff/format/strict pyright, wheel and dependency audits green |
+| P2.5 Telnyx account/PSTN certification | pending-live | Six guarded commands plus the both-path physical checklist are exact in `docs/GAPS.md`; permitted local credential inventory contains no Telnyx or LiveKit variables |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

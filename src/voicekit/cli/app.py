@@ -50,6 +50,7 @@ from voicekit.testing.runner import run_project_tests
 from voicekit.tunnel import TunnelPreference
 
 if TYPE_CHECKING:
+    from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.twilio import TwilioAdapter
 
 app = typer.Typer(
@@ -247,7 +248,7 @@ def call_command(
         typer.Option("--yes", help="Confirm the paid outbound call."),
     ] = False,
 ) -> None:
-    """Place one paid test call through the durable Twilio intent ledger."""
+    """Place one paid test call through the configured carrier intent ledger."""
 
     def operation() -> None:
         context = _context()
@@ -264,12 +265,12 @@ def call_command(
                 "VK-CLI-007",
                 detail="start `voicekit dev --phone` or pass --url first.",
             )
-        adapter = _twilio(context)
+        adapter = _carrier(context)
         try:
             call_sid = adapter.start_call(
                 manifest.phone_number,
                 e164,
-                PipecatTarget(target_url),
+                _carrier_target(context, target_url),
             )
         finally:
             adapter.ledger.close()
@@ -531,7 +532,7 @@ def numbers_list(
     """List voice-capable numbers owned by the configured carrier."""
 
     def operation() -> None:
-        adapter = _twilio(_context())
+        adapter = _carrier(_context())
         try:
             rows: list[dict[str, object]] = []
             for number in adapter.list_numbers():
@@ -559,8 +560,14 @@ def numbers_buy(
     """Buy the first matching voice number after an explicit money confirmation."""
 
     def operation() -> None:
-        _confirm(f"Buy one Twilio voice number in {country.upper()}/{area or '*'}?", yes=yes)
-        adapter = _twilio(_context())
+        context = _context()
+        carriers = require_manifest(context).carriers
+        provider = carriers[0] if carriers else "carrier"
+        _confirm(
+            f"Buy one {provider} voice number in {country.upper()}/{area or '*'}?",
+            yes=yes,
+        )
+        adapter = _carrier(context)
         try:
             number = adapter.buy_number(country, area)
         finally:
@@ -580,7 +587,7 @@ def numbers_release(
 
     def operation() -> None:
         _confirm(f"Release {number}? The number may not be recoverable.", yes=yes)
-        adapter = _twilio(_context())
+        adapter = _carrier(_context())
         try:
             adapter.release_number(number)
         finally:
@@ -613,9 +620,12 @@ def numbers_point(
                 detail="an owned number and --url/VOICEKIT_PUBLIC_URL are required.",
             )
         _confirm(f"Point live number {selected_number} to {target_url}?", yes=yes)
-        adapter = _twilio(context, expected_public_base=target_url)
+        adapter = _carrier(context, expected_public_base=target_url)
         try:
-            token = adapter.point_inbound(selected_number, PipecatTarget(target_url))
+            token = adapter.point_inbound(
+                selected_number,
+                _carrier_target(context, target_url),
+            )
         finally:
             adapter.ledger.close()
         console.print(f"Pointed {selected_number}. Rollback token: {token.token}")
@@ -633,9 +643,11 @@ def numbers_restore(
 
     def operation() -> None:
         _confirm(f"Restore the carrier route captured by {token}?", yes=yes)
-        adapter = _twilio(_context())
+        context = _context()
+        provider = require_manifest(context).carriers[0]
+        adapter = _carrier(context)
         try:
-            adapter.restore(RollbackToken(provider="twilio", token=token))
+            adapter.restore(RollbackToken(provider=provider, token=token))
         finally:
             adapter.ledger.close()
         console.print(f"Restored: {token}")
@@ -885,13 +897,13 @@ def deploy_command(
                 ),
                 yes=yes,
             )
-            adapter = _twilio(context, expected_public_base=smoke_result.url)
+            adapter = _carrier(context, expected_public_base=smoke_result.url)
             try:
                 call_id = await asyncio.to_thread(
                     adapter.start_call,
                     cast("str", manifest.phone_number),
                     destination,
-                    PipecatTarget(https_base=smoke_result.url),
+                    _carrier_target(context, smoke_result.url),
                 )
             finally:
                 adapter.ledger.close()
@@ -958,25 +970,62 @@ def _context() -> ProjectContext:
     return discover_project(Path.cwd(), dict(os.environ))
 
 
+def _carrier(
+    context: ProjectContext,
+    *,
+    expected_public_base: str | None = None,
+) -> TwilioAdapter | TelnyxAdapter:
+    from voicekit.telephony.telnyx import TelnyxAdapter
+
+    manifest = require_manifest(context)
+    if manifest.carriers in ([], ["twilio"]):
+        return _twilio(context, expected_public_base=expected_public_base)
+    if manifest.carriers == ["telnyx"]:
+        return TelnyxAdapter(
+            api_key=context.environment.get("TELNYX_API_KEY"),
+            public_key=context.environment.get("TELNYX_PUBLIC_KEY"),
+            connection_id=context.environment.get("TELNYX_CONNECTION_ID"),
+            ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+        )
+    raise VoicekitError(
+        "VK-CLI-005",
+        detail="this command requires the enabled Twilio or Telnyx carrier.",
+    )
+
+
 def _twilio(
     context: ProjectContext,
     *,
     expected_public_base: str | None = None,
 ) -> TwilioAdapter:
+    """Compatibility seam for Twilio-specific tests and third-party CLI wrappers."""
     from voicekit.telephony.twilio import TwilioAdapter
 
-    manifest = require_manifest(context)
-    if manifest.carriers != ["twilio"]:
-        raise VoicekitError(
-            "VK-CLI-005",
-            detail="this command requires the enabled Twilio carrier.",
-        )
     return TwilioAdapter(
         account_sid=context.environment.get("TWILIO_ACCOUNT_SID"),
         auth_token=context.environment.get("TWILIO_AUTH_TOKEN"),
         ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
         expected_public_base=expected_public_base,
     )
+
+
+def _carrier_target(context: ProjectContext, public_base: str) -> PipecatTarget:
+    manifest = require_manifest(context)
+    if manifest.carriers == ["telnyx"]:
+        return PipecatTarget(
+            public_base,
+            ws_path="/telnyx/media",
+            answer_path="/telnyx/answer",
+            event_path="/telnyx/events",
+            recording_path="/telnyx/recordings",
+            amd_path="/telnyx/amd",
+        )
+    if manifest.carriers != ["twilio"]:
+        raise VoicekitError(
+            "VK-CLI-005",
+            detail="this command requires the enabled Twilio or Telnyx carrier.",
+        )
+    return PipecatTarget(public_base)
 
 
 def _provider_entry(context: ProjectContext, provider: str) -> ProviderCatalogEntry:

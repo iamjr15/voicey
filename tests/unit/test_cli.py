@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import pytest
 from typer.testing import CliRunner
@@ -141,6 +141,25 @@ class FakeTwilio:
         return "CA" + "1" * 32
 
 
+class FakeTelnyx(FakeTwilio):
+    def point_inbound(self, number: str, target: PipecatTarget) -> RollbackToken:
+        assert target.ws_path == "/telnyx/media"
+        assert target.event_path == "/telnyx/events"
+        self.events.append(f"point:{number}:{target.stream_url}")
+        return RollbackToken(provider="telnyx", token="route_cli")
+
+    def start_call(
+        self,
+        from_number: str,
+        to_number: str,
+        target: PipecatTarget,
+    ) -> str:
+        assert target.ws_path == "/telnyx/media"
+        assert target.event_path == "/telnyx/events"
+        self.events.append(f"call:{from_number}:{to_number}:{target.stream_url}")
+        return "v3:telnyx-call-id"
+
+
 class FakeDoctor:
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         return
@@ -164,7 +183,15 @@ def _fake_twilio(*_args: object, **_kwargs: object) -> FakeTwilio:
     return FakeTwilio()
 
 
-def _phone_project(path: Path) -> ProjectManifest:
+def _fake_telnyx(*_args: object, **_kwargs: object) -> FakeTelnyx:
+    return FakeTelnyx()
+
+
+def _phone_project(
+    path: Path,
+    *,
+    carrier: Literal["twilio", "telnyx"] = "twilio",
+) -> ProjectManifest:
     models: dict[ModelAxis, str] = {
         "stt": "deepgram/nova-3",
         "llm": "anthropic/claude-sonnet-5",
@@ -176,7 +203,7 @@ def _phone_project(path: Path) -> ProjectManifest:
         recipe=RecipeSelection(name="scratch", version="1.0.0"),
         channels=frozenset({"phone", "web"}),
         models=models,
-        carriers=["twilio"],
+        carriers=[carrier],
         phone_number="+14155550123",
     )
     ManifestStore(path / "voicekit.jsonc").save(manifest)
@@ -530,6 +557,45 @@ def test_mutating_phone_commands_execute_only_with_yes(
         "point",
         "restore",
         "call",
+    ]
+
+
+def test_telnyx_phone_commands_use_telnyx_media_and_event_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path, carrier="telnyx")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app._carrier", _fake_telnyx)
+    FakeTelnyx.events.clear()
+
+    point = runner.invoke(
+        app,
+        [
+            "numbers",
+            "point",
+            "+14155550123",
+            "--url",
+            "https://public.example.test",
+            "--yes",
+        ],
+    )
+    call = runner.invoke(
+        app,
+        [
+            "call",
+            "+14155550199",
+            "--url",
+            "https://public.example.test",
+            "--yes",
+        ],
+    )
+
+    assert point.exit_code == 0, point.stderr
+    assert call.exit_code == 0, call.stderr
+    assert FakeTelnyx.events == [
+        "point:+14155550123:wss://public.example.test/telnyx/media",
+        "call:+14155550123:+14155550199:wss://public.example.test/telnyx/media",
     ]
 
 

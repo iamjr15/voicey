@@ -4258,6 +4258,10 @@ livekit = [
 pipecat = [
     { name = "pipecat-ai", extra = ["anthropic", "deepgram", "evals", "google", "webrtc", "websocket"] },
 ]
+telnyx = [
+    { name = "cryptography" },
+    { name = "python-multipart" },
+]
 tunnel = [
     { name = "ngrok" },
 ]
@@ -4283,6 +4287,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22,<1" },
+    { name = "cryptography", marker = "extra == 'telnyx'", specifier = ">=49,<50" },
     { name = "fastapi", specifier = ">=0.138,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "json5", specifier = ">=0.13,<1" },
@@ -4292,6 +4297,7 @@ requires-dist = [
     { name = "pipecat-ai", extras = ["anthropic", "deepgram", "evals", "google", "webrtc", "websocket"], marker = "extra == 'pipecat'", specifier = "==1.6.0" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pydantic-settings", specifier = ">=2.12,<3" },
+    { name = "python-multipart", marker = "extra == 'telnyx'", specifier = ">=0.0.22,<1" },
     { name = "python-multipart", marker = "extra == 'twilio'", specifier = ">=0.0.22,<1" },
     { name = "questionary", specifier = "==2.1.1" },
     { name = "rich", specifier = ">=13.9.4,<16" },
@@ -4302,7 +4308,7 @@ requires-dist = [
     { name = "watchfiles", specifier = ">=1.1,<2" },
     { name = "websockets", specifier = ">=13.1,<17" },
 ]
-provides-extras = ["pipecat", "livekit", "twilio", "tunnel"]
+provides-extras = ["pipecat", "livekit", "twilio", "telnyx", "tunnel"]
 
 [package.metadata.requires-dev]
 dev = [

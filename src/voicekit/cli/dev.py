@@ -11,7 +11,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import uvicorn
 from fastapi import FastAPI
@@ -37,10 +37,14 @@ from voicekit.tunnel import TunnelManager, TunnelPreference, TunnelProbe
 if TYPE_CHECKING:
     from livekit.api import LiveKitAPI
 
-    from voicekit.runtimes.livekit.sip import TwilioLiveKitSipProvisioner
     from voicekit.telephony.ledger import TelephonyLedger
+    from voicekit.telephony.telnyx import TelnyxAdapter
 
 DevNotice = Callable[[str], None]
+
+
+class _PhoneProvisioner(Protocol):
+    async def rollback(self, operation_id: str) -> object: ...
 
 
 async def run_dev(
@@ -82,7 +86,7 @@ async def run_dev(
             return
         tunnel_handle = None
         rollback: RollbackToken | None = None
-        adapter: TwilioAdapter | None = None
+        adapter: TwilioAdapter | TelnyxAdapter | None = None
         try:
             external_base = "https://localhost.invalid"
             public_origin = f"http://127.0.0.1:{port}"
@@ -97,12 +101,26 @@ async def run_dev(
                 external_base = tunnel_handle.public_url
             repository_path = context.root / ".voicekit" / "calls.sqlite3"
             async with SQLiteRepository(repository_path) as repository:
-                if phone or (agent.phone is not None and agent.phone.provider == "twilio"):
+                selected_provider = (
+                    agent.phone.provider
+                    if agent.phone is not None
+                    else (manifest.carriers[0] if phone and manifest.carriers else None)
+                )
+                if selected_provider == "twilio":
                     adapter = TwilioAdapter(
                         account_sid=context.environment.get("TWILIO_ACCOUNT_SID"),
                         auth_token=context.environment.get("TWILIO_AUTH_TOKEN"),
                         ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
                         expected_public_base=external_base,
+                    )
+                elif selected_provider == "telnyx":
+                    from voicekit.telephony.telnyx import TelnyxAdapter
+
+                    adapter = TelnyxAdapter(
+                        api_key=context.environment.get("TELNYX_API_KEY"),
+                        public_key=context.environment.get("TELNYX_PUBLIC_KEY"),
+                        connection_id=context.environment.get("TELNYX_CONNECTION_ID"),
+                        ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
                     )
                 secret = context.environment.get(agent.results.secret_env, "")
                 tokens = SessionTokenManager(
@@ -137,9 +155,22 @@ async def run_dev(
                                 "TWILIO_AUTH_TOKEN",
                                 "",
                             ),
+                            telnyx_api_key=context.environment.get(
+                                "TELNYX_API_KEY",
+                                "",
+                            ),
                             pending_media_timeout_s=float(tokens.ttl_s),
                         ),
-                        twilio=adapter,
+                        twilio=(
+                            cast("TwilioAdapter", adapter)
+                            if selected_provider == "twilio"
+                            else None
+                        ),
+                        telnyx=(
+                            cast("TelnyxAdapter", adapter)
+                            if selected_provider == "telnyx"
+                            else None
+                        ),
                         web_sessions=security,
                     )
                     reloads = ReloadController(
@@ -317,7 +348,7 @@ async def _run_livekit_dev(
             browser_reservation_ttl_s=float(tokens.ttl_s),
         ),
     )
-    provisioner: TwilioLiveKitSipProvisioner | None = None
+    provisioner: _PhoneProvisioner | None = None
     provision_operation_id: str | None = None
     livekit_client: LiveKitAPI | None = None
     telephony_ledger: TelephonyLedger | None = None
@@ -439,56 +470,100 @@ async def _provision_livekit_phone(
     api_key: str,
     api_secret: str,
     server_url: str,
-) -> tuple[TwilioLiveKitSipProvisioner, str, LiveKitAPI, TelephonyLedger]:
+) -> tuple[_PhoneProvisioner, str, LiveKitAPI, TelephonyLedger]:
     from livekit import api as livekit_api
-    from twilio.rest import Client
 
-    from voicekit.runtimes.livekit.sip import (
-        TwilioElasticSipBackend,
-        TwilioLiveKitSipConfig,
-        TwilioLiveKitSipProvisioner,
-    )
     from voicekit.telephony.ledger import TelephonyLedger
 
     manifest = require_manifest(context)
-    if manifest.phone_number is None or agent.phone is None or agent.phone.provider != "twilio":
+    if (
+        manifest.phone_number is None
+        or agent.phone is None
+        or agent.phone.provider not in {"twilio", "telnyx"}
+    ):
         raise VoicekitError(
             "VK-CLI-007",
-            detail="LiveKit --phone currently requires one configured Twilio number.",
+            detail="LiveKit --phone requires one configured Twilio or Telnyx number.",
         )
-    account_sid = _required_environment(context.environment, "TWILIO_ACCOUNT_SID")
-    auth_token = _required_environment(context.environment, "TWILIO_AUTH_TOKEN")
     livekit_client = livekit_api.LiveKitAPI(server_url, api_key, api_secret)
     ledger = TelephonyLedger(context.root / ".voicekit" / "telephony.sqlite3")
-    provisioner = TwilioLiveKitSipProvisioner(
-        livekit=livekit_client.sip,
-        twilio=TwilioElasticSipBackend(Client(account_sid, auth_token)),
-        ledger=ledger,
-    )
     try:
-        result = await provisioner.provision(
-            TwilioLiveKitSipConfig(
-                number=manifest.phone_number,
-                agent_name=agent.name,
-                livekit_sip_uri=_required_environment(
-                    context.environment,
-                    "VOICEKIT_LIVEKIT_SIP_URI",
-                ),
-                twilio_domain_name=_required_environment(
-                    context.environment,
-                    "VOICEKIT_TWILIO_SIP_DOMAIN",
-                ),
-                auth_username=_required_environment(
-                    context.environment,
-                    "VOICEKIT_TWILIO_SIP_USERNAME",
-                ),
-                auth_password=_required_environment(
-                    context.environment,
-                    "VOICEKIT_TWILIO_SIP_PASSWORD",
-                ),
-                record=agent.phone.record,
+        if agent.phone.provider == "twilio":
+            from twilio.rest import Client
+
+            from voicekit.runtimes.livekit.sip import (
+                TwilioElasticSipBackend,
+                TwilioLiveKitSipConfig,
+                TwilioLiveKitSipProvisioner,
             )
-        )
+
+            account_sid = _required_environment(context.environment, "TWILIO_ACCOUNT_SID")
+            auth_token = _required_environment(context.environment, "TWILIO_AUTH_TOKEN")
+            twilio_provisioner = TwilioLiveKitSipProvisioner(
+                livekit=livekit_client.sip,
+                twilio=TwilioElasticSipBackend(Client(account_sid, auth_token)),
+                ledger=ledger,
+            )
+            result = await twilio_provisioner.provision(
+                TwilioLiveKitSipConfig(
+                    number=manifest.phone_number,
+                    agent_name=agent.name,
+                    livekit_sip_uri=_required_environment(
+                        context.environment,
+                        "VOICEKIT_LIVEKIT_SIP_URI",
+                    ),
+                    twilio_domain_name=_required_environment(
+                        context.environment,
+                        "VOICEKIT_TWILIO_SIP_DOMAIN",
+                    ),
+                    auth_username=_required_environment(
+                        context.environment,
+                        "VOICEKIT_TWILIO_SIP_USERNAME",
+                    ),
+                    auth_password=_required_environment(
+                        context.environment,
+                        "VOICEKIT_TWILIO_SIP_PASSWORD",
+                    ),
+                    record=agent.phone.record,
+                )
+            )
+            provisioner: _PhoneProvisioner = twilio_provisioner
+        else:
+            from voicekit.runtimes.livekit.telnyx import (
+                TelnyxLiveKitSipConfig,
+                TelnyxLiveKitSipProvisioner,
+                TelnyxSipHTTPBackend,
+            )
+
+            telnyx_provisioner = TelnyxLiveKitSipProvisioner(
+                livekit=livekit_client.sip,
+                telnyx=TelnyxSipHTTPBackend(
+                    api_key=_required_environment(
+                        context.environment,
+                        "TELNYX_API_KEY",
+                    )
+                ),
+                ledger=ledger,
+            )
+            result = await telnyx_provisioner.provision(
+                TelnyxLiveKitSipConfig(
+                    number=manifest.phone_number,
+                    agent_name=agent.name,
+                    livekit_sip_uri=_required_environment(
+                        context.environment,
+                        "VOICEKIT_LIVEKIT_SIP_URI",
+                    ),
+                    auth_username=_required_environment(
+                        context.environment,
+                        "VOICEKIT_TELNYX_SIP_USERNAME",
+                    ),
+                    auth_password=_required_environment(
+                        context.environment,
+                        "VOICEKIT_TELNYX_SIP_PASSWORD",
+                    ),
+                )
+            )
+            provisioner = telnyx_provisioner
     except Exception:
         await livekit_client.aclose()
         ledger.close()

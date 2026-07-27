@@ -46,6 +46,7 @@ livekit = [
   "livekit-api==1.2.0",
 ]
 twilio = ["python-multipart>=0.0.22,<1", "twilio==9.10.9"]
+telnyx = ["cryptography>=49,<50", "python-multipart>=0.0.22,<1"]
 tunnel = ["ngrok==1.4.0"]
 
 [project.scripts]
@@ -53,6 +54,7 @@ voicekit = "voicekit.cli.app:app"
 
 [project.entry-points."voicekit.telephony"]
 twilio = "voicekit.telephony.twilio:TwilioAdapter"
+telnyx = "voicekit.telephony.telnyx:TelnyxAdapter"
 
 [project.entry-points."voicekit.providers"]
 

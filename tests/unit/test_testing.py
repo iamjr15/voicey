@@ -380,7 +380,7 @@ def test_pipecat_compiler_covers_timing_handoff_cloud_and_template_errors(
             service="openai",
             model="cloud",
             base_url="https://example.test/v1",
-            api_key_env="TEST_KEY",
+            api_key_env="TEST_KEY",  # pragma: allowlist secret
         ),
     )
     native = EvalScenario.load(compilation.scenarios[0])
@@ -499,7 +499,7 @@ async def test_model_client_requires_cloud_key_and_maps_bad_response() -> None:
         service="openai",
         model="cloud",
         base_url="https://example.test/v1",
-        api_key_env="CLOUD_KEY",
+        api_key_env="CLOUD_KEY",  # pragma: allowlist secret
     )
     with pytest.raises(VoicekitError, match="CLOUD_KEY is required"):
         await OpenAICompatibleClient(cloud, environment={}).complete([], seed=7)
@@ -526,13 +526,16 @@ def test_testing_config_defaults_local_and_validates_cloud(tmp_path: Path) -> No
             service: "openai",
             model: "gpt-5-mini",
             base_url: "https://api.openai.com/v1",
-            api_key_env: "OPENAI_API_KEY",
+            api_key_env: "OPENAI_API_KEY", // pragma: allowlist secret
           },
         }
         """,
         encoding="utf-8",
     )
-    assert load_testing_config(tmp_path).judge.api_key_env == "OPENAI_API_KEY"
+    assert (
+        load_testing_config(tmp_path).judge.api_key_env
+        == "OPENAI_API_KEY"  # pragma: allowlist secret
+    )
 
     (tests / "voicekit-test.jsonc").write_text("{ judge: false }", encoding="utf-8")
     with pytest.raises(VoicekitError, match="VK-TST-001"):
@@ -963,7 +966,7 @@ async def test_livekit_executor_uses_native_runs_and_enforces_latency(
             service="openai",
             model="cloud",
             base_url="https://example.test/v1",
-            api_key_env="TEST_KEY",
+            api_key_env="TEST_KEY",  # pragma: allowlist secret
         )
     )
     definition = ScenarioDefinition(

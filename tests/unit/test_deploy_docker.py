@@ -624,7 +624,7 @@ async def test_runtime_serve_builds_secure_web_boundary_and_closes_delivery(
     assert host.web_sessions is not None
 
 
-async def test_runtime_serve_phone_only_builds_twilio_and_rejects_future_carrier(
+async def test_runtime_serve_phone_builds_twilio_or_telnyx_and_requires_credentials(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -651,6 +651,26 @@ async def test_runtime_serve_phone_only_builds_twilio_and_rejects_future_carrier
     )
     assert observed["admin_app"] is None
     assert cast("Any", observed["host"]).twilio is not None
+
+    telnyx_environment = {
+        "VOICEKIT_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
+        "TELNYX_API_KEY": "fixture",  # pragma: allowlist secret
+        "TELNYX_PUBLIC_KEY": "00" * 32,
+        "TELNYX_CONNECTION_ID": "connection-fixture",
+    }
+    observed.clear()
+    await runtime_module._serve(
+        settings=settings,
+        agent=_runtime_agent(
+            phone=Phone(provider="telnyx", number="+14155550123"),
+            web=False,
+        ),
+        preflight=_preflight(tmp_path),
+        environment=telnyx_environment,
+    )
+    telnyx_host = cast("Any", observed["host"])
+    assert telnyx_host.twilio is None
+    assert telnyx_host.telnyx is not None
 
     with pytest.raises(VoicekitError) as carrier:
         await runtime_module._serve(

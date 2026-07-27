@@ -21,7 +21,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P2 appointment LiveKit conversation | ready-to-run, pending credentials/human | Command and checklist below | LiveKit project, reference-provider keys, browser microphone grant, a person exercising all handoffs |
 | P2 unified appointment text suite, both runtimes | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia, local Ollama; both generated projects |
 | P2 unified appointment audio suite, both runtimes | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys, Ollama, Kokoro/Moonshine downloads; both generated projects |
-| P2 Telnyx certification, both paths | not-ready | Added with the P2 certification harness | Funded Telnyx and LiveKit accounts |
+| P2 Telnyx certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Telnyx/LiveKit accounts, both carrier paths, public target, PSTN |
 | P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
@@ -255,6 +255,102 @@ This gate is not green until both guarded pytest commands and the physical
 checklist genuinely pass. This workspace has neither the account variables nor
 the required PSTN endpoints, so the tests skip and the handset checklist
 remains pending.
+
+## P2 Telnyx dual-path certification
+
+The offline certification validates signed Call Control and TeXML callbacks,
+one-use WebSocket admission, native PCMU/8 kHz bidirectional streaming, DTMF,
+hangup mapping, recording ingestion, asynchronous number orders, durable
+intent reconciliation, conflict-safe route restoration, current LiveKit/Telnyx
+request shapes, idempotent reuse, and reverse rollback:
+
+```bash
+uv run pytest --no-cov \
+  tests/certification/test_telnyx_adapter.py \
+  tests/certification/test_telnyx_media.py \
+  tests/certification/test_telnyx_livekit_sip.py
+```
+
+The safe read-only account/owned-number check needs `TELNYX_API_KEY`,
+`TELNYX_PUBLIC_KEY`, `TELNYX_CONNECTION_ID`, and
+`VOICEKIT_TELNYX_LIVE_FROM`:
+
+```bash
+uv run pytest -m live --no-cov \
+  tests/live/test_telnyx_live.py::test_telnyx_live_account_and_owned_number_are_ready
+```
+
+With the Pipecat agent running at `VOICEKIT_LIVE_PUBLIC_BASE`, this guarded
+command temporarily points the number to the configured Voice API connection,
+checks the FULL-durability route record, and restores the exact snapshot:
+
+```bash
+VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+  uv run pytest -m live --no-cov \
+  tests/live/test_telnyx_live.py::test_telnyx_live_route_point_and_crash_safe_restore
+```
+
+The paid Call Control gate additionally needs
+`VOICEKIT_TELNYX_LIVE_TO`, `VOICEKIT_TELNYX_TRANSFER_TO`, a person answering
+the endpoint, and destination permissions. It starts dual-channel recording,
+sends `12#`, cold-transfers, and guarantees a final hangup:
+
+```bash
+VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+  uv run pytest -m live --no-cov \
+  tests/live/test_telnyx_live.py::test_telnyx_live_paid_pstn_dtmf_recording_and_cold_transfer
+```
+
+After the verified runtime captures `call.recording.saved`, export its `mp3`
+or `wav` URL as `VOICEKIT_TELNYX_LIVE_RECORDING_URL` and prove that engine-owned
+artifact ingestion succeeds:
+
+```bash
+uv run pytest -m live --no-cov \
+  tests/live/test_telnyx_live.py::test_telnyx_live_signed_recording_url_ingests_to_engine_storage
+```
+
+For the no-call LiveKit path, also export `LIVEKIT_URL`,
+`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `VOICEKIT_LIVEKIT_AGENT_NAME`,
+`VOICEKIT_LIVEKIT_SIP_URI`, `VOICEKIT_TELNYX_SIP_USERNAME`, and
+`VOICEKIT_TELNYX_SIP_PASSWORD`. The test provisions both control planes
+twice, proves reuse, then rolls back:
+
+```bash
+VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+  uv run pytest -m live --no-cov \
+  tests/live/test_telnyx_livekit_live.py::test_live_telnyx_livekit_provision_reuse_and_rollback
+```
+
+Retain a provisioned outbound trunk as `LIVEKIT_SIP_OUTBOUND_TRUNK`, set
+`VOICEKIT_LIVEKIT_CERT_ROOM`, and run the paid LiveKit SIP call:
+
+```bash
+VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+  uv run pytest -m live --no-cov \
+  tests/live/test_telnyx_livekit_live.py::test_live_telnyx_livekit_paid_outbound_and_sip_status_mapping
+```
+
+The physical checklist requires one inbound and one outbound call on each
+path:
+
+1. verify greeting and two-way audio;
+2. send and receive `12#`, then inspect the durable DTMF observation;
+3. hang up once from each side and confirm caller/agent/provider terminal
+   mapping;
+4. complete a cold transfer on both paths and a native warm transfer on
+   LiveKit;
+5. confirm the stable pending recording reference and
+   `call.recording.ready`;
+6. confirm exactly one terminal event and an acknowledged or visibly
+   dead-lettered delivery;
+7. interrupt one temporary route/provisioning run and prove the saved snapshot
+   restores without overwriting concurrent carrier changes.
+
+This workspace has no Telnyx or LiveKit variables. All six live tests therefore
+skip, and no account, route, paid-call, recording, or handset result is marked
+green.
+
 ## P1 cloudflared public WebSocket edge
 
 The harness starts a loopback FastAPI listener, installs an ephemeral

@@ -42,6 +42,7 @@ from voicekit.runtimes.pipecat import PipecatHost, PipecatHostSettings
 from voicekit.storage.sqlite import SQLiteRepository
 
 if TYPE_CHECKING:
+    from voicekit.telephony.telnyx import TelnyxAdapter
     from voicekit.telephony.twilio import TwilioAdapter
 
 _LOG = get_logger(component="docker-runtime")
@@ -172,24 +173,49 @@ async def _serve(
     preflight: PersistencePreflightReport,
     environment: Mapping[str, str],
 ) -> None:
-    adapter: TwilioAdapter | None = None
+    twilio: TwilioAdapter | None = None
+    telnyx: TelnyxAdapter | None = None
     database_path = preflight.database_path
     async with SQLiteRepository(database_path) as repository:
         if agent.phone is not None:
-            if agent.phone.provider != "twilio":
+            if agent.phone.provider == "twilio":
+                from voicekit.telephony.twilio import TwilioAdapter
+
+                twilio = TwilioAdapter(
+                    account_sid=environment.get("TWILIO_ACCOUNT_SID"),
+                    auth_token=environment.get("TWILIO_AUTH_TOKEN"),
+                    ledger_path=settings.data_dir / "telephony.sqlite3",
+                    expected_public_base=settings.public_base,
+                    trusted_proxies=settings.trusted_proxy_ips,
+                )
+            elif agent.phone.provider == "telnyx":
+                from voicekit.telephony.telnyx import TelnyxAdapter
+
+                missing = [
+                    name
+                    for name in (
+                        "TELNYX_API_KEY",
+                        "TELNYX_PUBLIC_KEY",
+                        "TELNYX_CONNECTION_ID",
+                    )
+                    if not environment.get(name)
+                ]
+                if missing:
+                    raise VoicekitError(
+                        "VK-DEP-003",
+                        detail=f"Telnyx deployment is missing {', '.join(missing)}.",
+                    )
+                telnyx = TelnyxAdapter(
+                    api_key=environment.get("TELNYX_API_KEY"),
+                    public_key=environment.get("TELNYX_PUBLIC_KEY"),
+                    connection_id=environment.get("TELNYX_CONNECTION_ID"),
+                    ledger_path=settings.data_dir / "telephony.sqlite3",
+                )
+            else:
                 raise VoicekitError(
                     "VK-DEP-003",
-                    detail=f"carrier {agent.phone.provider!r} is not available in P1 Docker.",
+                    detail=f"carrier {agent.phone.provider!r} is not available in Docker.",
                 )
-            from voicekit.telephony.twilio import TwilioAdapter
-
-            adapter = TwilioAdapter(
-                account_sid=environment.get("TWILIO_ACCOUNT_SID"),
-                auth_token=environment.get("TWILIO_AUTH_TOKEN"),
-                ledger_path=settings.data_dir / "telephony.sqlite3",
-                expected_public_base=settings.public_base,
-                trusted_proxies=settings.trusted_proxy_ips,
-            )
 
         secret = _required_secret(environment, agent.results.secret_env)
         previous_secret = (
@@ -232,9 +258,11 @@ async def _serve(
                 public_base=settings.public_base,
                 twilio_account_sid=environment.get("TWILIO_ACCOUNT_SID", ""),
                 twilio_auth_token=environment.get("TWILIO_AUTH_TOKEN", ""),
+                telnyx_api_key=environment.get("TELNYX_API_KEY", ""),
                 storage_ready=preflight.schema_ready and preflight.artifact_round_trip,
             ),
-            twilio=adapter,
+            twilio=twilio,
+            telnyx=telnyx,
             web_sessions=web_security,
         )
         delivery = DeliveryWorker(
@@ -261,8 +289,10 @@ async def _serve(
                 )
         finally:
             await delivery.close()
-            if adapter is not None:
-                await asyncio.to_thread(adapter.ledger.close)
+            if twilio is not None:
+                await asyncio.to_thread(twilio.ledger.close)
+            if telnyx is not None:
+                await asyncio.to_thread(telnyx.ledger.close)
 
 
 def _admin_app(

@@ -25,6 +25,7 @@ CallEventType: TypeAlias = Literal[
     "dtmf",
 ]
 TransferMode: TypeAlias = Literal["cold", "warm"]
+CallDirection: TypeAlias = Literal["inbound", "outbound"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +108,7 @@ class PipecatTarget:
         ):
             raise VoicekitError(
                 "VK-TEL-002",
-                detail="Twilio stream parameters require safe names and values up to 500 chars.",
+                detail="Carrier stream parameters require safe names and values up to 500 chars.",
             )
 
     @property
@@ -165,6 +166,9 @@ class CallEvent:
     answered_by: str | None = None
     digits: str | None = None
     intent_id: str | None = None
+    direction: CallDirection | None = None
+    from_number: str | None = None
+    to_number: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

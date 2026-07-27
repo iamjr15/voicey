@@ -178,3 +178,26 @@ These choices apply the documented proposals authorized in the build mandate and
   modality and claim that it exercised the audio pipeline.
 - Leave `--live` fail-closed until the P3 PSTN loopback harness exists. A lower
   tier is never an implicit substitute.
+
+## 2026-07-27 — Telnyx dual-path carrier boundary
+
+- Certify both required surfaces: native Call Control/TeXML with bidirectional
+  RTP-in-JSON media for Pipecat, and FQDN/credential SIP provisioning for
+  LiveKit. Neither path silently substitutes for the other.
+- Use native Call Control `command_id` plus the durable intent, and bind an
+  ambiguous create only through the signed callback's `client_state`. The
+  current Voice API does not document a safe call-list-by-command-id
+  reconciliation query, so voicekit does not invent one.
+- Treat number orders as asynchronous and return a phone-number resource only
+  after the owned-number API confirms it. A pending order remains an
+  indeterminate, inspect-before-retry operation.
+- Follow the current official LiveKit Telnyx provider recipe exactly: Telnyx
+  FQDN connection and LiveKit outbound signaling use TCP port 5060, media
+  encryption is disabled on the LiveKit trunk objects, and the outbound trunk
+  maps `X-Telnyx-Username` to the configured SIP username for the initial
+  digest challenge. Do not claim TLS/SRTP for this interconnect unless the
+  provider contract and certification evidence change together.
+- Ingest recording media only from the HTTPS URL carried by a verified
+  `call.recording.saved` event. Do not attach the Telnyx API key to that
+  potentially provider-hosted presigned URL; disallow redirects, bound size
+  and type, then copy into the configured artifact store.

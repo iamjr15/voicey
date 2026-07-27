@@ -256,7 +256,7 @@ class Doctor:
                 ["Not required for this web-only project."],
             )
         return await asyncio.to_thread(
-            _twilio_check,
+            _carrier_check,
             self.context,
             self.manifest,
         )
@@ -276,16 +276,25 @@ class Doctor:
             issues.append(check.detail)
             advice.append(check.fix)
         if "phone" in self.manifest.channels:
-            sip_names = (
-                "VOICEKIT_LIVEKIT_SIP_URI",
-                "VOICEKIT_TWILIO_SIP_DOMAIN",
-                "VOICEKIT_TWILIO_SIP_USERNAME",
-                "VOICEKIT_TWILIO_SIP_PASSWORD",
-            )
+            if self.manifest.carriers == ["telnyx"]:
+                sip_names = (
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_TELNYX_SIP_USERNAME",
+                    "VOICEKIT_TELNYX_SIP_PASSWORD",
+                )
+                carrier_label = "Telnyx↔LiveKit"
+            else:
+                sip_names = (
+                    "VOICEKIT_LIVEKIT_SIP_URI",
+                    "VOICEKIT_TWILIO_SIP_DOMAIN",
+                    "VOICEKIT_TWILIO_SIP_USERNAME",
+                    "VOICEKIT_TWILIO_SIP_PASSWORD",
+                )
+                carrier_label = "Twilio↔LiveKit"
             missing = [name for name in sip_names if not self.context.environment.get(name)]
             if missing:
                 issues.append(f"Missing LiveKit SIP provisioning values: {', '.join(missing)}.")
-                advice.append("Add the Twilio↔LiveKit SIP values, then rerun `voicekit doctor`.")
+                advice.append(f"Add the {carrier_label} SIP values, then rerun `voicekit doctor`.")
             elif check.status == "valid" and self.manifest.phone_number is not None:
                 digits = self.manifest.phone_number.removeprefix("+")
                 sip_issues, sip_advice = await self.livekit_sip_inspector.inspect(
@@ -483,6 +492,12 @@ def _port_check(port: int) -> DoctorCheck:
     )
 
 
+def _carrier_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
+    if manifest.carriers == ["telnyx"]:
+        return _telnyx_check(context, manifest)
+    return _twilio_check(context, manifest)
+
+
 def _twilio_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
     from voicekit.telephony.twilio import TwilioAdapter
 
@@ -545,6 +560,66 @@ def _twilio_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorC
     return _result(
         "carrier",
         "Carrier account, funding, KYC, and inbound route",
+        issues,
+        advice,
+    )
+
+
+def _telnyx_check(context: ProjectContext, manifest: ProjectManifest) -> DoctorCheck:
+    from voicekit.telephony.telnyx import TelnyxAdapter
+
+    if manifest.carriers != ["telnyx"] or manifest.phone_number is None:
+        return _result(
+            "carrier",
+            "Carrier account, funding, KYC, and inbound route",
+            ["The selected carrier is not available in this certification phase."],
+            ["Resume init with Twilio or Telnyx, then rerun `voicekit doctor`."],
+        )
+    required = ("TELNYX_API_KEY", "TELNYX_PUBLIC_KEY", "TELNYX_CONNECTION_ID")
+    missing = [name for name in required if not context.environment.get(name)]
+    if missing:
+        return _result(
+            "carrier",
+            "Telnyx account, funding, signatures, and inbound route",
+            [f"Missing Telnyx values: {', '.join(missing)}."],
+            ["Add the Telnyx API key, public key, and Voice API connection id."],
+        )
+    issues: list[str] = []
+    advice: list[str] = []
+    adapter = TelnyxAdapter(
+        api_key=context.environment.get("TELNYX_API_KEY"),
+        public_key=context.environment.get("TELNYX_PUBLIC_KEY"),
+        connection_id=context.environment.get("TELNYX_CONNECTION_ID"),
+        ledger_path=context.root / ".voicekit" / "telephony.sqlite3",
+    )
+    try:
+        account = adapter.account_state()
+        try:
+            balance = None if account.balance is None else float(account.balance)
+        except ValueError:
+            balance = None
+        if balance is not None and balance <= 0:
+            issues.append(f"Telnyx balance is {account.balance} {account.currency or ''}.".strip())
+            advice.append("Fund the paid Telnyx account before placing calls.")
+        numbers = adapter.list_numbers()
+        selected = [number for number in numbers if number.number == manifest.phone_number]
+        if len(selected) != 1:
+            issues.append(f"{manifest.phone_number} is not uniquely owned by this Telnyx account.")
+            advice.append("Select an owned E.164 number with `voicekit init --resume`.")
+        else:
+            route = adapter.inbound_route(manifest.phone_number)
+            expected = context.environment.get("TELNYX_CONNECTION_ID")
+            if route.get("connection_id") != expected:
+                issues.append("The selected Telnyx number is not assigned to the configured app.")
+                advice.append("Run `voicekit dev --phone` for a temporary conflict-safe route.")
+        advice.append(
+            "Telnyx LiveKit SIP requires a paid account; confirm KYC and destination permissions."
+        )
+    finally:
+        adapter.ledger.close()
+    return _result(
+        "carrier",
+        "Telnyx account, funding, signatures, and inbound route",
         issues,
         advice,
     )

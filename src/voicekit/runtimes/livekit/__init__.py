@@ -18,6 +18,12 @@ from voicekit.runtimes.livekit.sip import (
     TwilioLiveKitSipProvisioner,
     TwilioTrunkRecordingReconciler,
 )
+from voicekit.runtimes.livekit.telnyx import (
+    TelnyxLiveKitSipConfig,
+    TelnyxLiveKitSipProvisioner,
+    TelnyxSipHTTPBackend,
+    TelnyxSipProvisioningResult,
+)
 from voicekit.runtimes.livekit.token import LiveKitToken, LiveKitTokenIssuer
 from voicekit.runtimes.livekit.tools import shared_livekit_tools
 
@@ -34,6 +40,10 @@ __all__ = [
     "LiveKitToken",
     "LiveKitTokenIssuer",
     "SipProvisioningResult",
+    "TelnyxLiveKitSipConfig",
+    "TelnyxLiveKitSipProvisioner",
+    "TelnyxSipHTTPBackend",
+    "TelnyxSipProvisioningResult",
     "TwilioLiveKitSipConfig",
     "TwilioLiveKitSipProvisioner",
     "TwilioTrunkRecordingReconciler",

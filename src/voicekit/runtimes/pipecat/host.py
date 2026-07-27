@@ -1,4 +1,4 @@
-"""Long-lived FastAPI/WorkerRunner host for Twilio and SmallWebRTC."""
+"""Long-lived FastAPI/WorkerRunner host for carrier media and SmallWebRTC."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import JSONResponse
 from pipecat.runner.types import CallData
 from pipecat.runner.utils import parse_telephony_websocket
+from pipecat.serializers.telnyx import TelnyxFrameSerializer
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.request_handler import (
@@ -72,6 +73,24 @@ class TwilioRuntimeAdapter(Protocol):
     def cold_transfer(self, call_sid: str, to_number: str) -> None: ...
 
 
+class TelnyxRuntimeAdapter(Protocol):
+    """Telnyx operations consumed by the host without forcing its extra."""
+
+    def verify_request(self, request: TelephonyRequest) -> bool: ...
+
+    def answer_response(self, target: RuntimeTarget) -> str: ...
+
+    def parse_event(self, request: TelephonyRequest) -> CallEvent: ...
+
+    def answer_call(self, call_control_id: str) -> None: ...
+
+    def start_media(self, call_control_id: str, target: RuntimeTarget) -> None: ...
+
+    def cold_transfer(self, call_control_id: str, to_number: str) -> None: ...
+
+    def hangup(self, call_control_id: str) -> None: ...
+
+
 class WebSessionAuthorizer(Protocol):
     """Authenticate and bind browser signaling without coupling to token format."""
 
@@ -107,6 +126,8 @@ class PipecatHostSettings:
     pending_media_timeout_s: float = 30
     web_sample_rate: int = 16000
     twilio_sample_rate: int = 8000
+    telnyx_api_key: str = field(default="", repr=False)
+    telnyx_sample_rate: int = 8000
     allow_insecure_web_sessions_for_tests: bool = False
     storage_ready: bool = True
 
@@ -116,6 +137,7 @@ class PipecatHostSettings:
             public_base=public_base,
             twilio_account_sid=os.environ.get("TWILIO_ACCOUNT_SID", ""),
             twilio_auth_token=os.environ.get("TWILIO_AUTH_TOKEN", ""),
+            telnyx_api_key=os.environ.get("TELNYX_API_KEY", ""),
         )
 
     def __post_init__(self) -> None:
@@ -129,10 +151,14 @@ class PipecatHostSettings:
                 "VK-RUN-002",
                 detail="pending media timeout must be positive.",
             )
-        if self.web_sample_rate < 8000 or self.twilio_sample_rate != 8000:
+        if (
+            self.web_sample_rate < 8000
+            or self.twilio_sample_rate != 8000
+            or self.telnyx_sample_rate != 8000
+        ):
             raise VoicekitError(
                 "VK-RUN-002",
-                detail="web audio must be at least 8kHz and Twilio must be exactly 8kHz.",
+                detail=("web audio must be at least 8kHz and carrier media must be exactly 8kHz."),
             )
 
 
@@ -156,6 +182,14 @@ class DrainReport:
 
 class _TwilioTransfer(TransferHandler):
     def __init__(self, adapter: TwilioRuntimeAdapter) -> None:
+        self._adapter = adapter
+
+    async def __call__(self, call_id: str, number: str) -> None:
+        await asyncio.to_thread(self._adapter.cold_transfer, call_id, number)
+
+
+class _TelnyxTransfer(TransferHandler):
+    def __init__(self, adapter: TelnyxRuntimeAdapter) -> None:
         self._adapter = adapter
 
     async def __call__(self, call_id: str, number: str) -> None:
@@ -200,6 +234,7 @@ class PipecatHost:
         repository: PipecatRepository,
         settings: PipecatHostSettings,
         twilio: TwilioRuntimeAdapter | None = None,
+        telnyx: TelnyxRuntimeAdapter | None = None,
         runner: WorkerRunner | None = None,
         request_handler: SmallWebRTCRequestHandler | None = None,
         session_builder: PipecatSessionBuilder | None = None,
@@ -211,6 +246,11 @@ class PipecatHost:
             raise VoicekitError(
                 "VK-RUN-001",
                 detail="Twilio phone config requires the voicekit[twilio] adapter.",
+            )
+        if agent.phone is not None and agent.phone.provider == "telnyx" and telnyx is None:
+            raise VoicekitError(
+                "VK-RUN-001",
+                detail="Telnyx phone config requires the voicekit[telnyx] adapter.",
             )
         if (
             agent.web.enabled
@@ -225,14 +265,33 @@ class PipecatHost:
         self.repository = repository
         self.settings = settings
         self.twilio = twilio
-        self.target = PipecatTarget(https_base=settings.public_base)
+        self.telnyx = telnyx
+        self.twilio_target = PipecatTarget(https_base=settings.public_base)
+        self.telnyx_target = PipecatTarget(
+            https_base=settings.public_base,
+            ws_path="/telnyx/media",
+            answer_path="/telnyx/answer",
+            event_path="/telnyx/events",
+            recording_path="/telnyx/recordings",
+            amd_path="/telnyx/amd",
+        )
+        self.target = (
+            self.telnyx_target
+            if agent.phone is not None and agent.phone.provider == "telnyx"
+            else self.twilio_target
+        )
         self.admission = AdmissionController(agent.limits.max_concurrent)
         self.lifecycle = PipecatLifecycleManager(repository, self.admission)
         self.runner_host = LongLivedRunner(runner)
         self.request_handler = request_handler or SmallWebRTCRequestHandler()
+        transfer_handler: TransferHandler | None = None
+        if agent.phone is not None and agent.phone.provider == "telnyx" and telnyx is not None:
+            transfer_handler = _TelnyxTransfer(telnyx)
+        elif twilio is not None:
+            transfer_handler = _TwilioTransfer(twilio)
         self.session_builder = session_builder or PipecatSessionBuilder(
             repository,
-            transfer_handler=None if twilio is None else _TwilioTransfer(twilio),
+            transfer_handler=transfer_handler,
         )
         self.web_sessions = web_sessions
         self._pending: dict[str, _PendingCall] = {}
@@ -388,6 +447,20 @@ class PipecatHost:
             pending.expires = None
         return pending
 
+    async def _claim_pending_token(self, token: str) -> _PendingCall:
+        """Claim a carrier reservation using its one-use opaque URL capability."""
+        async with self._state_lock:
+            matches = [
+                pending for pending in self._pending.values() if pending.admission.token == token
+            ]
+        if len(matches) != 1:
+            raise VoicekitError(
+                "VK-RUN-005",
+                detail="no unique pending media reservation matches the capability.",
+            )
+        pending = matches[0]
+        return await self._claim_pending(pending.call.call_id, token)
+
     def _build_app(self) -> FastAPI:
         @asynccontextmanager
         async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
@@ -466,7 +539,7 @@ class PipecatHost:
                     media_type="application/xml",
                 )
             target = replace(
-                self.target,
+                self.twilio_target,
                 custom_parameters={
                     "voicekit_token": pending.admission.token,
                     "from_number": pending.call.from_number or "",
@@ -568,12 +641,182 @@ class PipecatHost:
                 adapter.resume_after_amd,
                 event.provider_call_id,
                 answered_by=event.answered_by,
-                target=self.target,
+                target=self.twilio_target,
                 connect_machine=self.agent.behavior.voicemail == "leave_message",
             )
             if disposition == "hung_up":
                 await self._finish_pending(event.provider_call_id, "voicemail")
             return Response(status_code=204)
+
+        @app.post("/telnyx/answer")
+        async def telnyx_answer(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+        ) -> Response:
+            adapter = self._require_telnyx()
+            raw = await request.body()
+            try:
+                raw_body = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return _error_response("VK-RUN-007", 400)
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                raw_body=raw_body,
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            event = adapter.parse_event(telephony)
+            values = _string_mapping(form)
+            try:
+                pending = await self.reserve_call(
+                    PipecatCall(
+                        call_id=event.provider_call_id,
+                        channel="phone",
+                        direction="inbound",
+                        provider="telnyx",
+                        provider_call_id=event.provider_call_id,
+                        from_number=values.get("From"),
+                        to_number=values.get("To"),
+                    )
+                )
+            except VoicekitError as exc:
+                if exc.code not in {"VK-RUN-004", "VK-RUN-008"}:
+                    raise
+                return Response(
+                    content='<Response><Reject reason="busy" /></Response>',
+                    status_code=200,
+                    media_type="application/xml",
+                )
+            target = replace(
+                self.telnyx_target,
+                ws_path=f"{self.telnyx_target.ws_path}/{pending.admission.token}",
+                custom_parameters={
+                    "voicekit_token": pending.admission.token,
+                    "from_number": pending.call.from_number or "",
+                    "to_number": pending.call.to_number or "",
+                },
+            )
+            return Response(
+                content=adapter.answer_response(target),
+                media_type="application/xml",
+            )
+
+        @app.post("/telnyx/events")
+        @app.post("/telnyx/recordings")
+        async def telnyx_events(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+        ) -> Response:
+            adapter = self._require_telnyx()
+            raw = await request.body()
+            try:
+                raw_body = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return _error_response("VK-RUN-007", 400)
+            telephony = _http_telephony_request(
+                request,
+                None,
+                raw_body=raw_body,
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            event = adapter.parse_event(telephony)
+            if event.type == "initiated":
+                try:
+                    pending = await self.reserve_call(
+                        PipecatCall(
+                            call_id=event.provider_call_id,
+                            channel="phone",
+                            direction=event.direction or "inbound",
+                            provider="telnyx",
+                            provider_call_id=event.provider_call_id,
+                            from_number=event.from_number,
+                            to_number=event.to_number,
+                        )
+                    )
+                except VoicekitError as exc:
+                    if exc.code not in {"VK-RUN-004", "VK-RUN-008"}:
+                        raise
+                    await asyncio.to_thread(adapter.hangup, event.provider_call_id)
+                    return Response(status_code=204)
+                if pending.call.direction == "inbound":
+                    try:
+                        await asyncio.to_thread(adapter.answer_call, event.provider_call_id)
+                    except Exception:
+                        await self._fail_pending_setup(pending)
+                        raise
+            elif event.type == "answered":
+                async with self._state_lock:
+                    pending = self._pending.get(event.provider_call_id)
+                if pending is not None:
+                    target = replace(
+                        self.telnyx_target,
+                        ws_path=(f"{self.telnyx_target.ws_path}/{pending.admission.token}"),
+                    )
+                    try:
+                        await asyncio.to_thread(
+                            adapter.start_media,
+                            event.provider_call_id,
+                            target,
+                        )
+                    except Exception:
+                        await self._fail_pending_setup(pending)
+                        raise
+            if event.ended_reason is not None:
+                await self._end_from_provider(event)
+            return Response(status_code=204)
+
+        @app.websocket("/telnyx/media/{token}")
+        async def telnyx_media(  # pyright: ignore[reportUnusedFunction]
+            websocket: WebSocket,
+            token: str,
+        ) -> None:
+            await websocket.accept()
+            pending: _PendingCall | None = None
+            try:
+                parsed = cast(
+                    "tuple[str, CallData]",
+                    await parse_telephony_websocket(websocket),
+                )
+                transport_type, call_data = parsed
+                if transport_type != "telnyx":
+                    raise VoicekitError(
+                        "VK-RUN-007",
+                        detail=f"expected Telnyx media; received {transport_type!r}.",
+                    )
+                call_id, stream_id, encoding = _telnyx_handshake(call_data)
+                pending = await self._claim_pending_token(token)
+                transport = FastAPIWebsocketTransport(
+                    websocket=websocket,
+                    params=telnyx_transport_params(
+                        settings=self.settings,
+                        call_id=call_id,
+                        stream_id=stream_id,
+                        encoding=encoding,
+                        max_duration_s=self.agent.limits.max_duration_s,
+                    ),
+                )
+                session = self.session_builder.build(
+                    agent=self.agent,
+                    call=pending.call,
+                    lifecycle=pending.lifecycle,
+                    transport=transport,
+                    sample_rate=self.settings.telnyx_sample_rate,
+                )
+                async with self._state_lock:
+                    self._active[pending.call.call_id] = session
+                await session.start(self.runner_host.runner)
+                await session.wait()
+            except Exception:
+                if pending is not None and pending.lifecycle.terminal_event is None:
+                    await pending.lifecycle.fail_setup()
+                with suppress(RuntimeError):
+                    await websocket.close(code=1011, reason="VK-RUN-006")
+            finally:
+                if pending is not None:
+                    async with self._state_lock:
+                        self._active.pop(pending.call.call_id, None)
+                    self._mark_idle_if_empty()
 
         @app.post("/api/offer")
         async def web_offer(  # pyright: ignore[reportUnusedFunction]
@@ -790,6 +1033,11 @@ class PipecatHost:
             raise VoicekitError("VK-RUN-001", detail="Twilio adapter is not configured.")
         return self.twilio
 
+    def _require_telnyx(self) -> TelnyxRuntimeAdapter:
+        if self.telnyx is None:
+            raise VoicekitError("VK-RUN-001", detail="Telnyx adapter is not configured.")
+        return self.telnyx
+
 
 async def _no_new_connection(_connection: Any) -> None:
     return None
@@ -826,6 +1074,46 @@ def twilio_transport_params(
     )
 
 
+def telnyx_transport_params(
+    *,
+    settings: PipecatHostSettings,
+    call_id: str,
+    stream_id: str,
+    encoding: str,
+    max_duration_s: int,
+) -> FastAPIWebsocketParams:
+    """Build the installed Pipecat 1.6 Telnyx raw-RTP serializer contract."""
+    if encoding != "PCMU":
+        raise VoicekitError(
+            "VK-TEL-010",
+            detail=f"Telnyx media negotiated unsupported encoding {encoding!r}.",
+        )
+    serializer = TelnyxFrameSerializer(
+        stream_id=stream_id,
+        outbound_encoding=encoding,
+        inbound_encoding="PCMU",
+        call_control_id=call_id,
+        api_key=settings.telnyx_api_key,
+        params=TelnyxFrameSerializer.InputParams(
+            telnyx_sample_rate=8000,
+            sample_rate=8000,
+            inbound_encoding="PCMU",
+            outbound_encoding=encoding,
+            auto_hang_up=True,
+        ),
+    )
+    return FastAPIWebsocketParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+        audio_in_sample_rate=settings.telnyx_sample_rate,
+        audio_out_sample_rate=settings.telnyx_sample_rate,
+        add_wav_header=False,
+        serializer=serializer,
+        session_timeout=max_duration_s + 30,
+        allowed_origins=[],
+    )
+
+
 def _twilio_handshake(call_data: CallData) -> tuple[str, str, str]:
     call_id = call_data.call_id
     stream_id = call_data.stream_id
@@ -839,11 +1127,31 @@ def _twilio_handshake(call_data: CallData) -> tuple[str, str, str]:
     return call_id, stream_id, token
 
 
+def _telnyx_handshake(call_data: CallData) -> tuple[str, str, str]:
+    call_id = call_data.call_id
+    stream_id = call_data.stream_id
+    body = cast("dict[str, Any]", call_data.body)
+    encoding = str(
+        getattr(
+            call_data,
+            "outbound_encoding",
+            body.get("outbound_encoding", "PCMU"),
+        )
+    ).upper()
+    if not call_id or not stream_id:
+        raise VoicekitError(
+            "VK-RUN-005",
+            detail="Telnyx start frame lacks call or stream data.",
+        )
+    return call_id, stream_id, encoding
+
+
 def _http_telephony_request(
     request: Request,
-    form: object,
+    form: object | None,
     *,
     route_params: dict[str, str] | None = None,
+    raw_body: str | None = None,
 ) -> TelephonyRequest:
     return TelephonyRequest(
         scheme=request.url.scheme,
@@ -852,6 +1160,7 @@ def _http_telephony_request(
         headers=dict(request.headers),
         query_string=request.url.query,
         form=form,
+        raw_body=raw_body,
         peer_host=None if request.client is None else request.client.host,
         route_params=route_params or {},
     )

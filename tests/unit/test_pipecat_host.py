@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -17,8 +18,10 @@ from voicekit.runtimes.pipecat.host import (
     LongLivedRunner,
     PipecatHost,
     PipecatHostSettings,
+    TelnyxRuntimeAdapter,
     TwilioRuntimeAdapter,
     WebSessionAuthorizer,
+    telnyx_transport_params,
     twilio_transport_params,
 )
 from voicekit.runtimes.pipecat.lifecycle import PipecatCall, PipecatCallLifecycle
@@ -45,6 +48,7 @@ def _agent(
     *,
     max_concurrent: int = 2,
     voicemail: str = "hangup",
+    provider: str = "twilio",
 ) -> Agent:
     return Agent(
         name="host-test",
@@ -57,7 +61,7 @@ def _agent(
         persona="Helpful.",
         flow=f"{__name__}:entry",
         tools=[identify],
-        phone=Phone(provider="twilio", number="+14155550123"),
+        phone=Phone(provider=cast("Any", provider), number="+14155550123"),
         web=Web(enabled=True, allowed_origins=["https://app.example"]),
         results=Results(
             webhook="https://receiver.example/results",
@@ -121,6 +125,65 @@ class _Twilio:
 
     def cold_transfer(self, call_sid: str, to_number: str) -> None:
         self.transfers.append((call_sid, to_number))
+
+
+class _Telnyx:
+    def __init__(self, *, verified: bool = True) -> None:
+        self.verified = verified
+        self.answers: list[str] = []
+        self.media: list[tuple[str, PipecatTarget]] = []
+        self.transfers: list[tuple[str, str]] = []
+        self.hangups: list[str] = []
+        self.texml_targets: list[PipecatTarget] = []
+
+    def verify_request(self, _request: TelephonyRequest) -> bool:
+        return self.verified
+
+    def answer_response(self, target: object) -> str:
+        self.texml_targets.append(cast("PipecatTarget", target))
+        return "<Response><Connect><Stream /></Connect></Response>"
+
+    def parse_event(self, request: TelephonyRequest) -> CallEvent:
+        if request.form is not None:
+            form = cast("Any", request.form)
+            return CallEvent(
+                type="initiated",
+                provider_call_id=str(form.get("CallControlId", "texml-call")),
+                provider_status="initiated",
+                direction="inbound",
+                from_number="+14155550100",
+                to_number="+14155550123",
+            )
+        document = json.loads(request.raw_body or "{}")
+        data = cast("dict[str, Any]", document["data"])
+        payload = cast("dict[str, Any]", data["payload"])
+        event_type = str(data["event_type"])
+        mapped = {
+            "call.initiated": "initiated",
+            "call.answered": "answered",
+            "call.hangup": "completed",
+        }[event_type]
+        return CallEvent(
+            type=cast("Any", mapped),
+            provider_call_id=str(payload["call_control_id"]),
+            provider_status=event_type,
+            ended_reason="provider_hangup" if mapped == "completed" else None,
+            direction="inbound" if payload.get("direction") == "incoming" else "outbound",
+            from_number=str(payload.get("from", "")) or None,
+            to_number=str(payload.get("to", "")) or None,
+        )
+
+    def answer_call(self, call_control_id: str) -> None:
+        self.answers.append(call_control_id)
+
+    def start_media(self, call_control_id: str, target: object) -> None:
+        self.media.append((call_control_id, cast("PipecatTarget", target)))
+
+    def cold_transfer(self, call_control_id: str, to_number: str) -> None:
+        self.transfers.append((call_control_id, to_number))
+
+    def hangup(self, call_control_id: str) -> None:
+        self.hangups.append(call_control_id)
 
 
 class _RunnerSpy:
@@ -259,6 +322,35 @@ async def _host(
     return host, repository, adapter
 
 
+async def _telnyx_host(
+    tmp_path: Path,
+    *,
+    telnyx: _Telnyx | None = None,
+    session_builder: _SessionBuilder | None = None,
+    max_concurrent: int = 2,
+) -> tuple[PipecatHost, SQLiteRepository, _Telnyx]:
+    repository = SQLiteRepository(tmp_path / "telnyx-host.sqlite3")
+    await repository.open()
+    adapter = telnyx or _Telnyx()
+    host = PipecatHost(
+        agent=_agent(provider="telnyx", max_concurrent=max_concurrent),
+        repository=repository,
+        settings=PipecatHostSettings(
+            public_base="https://voice.example",
+            twilio_account_sid="",
+            twilio_auth_token="",
+            telnyx_api_key="KEY-not-real",  # pragma: allowlist secret
+            pending_media_timeout_s=60,
+            allow_insecure_web_sessions_for_tests=True,
+        ),
+        telnyx=cast("TelnyxRuntimeAdapter", adapter),
+        session_builder=(
+            cast("PipecatSessionBuilder", session_builder) if session_builder is not None else None
+        ),
+    )
+    return host, repository, adapter
+
+
 async def test_long_lived_runner_uses_auto_end_false() -> None:
     runner = _RunnerSpy()
     host = LongLivedRunner(cast(Any, runner))
@@ -322,6 +414,46 @@ def test_twilio_transport_is_exactly_8khz_and_auto_hangs_up() -> None:
     assert serializer._params.twilio_sample_rate == 8000
     assert serializer._params.sample_rate == 8000
     assert serializer._params.auto_hang_up is True
+
+
+def test_telnyx_transport_is_exactly_8khz_pcmu_and_auto_hangs_up() -> None:
+    params = telnyx_transport_params(
+        settings=PipecatHostSettings(
+            public_base="https://voice.example",
+            twilio_account_sid="",
+            twilio_auth_token="",
+            telnyx_api_key="KEY-not-real",  # pragma: allowlist secret
+        ),
+        call_id="v3:call-media",
+        stream_id="stream-media",
+        encoding="PCMU",
+        max_duration_s=60,
+    )
+    serializer = cast("Any", params.serializer)
+
+    assert params.audio_in_sample_rate == 8000
+    assert params.audio_out_sample_rate == 8000
+    assert params.session_timeout == 90
+    assert params.allowed_origins == []
+    assert serializer._params.telnyx_sample_rate == 8000
+    assert serializer._params.sample_rate == 8000
+    assert serializer._params.inbound_encoding == "PCMU"
+    assert serializer._params.outbound_encoding == "PCMU"
+    assert serializer._params.auto_hang_up is True
+
+    with pytest.raises(VoicekitError, match="VK-TEL-010"):
+        telnyx_transport_params(
+            settings=PipecatHostSettings(
+                public_base="https://voice.example",
+                twilio_account_sid="",
+                twilio_auth_token="",
+                telnyx_api_key="KEY-not-real",  # pragma: allowlist secret
+            ),
+            call_id="v3:call-media",
+            stream_id="stream-media",
+            encoding="OPUS",
+            max_duration_s=60,
+        )
 
 
 @pytest.mark.parametrize(
@@ -573,6 +705,226 @@ async def test_twilio_media_rejects_wrong_transport(
 
     assert websocket.accepted
     assert websocket.closed == (1011, "VK-RUN-006")
+    await repository.close()
+
+
+async def test_telnyx_json_events_reserve_answer_and_start_capability_media(
+    tmp_path: Path,
+) -> None:
+    host, repository, adapter = await _telnyx_host(tmp_path)
+    transport = httpx.ASGITransport(app=host.app)
+    initiated = {
+        "data": {
+            "event_type": "call.initiated",
+            "payload": {
+                "call_control_id": "v3:telnyx-route",
+                "direction": "incoming",
+                "from": "+14155550100",
+                "to": "+14155550123",
+            },
+        }
+    }
+    answered = {
+        "data": {
+            "event_type": "call.answered",
+            "payload": {
+                "call_control_id": "v3:telnyx-route",
+                "direction": "incoming",
+                "from": "+14155550100",
+                "to": "+14155550123",
+            },
+        }
+    }
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="https://voice.example",
+    ) as client:
+        first = await client.post("/telnyx/events", json=initiated)
+        second = await client.post("/telnyx/events", json=answered)
+
+    assert first.status_code == 204
+    assert second.status_code == 204
+    assert adapter.answers == ["v3:telnyx-route"]
+    assert len(adapter.media) == 1
+    call_id, target = adapter.media[0]
+    assert call_id == "v3:telnyx-route"
+    assert target.ws_path.startswith("/telnyx/media/")
+    token = target.ws_path.rsplit("/", maxsplit=1)[-1]
+    assert token
+    record = await repository.get_call("v3:telnyx-route")
+    assert record.direction == "inbound"
+    assert record.from_number == "+14155550100"
+    await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
+        "v3:telnyx-route",
+        "provider_hangup",
+    )
+    await repository.close()
+
+
+async def test_telnyx_media_claims_one_use_path_and_runs_native_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_builder = _SessionBuilder()
+    host, repository, _ = await _telnyx_host(
+        tmp_path,
+        session_builder=session_builder,
+    )
+    pending = await host.reserve_call(
+        PipecatCall(
+            call_id="v3:telnyx-media",
+            channel="phone",
+            direction="inbound",
+            provider="telnyx",
+            provider_call_id="v3:telnyx-media",
+        )
+    )
+
+    async def parse(_websocket: object) -> tuple[str, CallData]:
+        return (
+            "telnyx",
+            CallData(
+                call_id="v3:telnyx-media",
+                stream_id="stream-telnyx-media",
+                body={"outbound_encoding": "PCMU"},
+            ),
+        )
+
+    monkeypatch.setattr(host_module, "parse_telephony_websocket", parse)
+    websocket = _WebSocket()
+    route = next(
+        route
+        for route in host.app.routes
+        if getattr(route, "path", None) == "/telnyx/media/{token}"
+    )
+    await cast("Any", route).endpoint(websocket, pending.admission.token)
+
+    record = await repository.get_call("v3:telnyx-media")
+    assert websocket.accepted
+    assert websocket.closed is None
+    assert session_builder.sessions[0].started
+    assert record.status == "completed"
+    assert host.admission.active_count == 0
+    await repository.close()
+
+
+async def test_telnyx_media_rejects_wrong_token_transport_and_codec(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host, repository, _ = await _telnyx_host(tmp_path)
+    pending = await host.reserve_call(
+        PipecatCall(
+            call_id="v3:telnyx-reject",
+            channel="phone",
+            direction="inbound",
+            provider="telnyx",
+        )
+    )
+    route = next(
+        route
+        for route in host.app.routes
+        if getattr(route, "path", None) == "/telnyx/media/{token}"
+    )
+
+    async def wrong_transport(_websocket: object) -> tuple[str, CallData]:
+        return "twilio", CallData(call_id="v3:telnyx-reject", stream_id="stream")
+
+    monkeypatch.setattr(host_module, "parse_telephony_websocket", wrong_transport)
+    wrong = _WebSocket()
+    await cast("Any", route).endpoint(wrong, pending.admission.token)
+    assert wrong.closed == (1011, "VK-RUN-006")
+
+    async def wrong_codec(_websocket: object) -> tuple[str, CallData]:
+        return (
+            "telnyx",
+            CallData(
+                call_id="v3:telnyx-reject",
+                stream_id="stream",
+                body={"outbound_encoding": "OPUS"},
+            ),
+        )
+
+    monkeypatch.setattr(host_module, "parse_telephony_websocket", wrong_codec)
+    codec = _WebSocket()
+    await cast("Any", route).endpoint(codec, pending.admission.token)
+    assert codec.closed == (1011, "VK-RUN-006")
+
+    await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
+        "v3:telnyx-reject",
+        "carrier_error",
+    )
+    await repository.close()
+
+
+async def test_telnyx_signed_routes_reject_invalid_and_busy_calls(
+    tmp_path: Path,
+) -> None:
+    adapter = _Telnyx(verified=False)
+    host, repository, _ = await _telnyx_host(
+        tmp_path,
+        telnyx=adapter,
+        max_concurrent=1,
+    )
+    body = {
+        "data": {
+            "event_type": "call.initiated",
+            "payload": {
+                "call_control_id": "v3:invalid",
+                "direction": "incoming",
+            },
+        }
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=host.app),
+        base_url="https://voice.example",
+    ) as client:
+        rejected = await client.post("/telnyx/events", json=body)
+    assert rejected.status_code == 403
+
+    adapter.verified = True
+    await host.reserve_web_call()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=host.app),
+        base_url="https://voice.example",
+    ) as client:
+        busy = await client.post("/telnyx/events", json=body)
+    assert busy.status_code == 204
+    assert adapter.hangups == ["v3:invalid"]
+    await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
+        next(iter(host._pending)),  # pyright: ignore[reportPrivateUsage]
+        "provider_hangup",
+    )
+    await repository.close()
+
+
+async def test_telnyx_texml_answer_uses_one_use_media_path(
+    tmp_path: Path,
+) -> None:
+    host, repository, adapter = await _telnyx_host(tmp_path)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=host.app),
+        base_url="https://voice.example",
+    ) as client:
+        response = await client.post(
+            "/telnyx/answer",
+            data={
+                "CallControlId": "v3:texml-call",
+                "CallStatus": "ringing",
+                "From": "+14155550100",
+                "To": "+14155550123",
+            },
+        )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+    assert len(adapter.texml_targets) == 1
+    target = adapter.texml_targets[0]
+    assert target.ws_path.startswith("/telnyx/media/")
+    assert target.custom_parameters["voicekit_token"] == target.ws_path.rsplit("/", 1)[-1]
+    await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
+        "v3:texml-call",
+        "provider_hangup",
+    )
     await repository.close()
 
 

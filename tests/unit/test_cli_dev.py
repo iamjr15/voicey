@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import pytest
 from fastapi import FastAPI
@@ -46,7 +46,12 @@ def _agent(*, runtime: str = "pipecat") -> Agent:
     )
 
 
-def _context(tmp_path: Path, *, phone: bool) -> ProjectContext:
+def _context(
+    tmp_path: Path,
+    *,
+    phone: bool,
+    carrier: Literal["twilio", "telnyx"] = "twilio",
+) -> ProjectContext:
     models: dict[ModelAxis, str] = {
         "stt": "deepgram/nova-3",
         "llm": "anthropic/claude-sonnet-5",
@@ -58,7 +63,7 @@ def _context(tmp_path: Path, *, phone: bool) -> ProjectContext:
         recipe=RecipeSelection(name="scratch", version="1.0.0"),
         channels=frozenset({"phone", "web"} if phone else {"web"}),
         models=models,
-        carriers=["twilio"] if phone else [],
+        carriers=[carrier] if phone else [],
         phone_number="+14155550123" if phone else None,
     )
     return ProjectContext(
@@ -68,6 +73,9 @@ def _context(tmp_path: Path, *, phone: bool) -> ProjectContext:
         environment={
             "TWILIO_ACCOUNT_SID": "AC" + "1" * 32,
             "TWILIO_AUTH_TOKEN": "token",  # pragma: allowlist secret
+            "TELNYX_API_KEY": "telnyx-key",  # pragma: allowlist secret
+            "TELNYX_PUBLIC_KEY": "public-key",
+            "TELNYX_CONNECTION_ID": "connection-id",
             "VOICEKIT_WEBHOOK_SECRET": encode_secret(b"d" * 32),
         },
     )
@@ -123,9 +131,11 @@ def test_load_agent_requires_exported_typed_agent(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("carrier", ["twilio", "telnyx"])
 async def test_phone_dev_supervisor_points_probes_and_restores(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    carrier: Literal["twilio", "telnyx"],
 ) -> None:
     events: list[str] = []
 
@@ -147,7 +157,8 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
 
     class FakeTunnelManager:
         def __init__(self, *, environment: Mapping[str, str]) -> None:
-            assert environment["TWILIO_AUTH_TOKEN"]
+            expected = "TWILIO_AUTH_TOKEN" if carrier == "twilio" else "TELNYX_API_KEY"
+            assert environment[expected]
 
         async def open(self, port: int, **_kwargs: object) -> FakeTunnel:
             assert port == 7860
@@ -182,7 +193,7 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
             assert number == "+14155550123"
             assert target.https_base == "https://public.example.test"
             events.append("pointed")
-            return RollbackToken(provider="twilio", token="route_test")
+            return RollbackToken(provider=carrier, token="route_test")
 
         def restore(self, token: RollbackToken) -> None:
             assert token.token == "route_test"
@@ -193,6 +204,8 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
             self.app = FastAPI()
             settings = kwargs["settings"]
             assert settings.pending_media_timeout_s == 120
+            assert (kwargs["twilio"] is not None) is (carrier == "twilio")
+            assert (kwargs["telnyx"] is not None) is (carrier == "telnyx")
             self.target = PipecatTarget(settings.public_base)
 
         async def reserve_web_call(self) -> str:
@@ -220,12 +233,15 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
     monkeypatch.setattr("voicekit.cli.dev.TunnelManager", FakeTunnelManager)
     monkeypatch.setattr("voicekit.cli.dev.TunnelProbe", FakeProbe)
     monkeypatch.setattr("voicekit.cli.dev.TwilioAdapter", FakeAdapter)
+    import voicekit.telephony.telnyx as telnyx_runtime
+
+    monkeypatch.setattr(telnyx_runtime, "TelnyxAdapter", FakeAdapter)
     monkeypatch.setattr("voicekit.cli.dev.PipecatHost", FakeHost)
     monkeypatch.setattr("voicekit.cli.dev.uvicorn.Server", FakeServer)
     monkeypatch.setattr("voicekit.cli.dev.uvicorn.Config", config)
 
     await run_dev(
-        _context(tmp_path, phone=True),
+        _context(tmp_path, phone=True, carrier=carrier),
         phone=True,
         tunnel="cloudflared",
         public_url=None,
@@ -479,6 +495,115 @@ async def test_livekit_phone_provisioning_builds_native_sip_resources_and_cleans
             server_url="wss://project.livekit.cloud",
         )
     assert events[-2:] == ["livekit-close", "ledger-close"]
+
+
+@pytest.mark.asyncio
+async def test_livekit_phone_provisioning_selects_telnyx_control_planes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    events: list[object] = []
+
+    class FakeLiveKitAPI:
+        sip = "livekit-sip-service"
+
+        def __init__(self, url: str, api_key: str, api_secret: str) -> None:
+            events.append(("livekit", url, api_key, api_secret))
+
+        async def aclose(self) -> None:
+            events.append("livekit-close")
+
+    class FakeBackend:
+        def __init__(self, *, api_key: str) -> None:
+            events.append(("telnyx-backend", api_key))
+
+    class FakeLedger:
+        def __init__(self, path: Path) -> None:
+            events.append(("ledger", path.name))
+
+        def close(self) -> None:
+            events.append("ledger-close")
+
+    class FakeConfig:
+        def __init__(self, **values: object) -> None:
+            self.values = values
+            events.append(("telnyx-config", values))
+
+    class FakeProvisioner:
+        def __init__(self, *, livekit: object, telnyx: object, ledger: object) -> None:
+            events.append(
+                (
+                    "telnyx-provisioner",
+                    livekit,
+                    telnyx.__class__.__name__,
+                    ledger.__class__.__name__,
+                )
+            )
+
+        async def provision(self, config: FakeConfig) -> object:
+            events.append(("telnyx-provision", config.values))
+            return SimpleNamespace(operation_id="telnyx-sip-operation")
+
+    monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.telnyx.TelnyxSipHTTPBackend",
+        FakeBackend,
+    )
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.telnyx.TelnyxLiveKitSipConfig",
+        FakeConfig,
+    )
+    monkeypatch.setattr(
+        "voicekit.runtimes.livekit.telnyx.TelnyxLiveKitSipProvisioner",
+        FakeProvisioner,
+    )
+    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+
+    base = _context(tmp_path, phone=True, carrier="telnyx")
+    assert base.manifest is not None
+    context = ProjectContext(
+        root=base.root,
+        manifest=base.manifest.model_copy(update={"runtime": "livekit"}),
+        checkpoint=False,
+        environment={
+            **base.environment,
+            "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+            "VOICEKIT_TELNYX_SIP_USERNAME": "voicekit-user",
+            "VOICEKIT_TELNYX_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+        },
+    )
+    agent = _agent(runtime="livekit").model_copy(
+        update={
+            "phone": Phone(
+                provider="telnyx",
+                number="+14155550123",
+                record=True,
+            )
+        }
+    )
+
+    provisioner, operation_id, livekit_client, ledger = await _provision_livekit_phone(
+        context,
+        agent=agent,
+        api_key="api-key",  # pragma: allowlist secret
+        api_secret="api-secret",  # pragma: allowlist secret
+        server_url="wss://project.livekit.cloud",
+    )
+
+    assert isinstance(provisioner, FakeProvisioner)
+    assert operation_id == "telnyx-sip-operation"
+    assert isinstance(livekit_client, FakeLiveKitAPI)
+    assert isinstance(ledger, FakeLedger)
+    assert ("telnyx-backend", "telnyx-key") in events
+    config_event = next(
+        cast("tuple[str, dict[str, object]]", event)
+        for event in events
+        if isinstance(event, tuple) and event[0] == "telnyx-config"
+    )
+    assert config_event[1]["number"] == "+14155550123"
+    assert config_event[1]["auth_username"] == "voicekit-user"
+    await livekit_client.aclose()
+    ledger.close()
 
 
 @pytest.mark.asyncio

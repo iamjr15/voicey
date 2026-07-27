@@ -27,6 +27,7 @@ from voicekit.cli.doctor import (
     _python_check,
     _results_endpoint,
     _runtime_check,
+    _telnyx_check,
     _twilio_check,
 )
 from voicekit.cli.keys import KeyCheck
@@ -365,6 +366,60 @@ def test_twilio_doctor_surfaces_trial_funding_kyc_and_route_diff(
     assert any("voice_url" in issue for issue in check.issues)
     assert any("trial" in advice.casefold() for advice in check.advice)
     assert any("regulatory" in advice for advice in check.advice)
+
+
+def test_telnyx_doctor_checks_funding_ownership_and_connection_route(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class FakeTelnyxCarrier(FakeCarrier):
+        def account_state(self) -> CarrierAccountState:
+            return CarrierAccountState(
+                provider="telnyx",
+                status="active",
+                account_type=None,
+                balance="0",
+                currency="USD",
+            )
+
+        def inbound_route(self, _number: str) -> dict[str, str | None]:
+            return {"connection_id": "different-connection"}
+
+    models: dict[ModelAxis, str] = {
+        "stt": "deepgram/nova-3",
+        "llm": "anthropic/claude-sonnet-5",
+        "tts": "cartesia/sonic-3.5",
+    }
+    manifest = ProjectManifest(
+        project_name="telnyx-doctor",
+        runtime="pipecat",
+        recipe=RecipeSelection(name="scratch", version="1.0.0"),
+        channels=frozenset({"phone"}),
+        models=models,
+        carriers=["telnyx"],
+        phone_number="+919876543210",
+    )
+    environment = {
+        "TELNYX_API_KEY": "key",  # pragma: allowlist secret
+        "TELNYX_PUBLIC_KEY": "public",
+        "TELNYX_CONNECTION_ID": "expected-connection",
+    }
+    context = ProjectContext(tmp_path, manifest, False, environment)
+    monkeypatch.setattr("voicekit.telephony.telnyx.TelnyxAdapter", FakeTelnyxCarrier)
+
+    check = _telnyx_check(context, manifest)
+
+    assert not check.ok
+    assert any("balance" in issue for issue in check.issues)
+    assert any("not assigned" in issue for issue in check.issues)
+    assert any("KYC" in advice for advice in check.advice)
+
+    missing = _telnyx_check(
+        ProjectContext(tmp_path, manifest, False, {}),
+        manifest,
+    )
+    assert not missing.ok
+    assert "TELNYX_API_KEY" in missing.issues[0]
 
 
 def _free_port() -> int:
