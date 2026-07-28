@@ -463,6 +463,30 @@ evidence drifted.
 explicitly adopt only verified resources or restore the recorded identity
 before retrying.
 
+## VK-DEP-008
+
+**Cause:** A cloud-worker build, runtime bootstrap, or explicit deployment plan
+is invalid.
+
+**Fix:** Correct the named runtime, image, region, relay, wheel, project, or
+secret input and regenerate the cloud artifacts.
+
+## VK-DEP-009
+
+**Cause:** A required Pipecat Cloud or LiveKit Cloud CLI is missing,
+unauthenticated, timed out, or failed.
+
+**Fix:** Install and authenticate the pinned platform CLI, inspect its direct
+output, then rerun the same resumable voicekit command.
+
+## VK-DEP-010
+
+**Cause:** Cloud agent ownership, secret-sync, deployment, or rollback evidence
+is unsafe.
+
+**Fix:** Inspect the owner-only cloud ledger and platform agent; adopt the exact
+id explicitly or restore the ledgered version before retrying.
+
 ## VK-TST-001
 
 **Cause:** A simulated-caller scenario, profile, filter, or test config is

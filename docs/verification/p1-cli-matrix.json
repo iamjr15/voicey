@@ -203,6 +203,24 @@
       "paired_options": []
     },
     {
+      "path": "deploy pipecat-cloud",
+      "phase": "p3",
+      "interaction": "confirmed-external-mutation",
+      "json": "required",
+      "arguments": [],
+      "options": ["--adopt", "--agent", "--cutover", "--engine-wheel", "--image", "--image-pull-secret", "--json", "--max-agents", "--min-agents", "--no-cutover", "--org", "--prepare-only", "--profile", "--region", "--relay-url", "--rollback-created", "--secret-set", "--skip-smoke", "--smoke-to", "--telnyx-texml-ready", "--yes"],
+      "paired_options": [["--cutover", "--no-cutover"]]
+    },
+    {
+      "path": "deploy livekit-cloud",
+      "phase": "p3",
+      "interaction": "confirmed-external-mutation",
+      "json": "required",
+      "arguments": [],
+      "options": ["--adopt", "--agent", "--agent-id", "--engine-wheel", "--json", "--project", "--region", "--relay-url", "--rollback", "--skip-smoke", "--smoke-to", "--yes"],
+      "paired_options": []
+    },
+    {
       "path": "upgrade",
       "phase": "p4-reserved",
       "interaction": "confirmed-package-mutation",

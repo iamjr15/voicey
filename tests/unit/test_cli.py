@@ -19,9 +19,19 @@ from voicekit.cli.wizard import InitResult
 from voicekit.config.catalog import ProviderKind
 from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
 from voicekit.config.models import ModelAxis
+from voicekit.deploy.cloud import (
+    CloudArtifacts,
+    CloudDeploymentReport,
+    CloudResourceState,
+    CloudSmokeReport,
+    LiveKitCloudPlan,
+    PipecatCloudPlan,
+)
 from voicekit.deploy.docker import DockerSmokeResult
 from voicekit.deploy.fly import FlyArtifacts, FlyPlan, FlyResourceState, FlySmokeReport
+from voicekit.errors import VoicekitError
 from voicekit.obs.records import NewCall
+from voicekit.relay.auth import RelayCredential
 from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony.models import NumberInfo, PipecatTarget, RollbackToken
@@ -344,6 +354,46 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
                 "--rotate-credentials",
                 "--rollback-created",
                 "--skip-smoke",
+                "--engine-wheel",
+                "--yes",
+                "--json",
+            ),
+        ),
+        (
+            ["deploy", "pipecat-cloud", "--help"],
+            (
+                "--agent",
+                "--org",
+                "--region",
+                "--secret-set",
+                "--image",
+                "--min-agents",
+                "--max-agents",
+                "--profile",
+                "--relay-url",
+                "--prepare-only",
+                "--adopt",
+                "--cutover",
+                "--no-cutover",
+                "--rollback-created",
+                "--skip-smoke",
+                "--engine-wheel",
+                "--yes",
+                "--json",
+            ),
+        ),
+        (
+            ["deploy", "livekit-cloud", "--help"],
+            (
+                "--agent",
+                "--project",
+                "--region",
+                "--relay-url",
+                "--agent-id",
+                "--adopt",
+                "--smoke-to",
+                "--skip-smoke",
+                "--rollback",
                 "--engine-wheel",
                 "--yes",
                 "--json",
@@ -693,6 +743,605 @@ def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
     assert json.loads(accepted.stdout)["rolled_back"] is True
     assert rolled_back == ["test-results"]
     assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+
+
+def _cloud_state(
+    platform: Literal["pipecat-cloud", "livekit-cloud"],
+    *,
+    agent_name: str = "test-agent",
+) -> CloudResourceState:
+    return CloudResourceState.initial(
+        platform=platform,
+        agent_name=agent_name,
+        account_scope="test-org" if platform == "pipecat-cloud" else "test-project",
+        region="us-west",
+        relay_url="https://test-results.fly.dev",
+        relay=RelayCredential.issue("cli-cloud-key"),
+        relay_fingerprint="a" * 64,
+        artifact_digest="b" * 64,
+    ).checkpoint(
+        agent_created=True,
+        agent_id="agent_123456" if platform == "livekit-cloud" else None,
+        secrets_synced=True,
+        deployed=True,
+        platform_ready=True,
+        relay_ready=True,
+    )
+
+
+def _cloud_artifacts(
+    root: Path,
+    platform: Literal["pipecat-cloud", "livekit-cloud"],
+) -> CloudArtifacts:
+    context = root / ".voicekit" / "deploy" / platform / "context"
+    return CloudArtifacts(
+        platform=platform,
+        directory=context.parent,
+        context=context,
+        dockerfile=context / "Dockerfile",
+        platform_config=(context / "pcc-deploy.toml" if platform == "pipecat-cloud" else None),
+        bot=context / "bot.py" if platform == "pipecat-cloud" else None,
+        engine_wheel=None,
+        digest="b" * 64,
+    )
+
+
+def _pipecat_cloud_args(*, agent_name: str = "test-agent") -> list[str]:
+    return [
+        "deploy",
+        "pipecat-cloud",
+        "--agent",
+        agent_name,
+        "--org",
+        "test-org",
+        "--region",
+        "us-west",
+        "--secret-set",
+        f"{agent_name}-secrets",
+        "--image",
+        "registry.example.test/voicekit/agent:sha-123",
+        "--min-agents",
+        "1",
+        "--max-agents",
+        "4",
+        "--profile",
+        "agent-1x",
+        "--relay-url",
+        "https://test-results.fly.dev",
+    ]
+
+
+def _livekit_cloud_args() -> list[str]:
+    return [
+        "deploy",
+        "livekit-cloud",
+        "--agent",
+        "test-agent",
+        "--project",
+        "test-project",
+        "--region",
+        "us-west",
+        "--relay-url",
+        "https://test-results.fly.dev",
+    ]
+
+
+def test_pipecat_cloud_prepare_only_prints_exact_build_and_push(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _project(tmp_path)
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+
+        def prepare(
+            self,
+            plan: PipecatCloudPlan,
+            *,
+            engine_wheel: Path | None,
+        ) -> CloudArtifacts:
+            assert plan.image == "registry.example.test/voicekit/agent:sha-123"
+            assert engine_wheel is None
+            return _cloud_artifacts(tmp_path, "pipecat-cloud")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+    result = runner.invoke(
+        app,
+        [
+            "deploy",
+            "pipecat-cloud",
+            "--agent",
+            "test-agent",
+            "--org",
+            "test-org",
+            "--region",
+            "us-west",
+            "--secret-set",
+            "test-agent-secrets",
+            "--image",
+            "registry.example.test/voicekit/agent:sha-123",
+            "--min-agents",
+            "1",
+            "--max-agents",
+            "4",
+            "--profile",
+            "agent-1x",
+            "--relay-url",
+            "https://test-results.fly.dev",
+            "--prepare-only",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["prepared"] is True
+    assert "docker build -t registry.example.test/voicekit/agent:sha-123" in payload["next_step"]
+    assert "docker push registry.example.test/voicekit/agent:sha-123" in payload["next_step"]
+
+    text_result = runner.invoke(app, [*_pipecat_cloud_args(), "--prepare-only"])
+    assert text_result.exit_code == 0, text_result.stderr
+    assert "Secret-free Pipecat Cloud build context is ready." in text_result.stdout
+    assert "Next: docker build" in text_result.stdout
+
+
+def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path)
+    state = _cloud_state("pipecat-cloud", agent_name="phone-agent")
+    saved: list[CloudResourceState] = []
+    plans: list[PipecatCloudPlan] = []
+    verified: list[str] = []
+
+    class Store:
+        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+
+        def load(self) -> CloudResourceState:
+            return saved[-1] if saved else state
+
+        def save(self, value: CloudResourceState) -> None:
+            saved.append(value)
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+            self.store = Store()
+
+        async def deploy(
+            self,
+            plan: PipecatCloudPlan,
+            **_options: object,
+        ) -> CloudDeploymentReport:
+            plans.append(plan)
+            return CloudDeploymentReport(
+                state=state,
+                artifacts=_cloud_artifacts(tmp_path, "pipecat-cloud"),
+                smoke=CloudSmokeReport(
+                    platform="pipecat-cloud",
+                    agent_name=plan.agent_name,
+                    platform_ready=True,
+                    relay_ready=True,
+                    session_smoke=True,
+                ),
+            )
+
+    async def verify(
+        _relay_url: str,
+        _environment: Mapping[str, str],
+        call_id: str,
+    ) -> None:
+        verified.append(call_id)
+
+    carrier = FakeTwilio()
+
+    def carrier_factory(*_args: object, **_kwargs: object) -> FakeTwilio:
+        return carrier
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicekit.cli.app._carrier", carrier_factory)
+    monkeypatch.setattr("voicekit.cli.app._verify_cloud_phone_smoke", verify)
+    FakeTwilio.events = []
+    result = runner.invoke(
+        app,
+        [
+            "deploy",
+            "pipecat-cloud",
+            "--agent",
+            "phone-agent",
+            "--org",
+            "test-org",
+            "--region",
+            "us-west",
+            "--secret-set",
+            "phone-agent-secrets",
+            "--image",
+            "registry.example.test/voicekit/agent:sha-123",
+            "--min-agents",
+            "1",
+            "--max-agents",
+            "4",
+            "--profile",
+            "agent-1x",
+            "--relay-url",
+            "https://test-results.fly.dev",
+            "--smoke-to",
+            "+14155550199",
+            "--yes",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert plans[0].agent_name == "phone-agent"
+    assert payload["answer_url"].endswith("/us-west/test-org/phone-agent/twilio/answer")
+    assert verified == ["CA" + "1" * 32]
+    assert saved[-1].cutover_provider == "twilio"
+    assert saved[-1].cutover_token == "route_cli"
+    assert saved[-1].smoke_call_id == "CA" + "1" * 32
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == ("pipecat-cloud")
+
+
+def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _project(tmp_path)
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"runtime": "livekit"})
+    )
+    captured: list[tuple[LiveKitCloudPlan, dict[str, object]]] = []
+    state = _cloud_state("livekit-cloud")
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+            self.store = SimpleNamespace(
+                path=tmp_path / ".voicekit" / "deploy" / "livekit-cloud-resources.json"
+            )
+
+        async def deploy(
+            self,
+            plan: LiveKitCloudPlan,
+            **options: object,
+        ) -> CloudDeploymentReport:
+            captured.append((plan, options))
+            return CloudDeploymentReport(
+                state=state,
+                artifacts=_cloud_artifacts(tmp_path, "livekit-cloud"),
+                smoke=CloudSmokeReport(
+                    platform="livekit-cloud",
+                    agent_name=plan.agent_name,
+                    platform_ready=True,
+                    relay_ready=True,
+                    session_smoke=False,
+                ),
+            )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.LiveKitCloudDeploymentManager", Manager)
+    result = runner.invoke(
+        app,
+        [
+            "deploy",
+            "livekit-cloud",
+            "--agent",
+            "test-agent",
+            "--project",
+            "test-project",
+            "--region",
+            "us-west",
+            "--relay-url",
+            "https://test-results.fly.dev",
+            "--skip-smoke",
+            "--yes",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["target"] == "livekit-cloud"
+    assert captured[0][1]["skip_session_smoke"] is True
+    assert captured[0][1]["smoke_to"] is None
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == ("livekit-cloud")
+
+    text_result = runner.invoke(
+        app,
+        [*_livekit_cloud_args(), "--skip-smoke", "--yes"],
+    )
+    assert text_result.exit_code == 0, text_result.stderr
+    assert "LiveKit Cloud deployment completed." in text_result.stdout
+    assert "Next: voicekit calls list" in text_result.stdout
+
+
+def test_cloud_cli_validation_guards_are_cataloged(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class Manager:
+        def __init__(self, _root: Path) -> None:
+            return
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicekit.cli.app.LiveKitCloudDeploymentManager", Manager)
+
+    manifest = _project(tmp_path)
+    wrong_livekit = runner.invoke(
+        app,
+        [*_livekit_cloud_args(), "--skip-smoke", "--yes"],
+    )
+    assert wrong_livekit.exit_code == 1
+    assert "VK-DEP-008" in wrong_livekit.stderr
+
+    prepare_conflict = runner.invoke(
+        app,
+        [*_pipecat_cloud_args(), "--prepare-only", "--skip-smoke"],
+    )
+    smoke_conflict = runner.invoke(
+        app,
+        [
+            *_pipecat_cloud_args(),
+            "--smoke-to",
+            "+14155550199",
+            "--skip-smoke",
+            "--yes",
+        ],
+    )
+    assert prepare_conflict.exit_code == 1
+    assert "VK-CLI-010" in prepare_conflict.stderr
+    assert smoke_conflict.exit_code == 1
+    assert "VK-CLI-010" in smoke_conflict.stderr
+
+    phone = _phone_project(tmp_path)
+    missing_pipecat_smoke = runner.invoke(app, [*_pipecat_cloud_args(agent_name="phone-agent")])
+    assert missing_pipecat_smoke.exit_code == 1
+    assert "VK-DEP-004" in missing_pipecat_smoke.stderr
+
+    telnyx = _phone_project(tmp_path, carrier="telnyx")
+    missing_texml_ack = runner.invoke(
+        app,
+        [*_pipecat_cloud_args(agent_name="phone-agent"), "--skip-smoke", "--yes"],
+    )
+    assert missing_texml_ack.exit_code == 1
+    assert "--telnyx-texml-ready" in missing_texml_ack.stderr
+
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"runtime": "livekit"})
+    )
+    wrong_pipecat = runner.invoke(
+        app,
+        [*_pipecat_cloud_args(), "--skip-smoke", "--yes"],
+    )
+    assert wrong_pipecat.exit_code == 1
+    assert "VK-DEP-008" in wrong_pipecat.stderr
+
+    ManifestStore(tmp_path / "voicekit.jsonc").save(phone.model_copy(update={"runtime": "livekit"}))
+    missing_livekit_smoke = runner.invoke(app, [*_livekit_cloud_args()])
+    livekit_smoke_conflict = runner.invoke(
+        app,
+        [
+            *_livekit_cloud_args(),
+            "--smoke-to",
+            "+14155550199",
+            "--skip-smoke",
+            "--yes",
+        ],
+    )
+    assert missing_livekit_smoke.exit_code == 1
+    assert "VK-DEP-004" in missing_livekit_smoke.stderr
+    assert livekit_smoke_conflict.exit_code == 1
+    assert "VK-CLI-010" in livekit_smoke_conflict.stderr
+
+    del telnyx
+
+
+def test_pipecat_cloud_rollback_restores_ledgered_cutover(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _phone_project(tmp_path)
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"deploy_target": "pipecat-cloud"})
+    )
+    initial = _cloud_state("pipecat-cloud", agent_name="phone-agent").checkpoint(
+        cutover_provider="twilio",
+        cutover_token="route_previous",
+    )
+    saved: list[CloudResourceState] = []
+    carrier = FakeTwilio()
+
+    class Store:
+        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+
+        def load(self) -> CloudResourceState:
+            return saved[-1] if saved else initial
+
+        def save(self, state: CloudResourceState) -> None:
+            saved.append(state)
+
+    class Manager:
+        def __init__(self, _root: Path) -> None:
+            self.store = Store()
+
+        def rollback_created(self, _plan: PipecatCloudPlan) -> CloudResourceState:
+            return (saved[-1] if saved else initial).checkpoint(
+                agent_created=False,
+                rolled_back=True,
+            )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+
+    def carrier_factory(*_args: object, **_kwargs: object) -> FakeTwilio:
+        return carrier
+
+    monkeypatch.setattr("voicekit.cli.app._carrier", carrier_factory)
+    FakeTwilio.events = []
+
+    result = runner.invoke(
+        app,
+        [*_pipecat_cloud_args(agent_name="phone-agent"), "--rollback-created", "--yes", "--json"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout)["rolled_back"] is True
+    assert FakeTwilio.events == ["restore:route_previous"]
+    assert saved[-1].cutover_token is None
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+
+
+def test_pipecat_cloud_smoke_failure_restores_new_cutover(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path)
+    state = _cloud_state("pipecat-cloud", agent_name="phone-agent")
+    saved: list[CloudResourceState] = []
+    carrier = FakeTwilio()
+
+    class Store:
+        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+
+        def save(self, value: CloudResourceState) -> None:
+            saved.append(value)
+
+    class Manager:
+        def __init__(self, _root: Path) -> None:
+            self.store = Store()
+
+        async def deploy(
+            self,
+            plan: PipecatCloudPlan,
+            **_options: object,
+        ) -> CloudDeploymentReport:
+            return CloudDeploymentReport(
+                state=state,
+                artifacts=_cloud_artifacts(tmp_path, "pipecat-cloud"),
+                smoke=CloudSmokeReport(
+                    platform="pipecat-cloud",
+                    agent_name=plan.agent_name,
+                    platform_ready=True,
+                    relay_ready=True,
+                    session_smoke=True,
+                ),
+            )
+
+    async def fail_smoke(
+        _relay_url: str,
+        _environment: Mapping[str, str],
+        _call_id: str,
+    ) -> None:
+        raise VoicekitError("VK-DEP-004", detail="expected smoke failure")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+
+    def carrier_factory(*_args: object, **_kwargs: object) -> FakeTwilio:
+        return carrier
+
+    monkeypatch.setattr("voicekit.cli.app._carrier", carrier_factory)
+    monkeypatch.setattr("voicekit.cli.app._verify_cloud_phone_smoke", fail_smoke)
+    FakeTwilio.events = []
+
+    result = runner.invoke(
+        app,
+        [
+            *_pipecat_cloud_args(agent_name="phone-agent"),
+            "--smoke-to",
+            "+14155550199",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "expected smoke failure" in result.stderr
+    assert FakeTwilio.events[-1] == "restore:route_cli"
+    assert saved[-1].cutover_token is None
+
+
+def test_cloud_rollback_and_web_deploy_text_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _project(tmp_path)
+    pipecat_state = _cloud_state("pipecat-cloud")
+    livekit_state = _cloud_state("livekit-cloud")
+
+    class PipecatStore:
+        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+
+        def load(self) -> CloudResourceState:
+            return pipecat_state
+
+        def save(self, _state: CloudResourceState) -> None:
+            return
+
+    class PipecatManager:
+        def __init__(self, _root: Path) -> None:
+            self.store = PipecatStore()
+
+        async def deploy(
+            self,
+            plan: PipecatCloudPlan,
+            **_options: object,
+        ) -> CloudDeploymentReport:
+            return CloudDeploymentReport(
+                state=pipecat_state,
+                artifacts=_cloud_artifacts(tmp_path, "pipecat-cloud"),
+                smoke=CloudSmokeReport(
+                    platform="pipecat-cloud",
+                    agent_name=plan.agent_name,
+                    platform_ready=True,
+                    relay_ready=True,
+                    session_smoke=False,
+                ),
+            )
+
+    class LiveKitManager:
+        def __init__(self, _root: Path) -> None:
+            self.store = SimpleNamespace(
+                path=tmp_path / ".voicekit" / "deploy" / "livekit-cloud-resources.json"
+            )
+
+        def rollback(self, _plan: LiveKitCloudPlan) -> CloudResourceState:
+            return livekit_state.checkpoint(rolled_back=True)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", PipecatManager)
+    web = runner.invoke(
+        app,
+        [*_pipecat_cloud_args(), "--skip-smoke", "--yes"],
+    )
+    assert web.exit_code == 0, web.stderr
+    assert "Pipecat Cloud deployment completed." in web.stdout
+    assert "Hosted carrier answer" not in web.stdout
+
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"runtime": "livekit", "deploy_target": "livekit-cloud"})
+    )
+    monkeypatch.setattr("voicekit.cli.app.LiveKitCloudDeploymentManager", LiveKitManager)
+    rollback = runner.invoke(
+        app,
+        [*_livekit_cloud_args(), "--rollback", "--yes"],
+    )
+    assert rollback.exit_code == 0, rollback.stderr
+    assert "LiveKit Cloud rollback completed." in rollback.stdout
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+
+    invalid_rollback = runner.invoke(
+        app,
+        [*_livekit_cloud_args(), "--rollback", "--adopt", "--yes"],
+    )
+    assert invalid_rollback.exit_code == 1
+    assert "VK-CLI-010" in invalid_rollback.stderr
 
 
 def test_project_status_and_non_json_read_tables(

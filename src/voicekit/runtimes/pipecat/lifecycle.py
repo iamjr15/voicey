@@ -6,7 +6,7 @@ import asyncio
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Protocol, cast
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -28,12 +28,13 @@ from voicekit.storage.models import (
     CallLease,
     EndedReason,
     PersistedEvent,
+    RecordingReady,
+    RecordingSnapshot,
     ResultDeliveryConfig,
     ResultSnapshot,
     TerminalEventType,
     TerminalRequest,
 )
-from voicekit.storage.repository import StorageRepository
 
 _COMPLETED_REASONS: frozenset[EndedReason] = frozenset(
     {
@@ -48,8 +49,54 @@ _COMPLETED_REASONS: frozenset[EndedReason] = frozenset(
 )
 
 
-class PipecatRepository(StorageRepository, Protocol):
-    """Repository plus incremental observation writes used by a runtime."""
+class PipecatRepository(Protocol):
+    """Minimal fenced call-write contract implemented locally or by the relay."""
+
+    async def begin_call(
+        self,
+        call: NewCall,
+        *,
+        owner_id: str,
+        delivery: ResultDeliveryConfig,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> CallLease: ...
+
+    async def renew_lease(
+        self,
+        lease: CallLease,
+        *,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> CallLease: ...
+
+    async def handoff_call(
+        self,
+        call_id: str,
+        *,
+        expected_owner_id: str,
+        owner_id: str,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> CallLease: ...
+
+    async def flush_results(self, lease: CallLease, snapshot: ResultSnapshot) -> None: ...
+
+    async def update_provider_state(self, lease: CallLease, state: str) -> None: ...
+
+    async def terminalize(
+        self,
+        lease: CallLease,
+        request: TerminalRequest,
+    ) -> PersistedEvent: ...
+
+    async def mark_recording_ready(self, update: RecordingReady) -> PersistedEvent: ...
+
+    async def mark_recording_failed(self, call_id: str) -> None: ...
+
+    async def get_recording_for_call(self, call_id: str) -> RecordingSnapshot | None: ...
+
+    async def get_recording(self, recording_id: str) -> RecordingSnapshot: ...
 
     async def append_timeline(self, call_id: str, event: TimelineEvent) -> None: ...
 

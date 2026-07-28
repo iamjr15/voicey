@@ -785,6 +785,17 @@ wheels = [
 ]
 
 [[package]]
+name = "daily-python"
+version = "0.31.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/ab/a460620aff20fe77aafb87dc9aa10b9b5dbae2bf3b0e638f240770e7d18e/daily_python-0.31.0-cp38-abi3-macosx_10_15_x86_64.whl", hash = "sha256:d384e9b88e98fcf20657283fc49bfe9f354ea4966d63e95d69439579067b8221", size = 13183720, upload-time = "2026-07-14T13:32:31.437Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/ee/68f2517d19bd3b2611a5d3c276a523fa471c1ce83a90a00f88ffb39ac4c4/daily_python-0.31.0-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:a1b85013fee95a707e529c5c252ea571d6b7ce9afdf7dc4c24b48ddd1c4f83b4", size = 11747377, upload-time = "2026-07-14T13:32:34.679Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/ce/cde22a998cfd1eae2e7cd8828553c2391be7ce7e3ba39465182da0b84415/daily_python-0.31.0-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:c5e50750fcfac4c7b69e61dcb2e305f801e1e9bfc0044adbc04c372a746bcd2b", size = 14073603, upload-time = "2026-07-14T13:32:38.284Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/3e/a8b12f42cfa308b8e3e7a06df31838eb4b52ab49c7db26a9b2fedb69d695/daily_python-0.31.0-cp38-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:19086d2d3066824cd242bb2f8dd5d20b1dfcb0de3fbe36ae0c80e5e08d02c3b4", size = 14369867, upload-time = "2026-07-14T13:32:41.08Z" },
+]
+
+[[package]]
 name = "decorator"
 version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2885,6 +2896,9 @@ wheels = [
 anthropic = [
     { name = "anthropic" },
 ]
+daily = [
+    { name = "daily-python" },
+]
 deepgram = [
     { name = "deepgram-sdk" },
 ]
@@ -4537,7 +4551,7 @@ livekit = [
     { name = "livekit-api" },
 ]
 pipecat = [
-    { name = "pipecat-ai", extra = ["anthropic", "deepgram", "evals", "google", "webrtc", "websocket"] },
+    { name = "pipecat-ai", extra = ["anthropic", "daily", "deepgram", "evals", "google", "webrtc", "websocket"] },
 ]
 plivo = [
     { name = "plivo" },
@@ -4585,7 +4599,7 @@ requires-dist = [
     { name = "livekit-agents", extras = ["anthropic", "cartesia", "deepgram", "elevenlabs", "google", "openai", "silero"], marker = "extra == 'livekit'", specifier = "==1.6.7" },
     { name = "livekit-api", marker = "extra == 'livekit'", specifier = "==1.2.0" },
     { name = "ngrok", marker = "extra == 'tunnel'", specifier = "==1.4.0" },
-    { name = "pipecat-ai", extras = ["anthropic", "cartesia", "deepgram", "evals", "google", "webrtc", "websocket"], marker = "extra == 'pipecat'", specifier = "==1.6.0" },
+    { name = "pipecat-ai", extras = ["anthropic", "cartesia", "daily", "deepgram", "evals", "google", "webrtc", "websocket"], marker = "extra == 'pipecat'", specifier = "==1.6.0" },
     { name = "plivo", marker = "extra == 'companion'", specifier = "==4.61.0" },
     { name = "plivo", marker = "extra == 'plivo'", specifier = "==4.61.0" },
     { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'cloud'", specifier = ">=3.2.10,<4" },

@@ -416,3 +416,32 @@ These choices apply the documented proposals authorized in the build mandate and
   replacement, `SIGTERM`, and a 45-second platform timeout. Promotion requires
   passing platform checks plus signed protocol/storage readiness; unsigned
   `/healthz` is not sufficient evidence.
+
+## 2026-07-28 — Managed cloud worker deployment
+
+- Pin the operator tooling contract to the installed
+  `pipecat-cli==0.1.15` and `lk==2.16.2`. Pipecat CLI 0.1.15 requires the
+  positional image and exposes no cloud-build fields, so generate a
+  secret-free context and require the operator to build and push an immutable
+  tag before platform deployment.
+- Use glibc multi-stage images and UID/GID 10001. Keep project conversation
+  logic in native Pipecat Flows or LiveKit workflows; generated entrypoints
+  only adapt installed platform runner/job arguments to the shared runtime.
+- Validate signed companion readiness before any platform mutation and before
+  every worker begins accepting work. Put worker secrets in an owner-only
+  temporary file, delete it after the CLI returns, and exclude database,
+  object-store, results-signing, and previous companion credentials.
+- Persist a separate owner-only, nonsecret ledger per cloud platform. Reuse
+  only exact ledgered identity, require explicit adoption for existing
+  resources, retain previous LiveKit version and carrier rollback facts, and
+  delete only resources explicitly marked created by voicekit.
+- Mount stable provider-answer XML on the durable companion. Use the official
+  Pipecat Cloud gateway contract for Twilio, Telnyx, Plivo, and the
+  Plivo-compatible Vobiz wire. Telnyx's TeXML Application remains external
+  provider state, so print the exact URL and require
+  `--telnyx-texml-ready` instead of claiming an automatic update.
+- Treat platform control-plane smoke as necessary but not sufficient media
+  evidence. Pipecat must prove a real platform session begin and terminal
+  record; LiveKit must prove named room dispatch and terminal persistence.
+  Phone projects additionally require an explicit paid destination and a
+  terminal durable result unless the operator visibly selects `--skip-smoke`.

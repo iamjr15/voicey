@@ -383,6 +383,33 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
             "only verified resources or restore the recorded identity before retrying."
         ),
     ),
+    "VK-DEP-008": ErrorDefinition(
+        code="VK-DEP-008",
+        cause="A cloud-worker build, runtime bootstrap, or explicit deployment plan is invalid.",
+        fix=(
+            "Correct the named runtime, image, region, relay, wheel, project, or secret "
+            "input and regenerate the cloud artifacts."
+        ),
+    ),
+    "VK-DEP-009": ErrorDefinition(
+        code="VK-DEP-009",
+        cause=(
+            "A required Pipecat Cloud or LiveKit Cloud CLI is missing, "
+            "unauthenticated, timed out, or failed."
+        ),
+        fix=(
+            "Install and authenticate the pinned platform CLI, inspect its direct output, "
+            "then rerun the same resumable voicekit command."
+        ),
+    ),
+    "VK-DEP-010": ErrorDefinition(
+        code="VK-DEP-010",
+        cause="Cloud agent ownership, secret-sync, deployment, or rollback evidence is unsafe.",
+        fix=(
+            "Inspect the owner-only cloud ledger and platform agent; adopt the exact id "
+            "explicitly or restore the ledgered version before retrying."
+        ),
+    ),
     "VK-TST-001": ErrorDefinition(
         code="VK-TST-001",
         cause="A simulated-caller scenario, profile, filter, or test config is invalid.",

@@ -431,7 +431,17 @@ Key flags (discover via `pipecat init --help` / `--list-options` JSON): `--bot-t
 `pipecat.runner` is a **local-dev tool, explicitly not for production**. Canonical bot: `async def bot(runner_args): transport = await create_transport(runner_args, transport_params); …` + `if __name__=="__main__": from pipecat.runner.run import main; main()`. Serves `localhost:7860`, UI at `/client`, session start `POST /start` (**same contract as Pipecat Cloud** — a client built against the runner runs unchanged on PCC). Client picks transport per session via `"transport"` in the `/start` body. `RunnerArguments` subclasses (`pipecat.runner.types`): `DailyRunnerArguments(room_url, token)`, `SmallWebRTCRunnerArguments(webrtc_connection)`, `WebSocketRunnerArguments(websocket, transport_type)`, `LiveKitRunnerArguments`, `EvalRunnerArguments`; base fields `body`, `call_data`, `session_id`, `cli_args`.
 
 ### 10.3 Pipecat Cloud deploy + `pcc-deploy.toml`
-`pipecat cloud deploy [AGENT] [IMAGE] [OPTS]`. Container-based; base image commonly `FROM dailyco/pipecat-base` (`EXPOSE 7860`, `CMD ["python","bot.py","--host","0.0.0.0"]`). Omit `--image` to use a Pipecat Cloud **Build** from your `Dockerfile`. Secrets = **secret sets** (`pipecat cloud secrets …`, bind `--secrets`). Agent name: lowercase/digits/hyphens, ≤54 chars.
+`pipecat cloud deploy [AGENT] [IMAGE] [OPTS]`. Container-based. Secrets = **secret sets** (`pipecat cloud secrets …`, bind `--secrets`). Agent name: lowercase/digits/hyphens, ≤54 chars.
+
+**Installed-pin correction (verified 2026-07-28):** the resolved `pipecat-cli==0.1.15`
+requires the positional `IMAGE`; its installed `DeployConfigParams` has no
+cloud-build/context/Dockerfile fields. The earlier upstream example that
+allowed omitting the image does not describe this pin. Voicekit therefore
+generates a secret-free build context with `--prepare-only`, prints the exact
+`docker build` and `docker push` commands for an operator-selected immutable
+tag, and deploys that exact tag. It does not claim a Pipecat-managed build.
+The generated image uses a glibc Python base, a non-root runtime user, and the
+installed `RunnerArguments`/`main` entrypoint.
 ```toml
 agent_name = "my-voice-agent"          # required
 image = "you/my-agent:0.1"             # or build_id / cloud build

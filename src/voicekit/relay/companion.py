@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from voicekit.errors import VoicekitError
 from voicekit.obs.records import CallRecord, CallStatus
 from voicekit.relay.auth import FenceSigner, RelayKeyring
+from voicekit.relay.cloud_answer import add_pipecat_cloud_answer_routes
 from voicekit.relay.journal import RelayJournal
 from voicekit.relay.recording import CarrierCallbackIngress, add_carrier_callback_routes
 from voicekit.relay.service import RelayRepository, RepositoryRelayBackend, create_relay_app
@@ -167,6 +168,7 @@ class CompanionService:
         )
         self.app = create_relay_app(self.backend, keyring=keyring)
         self._add_routes(self.app)
+        add_pipecat_cloud_answer_routes(self.app)
         add_carrier_callback_routes(
             self.app,
             public_base=settings.public_base,

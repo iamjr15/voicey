@@ -183,6 +183,68 @@ requires `--rotate-credentials`; destructive reverse rollback requires
 Pipecat Cloud or LiveKit Cloud command with its signed relay URL. See the
 [Fly companion guide](deploy/fly-companion.md).
 
+## Pipecat Cloud
+
+Prepare the secret-free context, build and push the exact immutable image, then
+deploy it:
+
+```bash
+voicekit deploy pipecat-cloud \
+  --agent my-agent \
+  --org my-org \
+  --region us-west \
+  --secret-set my-agent-secrets \
+  --image registry.example.com/voicekit/my-agent:git-sha \
+  --min-agents 1 \
+  --max-agents 4 \
+  --profile agent-1x \
+  --relay-url https://my-agent-results.fly.dev \
+  --prepare-only
+
+docker build \
+  -t registry.example.com/voicekit/my-agent:git-sha \
+  .voicekit/deploy/pipecat-cloud/context
+docker push registry.example.com/voicekit/my-agent:git-sha
+
+voicekit deploy pipecat-cloud \
+  --agent my-agent \
+  --org my-org \
+  --region us-west \
+  --secret-set my-agent-secrets \
+  --image registry.example.com/voicekit/my-agent:git-sha \
+  --min-agents 1 \
+  --max-agents 4 \
+  --profile agent-1x \
+  --relay-url https://my-agent-results.fly.dev \
+  --yes
+```
+
+The installed CLI requires the pre-pushed image. Phone projects also require
+`--smoke-to <E.164>` unless `--skip-smoke` is explicit. Telnyx requires the
+printed hosted-answer URL on its TeXML Application and
+`--telnyx-texml-ready`. Existing agents require `--adopt`; destructive
+created-only rollback is `--rollback-created --yes`. See the
+[Pipecat Cloud guide](deploy/pipecat-cloud.md).
+
+## LiveKit Cloud
+
+Deploy a native LiveKit worker against the validated companion:
+
+```bash
+voicekit deploy livekit-cloud \
+  --agent my-agent \
+  --project my-livekit-project \
+  --region us-west \
+  --relay-url https://my-agent-results.fly.dev \
+  --yes
+```
+
+Phone projects require `VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID` and
+`--smoke-to <E.164>` unless `--skip-smoke` is explicit. Existing agents require
+`--agent-id <id> --adopt`. `--rollback --yes` deletes a first version created
+by voicekit or restores the exact ledgered previous version. See the
+[LiveKit Cloud guide](deploy/livekit-cloud.md).
+
 ## Doctor
 
 Run local preflight:

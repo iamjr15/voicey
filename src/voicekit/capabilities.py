@@ -174,15 +174,13 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
             kind="deploy",
             id="pipecat-cloud",
             description="Managed Pipecat worker deployment.",
-            enabled=False,
-            unavailable_reason="the cloud target and results relay land in P3",
+            enabled=True,
         ),
         Capability(
             kind="deploy",
             id="livekit-cloud",
             description="Managed LiveKit agent deployment.",
-            enabled=False,
-            unavailable_reason="the cloud target and results relay land in P3",
+            enabled=True,
         ),
         Capability(
             kind="deploy",

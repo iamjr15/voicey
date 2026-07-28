@@ -28,7 +28,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
 | P3 managed object-store compatibility | ready-to-run, pending credentials | Command below | Private S3-compatible bucket with create/read/delete permission |
 | P3 Fly results companion | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Fly CLI, organization billing, Managed Postgres, and Tigris |
-| P3 cloud-worker deploys | not-ready | Added with each P3 worker target | Pipecat Cloud and LiveKit Cloud access |
+| P3 cloud-worker deploys | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Pipecat Cloud and LiveKit Cloud projects, deployed companion, registry, provider credentials, and paid PSTN |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
 | P4 24-hour soak | not-ready | Added with the P4 soak harness | 24 hours of uninterrupted runner time |
 
@@ -130,6 +130,167 @@ readiness evidence. To remove the disposable resources after evidence capture,
 run the exact same resource flags with `--rollback-created --yes`; verify
 Tigris, MPG, and app are deleted in that order. Do not run rollback against an
 adopted or production resource set.
+
+## P3 Pipecat Cloud and LiveKit Cloud workers
+
+The local suite proves secret-free images, native runtime entrypoints,
+worker-secret filtering, signed relay preflight, ownership/adoption drift
+fences, hosted carrier answers, resumable deploys, created-only/version
+rollback, platform session/room smoke, paid phone-smoke orchestration, and
+durable begin/terminal invariants. It does not prove either paid cloud control
+plane. This machine has `pipecat-cli==0.1.15` and `lk==2.16.2`, but no
+authenticated Pipecat Cloud organization or configured LiveKit Cloud project.
+
+First complete the Fly companion gate above and retain its public base and
+generated `VOICEKIT_RELAY_CREDENTIAL` in the agent project's ignored,
+owner-only `.env`. From this repository, build the unpublished engine wheel:
+
+```bash
+export VOICEKIT_REPO_ROOT="$PWD"
+export VOICEKIT_AGENT_PROJECT='/absolute/path/to/agent-project'
+export VOICEKIT_RELAY_URL='https://voicekit-results-cert.fly.dev'
+export VOICEKIT_ENGINE_WHEEL="$PWD/dist/voicekit-0.0.0.dev0-py3-none-any.whl"
+uv build --out-dir dist
+```
+
+For Pipecat Cloud, choose an immutable registry tag and exact account values,
+authenticate, verify the current region list, then prepare/build/push without
+platform mutation:
+
+```bash
+export VOICEKIT_PCC_AGENT='voicekit-cloud-cert'
+export VOICEKIT_PCC_ORG='exact-pipecat-org'
+export VOICEKIT_PCC_REGION='us-west'
+export VOICEKIT_PCC_SECRET_SET='voicekit-cloud-cert-secrets' # pragma: allowlist secret
+export VOICEKIT_PCC_IMAGE='registry.example.com/voicekit/cloud-cert:git-sha'
+pipecat cloud auth login
+pipecat cloud auth whoami
+pipecat cloud regions list
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
+    --agent "$VOICEKIT_PCC_AGENT" \
+    --org "$VOICEKIT_PCC_ORG" \
+    --region "$VOICEKIT_PCC_REGION" \
+    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
+    --image "$VOICEKIT_PCC_IMAGE" \
+    --min-agents 1 \
+    --max-agents 4 \
+    --profile agent-1x \
+    --relay-url "$VOICEKIT_RELAY_URL" \
+    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --prepare-only
+  docker build \
+    -t "$VOICEKIT_PCC_IMAGE" \
+    .voicekit/deploy/pipecat-cloud/context
+  docker push "$VOICEKIT_PCC_IMAGE"
+)
+```
+
+Use a disposable Twilio phone project for the full automatic cutover and paid
+smoke, with its owned `phone_number` in `voicekit.jsonc`:
+
+```bash
+export VOICEKIT_CLOUD_SMOKE_TO='+14155550199'
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
+    --agent "$VOICEKIT_PCC_AGENT" \
+    --org "$VOICEKIT_PCC_ORG" \
+    --region "$VOICEKIT_PCC_REGION" \
+    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
+    --image "$VOICEKIT_PCC_IMAGE" \
+    --min-agents 1 \
+    --max-agents 4 \
+    --profile agent-1x \
+    --relay-url "$VOICEKIT_RELAY_URL" \
+    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --smoke-to "$VOICEKIT_CLOUD_SMOKE_TO" \
+    --yes \
+    --json
+)
+```
+
+The JSON must report ready platform/relay/session smoke, a terminal
+`smoke_call_id`, and no credential value. The companion must contain both the
+platform-session begin/terminal record and paid-call terminal result with
+delivered webhook status. Repeat the identical command and verify it resumes
+without creating a second agent. For Telnyx, first configure its TeXML
+Application to the exact companion URL printed by the command and add
+`--telnyx-texml-ready`.
+
+After evidence capture, restore the carrier route and delete only the
+voicekit-created disposable agent:
+
+```bash
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
+    --agent "$VOICEKIT_PCC_AGENT" \
+    --org "$VOICEKIT_PCC_ORG" \
+    --region "$VOICEKIT_PCC_REGION" \
+    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
+    --image "$VOICEKIT_PCC_IMAGE" \
+    --min-agents 1 \
+    --max-agents 4 \
+    --profile agent-1x \
+    --relay-url "$VOICEKIT_RELAY_URL" \
+    --rollback-created \
+    --yes \
+    --json
+)
+```
+
+For LiveKit Cloud, use a LiveKit-runtime project with its carrier SIP
+provisioning already complete. Authenticate, verify the exact project, and set
+the outbound trunk used only for the paid smoke:
+
+```bash
+export VOICEKIT_LK_AGENT='voicekit-cloud-cert'
+export VOICEKIT_LK_PROJECT='exact-livekit-project'
+export VOICEKIT_LK_REGION='us-west'
+export VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID='ST_...'
+lk cloud auth
+lk project list --json
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy livekit-cloud \
+    --agent "$VOICEKIT_LK_AGENT" \
+    --project "$VOICEKIT_LK_PROJECT" \
+    --region "$VOICEKIT_LK_REGION" \
+    --relay-url "$VOICEKIT_RELAY_URL" \
+    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --smoke-to "$VOICEKIT_CLOUD_SMOKE_TO" \
+    --yes \
+    --json
+)
+```
+
+The JSON must report ready platform/relay/session smoke. Retain the room,
+dispatch, SIP participant, call, agent, version, and terminal relay ids without
+credentials or raw caller PII. Rerun with the same inputs and confirm it
+deploys one new version while retaining the previous version for rollback.
+Then run:
+
+```bash
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy livekit-cloud \
+    --agent "$VOICEKIT_LK_AGENT" \
+    --project "$VOICEKIT_LK_PROJECT" \
+    --region "$VOICEKIT_LK_REGION" \
+    --relay-url "$VOICEKIT_RELAY_URL" \
+    --rollback \
+    --yes \
+    --json
+)
+```
+
+Verify that a second version rolls back to the exact checkpointed previous
+version; a disposable first version created by voicekit is deleted instead.
+Neither command may delete an adopted agent. Both cloud rows remain
+pending-live until these commands and one real browser-media conversation per
+web runtime pass.
 
 ## P3 tier-3 paid PSTN loopback
 

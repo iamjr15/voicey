@@ -1,5 +1,19 @@
 """Deployment artifact, persistence, and smoke-verification surfaces."""
 
+from voicekit.deploy.cloud import (
+    CloudArtifactGenerator,
+    CloudArtifacts,
+    CloudDeploymentReport,
+    CloudResourceState,
+    CloudResourceStore,
+    CloudSmokeReport,
+    LiveKitCloudDeploymentManager,
+    LiveKitCloudPlan,
+    PipecatCloudDeploymentManager,
+    PipecatCloudPlan,
+    PlatformCliRunner,
+)
+from voicekit.deploy.cloud_smoke import LiveKitCloudSessionSmoke
 from voicekit.deploy.docker import (
     DockerArtifacts,
     DockerDeploymentGenerator,
@@ -25,6 +39,12 @@ from voicekit.deploy.persistence import (
 )
 
 __all__ = [
+    "CloudArtifactGenerator",
+    "CloudArtifacts",
+    "CloudDeploymentReport",
+    "CloudResourceState",
+    "CloudResourceStore",
+    "CloudSmokeReport",
     "DockerArtifacts",
     "DockerDeploymentGenerator",
     "DockerSmokeResult",
@@ -38,7 +58,13 @@ __all__ = [
     "FlyResourceStore",
     "FlySmokeReport",
     "FlyctlRunner",
+    "LiveKitCloudDeploymentManager",
+    "LiveKitCloudPlan",
+    "LiveKitCloudSessionSmoke",
     "PersistencePreflightReport",
+    "PipecatCloudDeploymentManager",
+    "PipecatCloudPlan",
+    "PlatformCliRunner",
     "RollingGenerationReport",
     "docker_persistence_preflight",
     "rolling_generation_invariant",

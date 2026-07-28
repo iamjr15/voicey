@@ -44,11 +44,22 @@ from voicekit.deploy import (
     DockerSmokeVerifier,
     FlyDeploymentManager,
     FlyPlan,
+    LiveKitCloudDeploymentManager,
+    LiveKitCloudPlan,
+    PipecatCloudDeploymentManager,
+    PipecatCloudPlan,
 )
 from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 from voicekit.obs.logging import scrub_secrets
 from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
 from voicekit.recipes.source import install_recipe
+from voicekit.relay.auth import RelayCredential
+from voicekit.relay.client import RelayClient
+from voicekit.relay.cloud_answer import (
+    PipecatCloudProvider,
+    pipecat_cloud_answer_path,
+    pipecat_cloud_websocket_url,
+)
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony.models import PipecatTarget, RollbackToken
 from voicekit.testing.reporting import result_json, write_junit
@@ -1144,6 +1155,483 @@ def deploy_fly_command(
     _guard_async(operation, json_output=json_output)
 
 
+@deploy_app.command("pipecat-cloud")
+def deploy_pipecat_cloud_command(
+    agent_name: Annotated[
+        str,
+        typer.Option("--agent", help="Exact deployed Pipecat Cloud agent name."),
+    ],
+    organization: Annotated[
+        str,
+        typer.Option("--org", help="Exact Pipecat Cloud organization slug."),
+    ],
+    region: Annotated[
+        str,
+        typer.Option("--region", help="Exact Pipecat Cloud region."),
+    ],
+    secret_set: Annotated[
+        str,
+        typer.Option("--secret-set", help="Exact Pipecat Cloud secret-set name."),
+    ],
+    image: Annotated[
+        str,
+        typer.Option("--image", help="Pre-pushed immutable tagged worker image."),
+    ],
+    min_agents: Annotated[
+        int,
+        typer.Option("--min-agents", help="Minimum warm agents (0-50)."),
+    ],
+    max_agents: Annotated[
+        int,
+        typer.Option("--max-agents", help="Maximum agents (1-50)."),
+    ],
+    profile: Annotated[
+        str,
+        typer.Option("--profile", help="agent-1x, agent-2x, or agent-3x."),
+    ],
+    relay_url: Annotated[
+        str,
+        typer.Option("--relay-url", help="Validated user-owned results companion URL."),
+    ],
+    image_pull_secret: Annotated[
+        str | None,
+        typer.Option("--image-pull-secret", help="Private-registry credential name."),
+    ] = None,
+    prepare_only: Annotated[
+        bool,
+        typer.Option(
+            "--prepare-only",
+            help="Generate the build context without touching Pipecat Cloud.",
+        ),
+    ] = False,
+    adopt: Annotated[
+        bool,
+        typer.Option("--adopt", help="Adopt an exact existing cloud agent."),
+    ] = False,
+    cutover: Annotated[
+        bool,
+        typer.Option(
+            "--cutover/--no-cutover",
+            help="Point the configured phone number after deployment.",
+        ),
+    ] = True,
+    telnyx_texml_ready: Annotated[
+        bool,
+        typer.Option(
+            "--telnyx-texml-ready",
+            help="Confirm the selected TeXML app uses the printed hosted-answer URL.",
+        ),
+    ] = False,
+    smoke_to: Annotated[
+        str | None,
+        typer.Option("--smoke-to", help="Paid phone-smoke destination in E.164 form."),
+    ] = None,
+    skip_smoke: Annotated[
+        bool,
+        typer.Option("--skip-smoke", help="Skip platform and phone smoke evidence."),
+    ] = False,
+    rollback_created: Annotated[
+        bool,
+        typer.Option(
+            "--rollback-created",
+            help="Restore cutover and delete only a voicekit-created cloud agent.",
+        ),
+    ] = False,
+    engine_wheel: Annotated[
+        Path | None,
+        typer.Option("--engine-wheel", help="Local unpublished voicekit wheel."),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Confirm paid/live/destructive mutations."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable deployment facts."),
+    ] = False,
+) -> None:
+    """Prepare, deploy, cut over, smoke, resume, or roll back Pipecat Cloud."""
+
+    async def operation() -> None:
+        DEFAULT_CAPABILITIES.require("deploy", "pipecat-cloud")
+        context = _context()
+        manifest = require_manifest(context)
+        if manifest.runtime != "pipecat":
+            raise VoicekitError(
+                "VK-DEP-008",
+                detail="pipecat-cloud requires a Pipecat-runtime project.",
+            )
+        plan = PipecatCloudPlan(
+            agent_name=agent_name,
+            organization=organization,
+            region=region,
+            secret_set=secret_set,
+            image=image,
+            relay_url=relay_url,
+            min_agents=min_agents,
+            max_agents=max_agents,
+            profile=cast(Any, profile),
+            image_pull_secret=image_pull_secret,
+        )
+        manager = PipecatCloudDeploymentManager(context.root)
+        manifest_store = ManifestStore(context.root / "voicekit.jsonc")
+        if prepare_only:
+            if adopt or rollback_created or smoke_to is not None or skip_smoke:
+                raise VoicekitError(
+                    "VK-CLI-010",
+                    detail=(
+                        "--prepare-only cannot be combined with adoption, rollback, "
+                        "or smoke options."
+                    ),
+                )
+            artifacts = await asyncio.to_thread(
+                manager.prepare,
+                plan,
+                engine_wheel=engine_wheel,
+            )
+            build = (
+                f"docker build -t {shlex.quote(plan.image)} {shlex.quote(str(artifacts.context))}"
+            )
+            push = f"docker push {shlex.quote(plan.image)}"
+            payload = {
+                "target": "pipecat-cloud",
+                "prepared": True,
+                "context": str(artifacts.context),
+                "dockerfile": str(artifacts.dockerfile),
+                "digest": artifacts.digest,
+                "next_step": f"{build} && {push}",
+            }
+            if json_output:
+                _json(payload)
+            else:
+                console.print("Secret-free Pipecat Cloud build context is ready.")
+                console.print(f"Context: {artifacts.context}")
+                console.print(f"Next: {payload['next_step']}")
+            return
+
+        if smoke_to is not None and skip_smoke:
+            raise VoicekitError("VK-CLI-010", detail="--smoke-to conflicts with --skip-smoke.")
+        phone_provider = manifest.carriers[0] if manifest.carriers else None
+        target = (
+            None
+            if phone_provider is None
+            else _pipecat_cloud_target(
+                plan,
+                cast("PipecatCloudProvider", phone_provider),
+            )
+        )
+        if (
+            phone_provider == "telnyx"
+            and not rollback_created
+            and (cutover or smoke_to is not None)
+            and not telnyx_texml_ready
+        ):
+            raise VoicekitError(
+                "VK-DEP-008",
+                detail=(
+                    "configure the selected Telnyx TeXML application URL as "
+                    f"{cast('PipecatTarget', target).answer_url}, then pass "
+                    "--telnyx-texml-ready."
+                ),
+            )
+        if (
+            phone_provider is not None
+            and not rollback_created
+            and not skip_smoke
+            and smoke_to is None
+        ):
+            raise VoicekitError(
+                "VK-DEP-004",
+                detail="phone deployment smoke requires --smoke-to E164 or --skip-smoke.",
+            )
+        if rollback_created:
+            _confirm(
+                (
+                    f"Restore any ledgered carrier cutover and delete only the "
+                    f"voicekit-created Pipecat Cloud agent {agent_name}?"
+                ),
+                yes=yes,
+            )
+            state = manager.store.load()
+            if state is not None and state.cutover_token is not None:
+                adapter = _carrier(context)
+                try:
+                    adapter.restore(
+                        RollbackToken(
+                            provider=cast(str, state.cutover_provider),
+                            token=state.cutover_token,
+                        )
+                    )
+                finally:
+                    adapter.ledger.close()
+                state = state.checkpoint(
+                    cutover_provider=None,
+                    cutover_token=None,
+                )
+                manager.store.save(state)
+            state = await asyncio.to_thread(manager.rollback_created, plan)
+            manifest_store.save(manifest.model_copy(update={"deploy_target": None}))
+            payload = {
+                "target": "pipecat-cloud",
+                "rolled_back": True,
+                "resources": asdict(state),
+                "next_step": "voicekit deploy pipecat-cloud --prepare-only ...",
+            }
+            if json_output:
+                _json(payload)
+            else:
+                console.print("Pipecat Cloud resources created by voicekit were rolled back.")
+                console.print(f"Next: {payload['next_step']}")
+            return
+
+        _confirm(
+            (
+                f"Deploy {agent_name} to Pipecat Cloud in {region}"
+                + (
+                    f", point {manifest.phone_number}, and place one paid smoke call"
+                    if phone_provider is not None and cutover and not skip_smoke
+                    else ""
+                )
+                + "? This can incur charges."
+            ),
+            yes=yes,
+        )
+        report = await manager.deploy(
+            plan,
+            environment=context.environment,
+            engine_wheel=engine_wheel,
+            adopt=adopt,
+            skip_session_smoke=skip_smoke,
+        )
+        state = report.state
+        adapter = None
+        new_cutover: RollbackToken | None = None
+        active_cutover = (
+            None
+            if state.cutover_token is None
+            else RollbackToken(
+                provider=cast(str, state.cutover_provider),
+                token=state.cutover_token,
+            )
+        )
+        try:
+            if (
+                target is not None
+                and cutover
+                and manifest.phone_number is not None
+                and state.cutover_token is None
+            ):
+                adapter = _carrier(context, expected_public_base=plan.relay_url)
+                new_cutover = await asyncio.to_thread(
+                    adapter.point_inbound,
+                    manifest.phone_number,
+                    target,
+                )
+                state = state.checkpoint(
+                    cutover_provider=new_cutover.provider,
+                    cutover_token=new_cutover.token,
+                )
+                active_cutover = new_cutover
+                manager.store.save(state)
+            if target is not None and smoke_to is not None:
+                adapter = adapter or _carrier(
+                    context,
+                    expected_public_base=plan.relay_url,
+                )
+                agent = load_project_agent(context)
+                call_id = await asyncio.to_thread(
+                    adapter.start_call,
+                    cast(str, manifest.phone_number),
+                    smoke_to,
+                    target,
+                    amd=True,
+                    record=bool(agent.phone and agent.phone.record),
+                )
+                await _verify_cloud_phone_smoke(
+                    plan.relay_url,
+                    context.environment,
+                    call_id,
+                )
+                state = state.checkpoint(smoke_call_id=call_id)
+                manager.store.save(state)
+        except Exception:
+            if adapter is not None and active_cutover is not None:
+                await asyncio.to_thread(adapter.restore, active_cutover)
+                state = state.checkpoint(
+                    cutover_provider=None,
+                    cutover_token=None,
+                )
+                manager.store.save(state)
+            raise
+        finally:
+            if adapter is not None:
+                adapter.ledger.close()
+        manifest_store.save(manifest.model_copy(update={"deploy_target": "pipecat-cloud"}))
+        payload = {
+            "target": "pipecat-cloud",
+            "resources": asdict(state),
+            "artifacts": {
+                "context": str(report.artifacts.context),
+                "dockerfile": str(report.artifacts.dockerfile),
+                "config": str(report.artifacts.platform_config),
+                "digest": report.artifacts.digest,
+            },
+            "smoke": asdict(report.smoke),
+            "answer_url": None if target is None else target.answer_url,
+            "next_step": "voicekit calls list",
+        }
+        if json_output:
+            _json(payload)
+            return
+        console.print("Pipecat Cloud deployment completed.")
+        console.print(f"Resource ledger: {manager.store.path}")
+        if target is not None:
+            console.print(f"Hosted carrier answer: {target.answer_url}")
+        console.print("Next: voicekit calls list")
+
+    _guard_async(operation, json_output=json_output)
+
+
+@deploy_app.command("livekit-cloud")
+def deploy_livekit_cloud_command(
+    agent_name: Annotated[
+        str,
+        typer.Option("--agent", help="Exact registered LiveKit agent name."),
+    ],
+    project: Annotated[
+        str,
+        typer.Option("--project", help="Exact authenticated LiveKit Cloud project."),
+    ],
+    region: Annotated[
+        str,
+        typer.Option("--region", help="Exact LiveKit Cloud region."),
+    ],
+    relay_url: Annotated[
+        str,
+        typer.Option("--relay-url", help="Validated user-owned results companion URL."),
+    ],
+    agent_id: Annotated[
+        str | None,
+        typer.Option("--agent-id", help="Exact existing agent id for adoption."),
+    ] = None,
+    adopt: Annotated[
+        bool,
+        typer.Option("--adopt", help="Adopt the exact existing agent id."),
+    ] = False,
+    smoke_to: Annotated[
+        str | None,
+        typer.Option("--smoke-to", help="Paid LiveKit SIP smoke destination."),
+    ] = None,
+    skip_smoke: Annotated[
+        bool,
+        typer.Option("--skip-smoke", help="Skip room/PSTN and relay smoke evidence."),
+    ] = False,
+    rollback: Annotated[
+        bool,
+        typer.Option("--rollback", help="Roll back the ledgered version or created agent."),
+    ] = False,
+    engine_wheel: Annotated[
+        Path | None,
+        typer.Option("--engine-wheel", help="Local unpublished voicekit wheel."),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Confirm paid/live/destructive mutations."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable deployment facts."),
+    ] = False,
+) -> None:
+    """Deploy, smoke, resume, adopt, or roll back a LiveKit Cloud agent."""
+
+    async def operation() -> None:
+        DEFAULT_CAPABILITIES.require("deploy", "livekit-cloud")
+        context = _context()
+        manifest = require_manifest(context)
+        if manifest.runtime != "livekit":
+            raise VoicekitError(
+                "VK-DEP-008",
+                detail="livekit-cloud requires a LiveKit-runtime project.",
+            )
+        if smoke_to is not None and skip_smoke:
+            raise VoicekitError("VK-CLI-010", detail="--smoke-to conflicts with --skip-smoke.")
+        if "phone" in manifest.channels and not rollback and not skip_smoke and smoke_to is None:
+            raise VoicekitError(
+                "VK-DEP-004",
+                detail="phone deployment smoke requires --smoke-to E164 or --skip-smoke.",
+            )
+        plan = LiveKitCloudPlan(
+            agent_name=agent_name,
+            project=project,
+            region=region,
+            relay_url=relay_url,
+            agent_id=agent_id,
+        )
+        manager = LiveKitCloudDeploymentManager(context.root)
+        manifest_store = ManifestStore(context.root / "voicekit.jsonc")
+        if rollback:
+            if adopt or skip_smoke or smoke_to is not None or engine_wheel is not None:
+                raise VoicekitError(
+                    "VK-CLI-010",
+                    detail="--rollback cannot be combined with deploy or smoke options.",
+                )
+            _confirm(
+                f"Roll back the ledgered LiveKit Cloud agent {agent_name}?",
+                yes=yes,
+            )
+            state = await asyncio.to_thread(manager.rollback, plan)
+            manifest_store.save(manifest.model_copy(update={"deploy_target": None}))
+            payload = {
+                "target": "livekit-cloud",
+                "rolled_back": True,
+                "resources": asdict(state),
+                "next_step": "voicekit deploy livekit-cloud --help",
+            }
+            if json_output:
+                _json(payload)
+            else:
+                console.print("LiveKit Cloud rollback completed.")
+                console.print(f"Next: {payload['next_step']}")
+            return
+        _confirm(
+            (
+                f"Deploy {agent_name} to LiveKit Cloud project {project} in {region}"
+                + (" and place one paid SIP smoke call" if smoke_to is not None else "")
+                + "? This can incur charges."
+            ),
+            yes=yes,
+        )
+        report = await manager.deploy(
+            plan,
+            environment=context.environment,
+            engine_wheel=engine_wheel,
+            adopt=adopt,
+            skip_session_smoke=skip_smoke,
+            smoke_to=smoke_to,
+        )
+        manifest_store.save(manifest.model_copy(update={"deploy_target": "livekit-cloud"}))
+        payload = {
+            "target": "livekit-cloud",
+            "resources": asdict(report.state),
+            "artifacts": {
+                "context": str(report.artifacts.context),
+                "dockerfile": str(report.artifacts.dockerfile),
+                "digest": report.artifacts.digest,
+            },
+            "smoke": asdict(report.smoke),
+            "next_step": "voicekit calls list",
+        }
+        if json_output:
+            _json(payload)
+            return
+        console.print("LiveKit Cloud deployment completed.")
+        console.print(f"Resource ledger: {manager.store.path}")
+        console.print("Next: voicekit calls list")
+
+    _guard_async(operation, json_output=json_output)
+
+
 @app.command("upgrade")
 def upgrade_command(
     pre: Annotated[bool, typer.Option("--pre/--stable")] = False,
@@ -1256,6 +1744,68 @@ def _carrier_target(context: ProjectContext, public_base: str) -> PipecatTarget:
             ),
         )
     return PipecatTarget(public_base)
+
+
+def _pipecat_cloud_target(
+    plan: PipecatCloudPlan,
+    provider: PipecatCloudProvider,
+) -> PipecatTarget:
+    answer_path = pipecat_cloud_answer_path(
+        region=plan.region,
+        organization=plan.organization,
+        agent_name=plan.agent_name,
+        provider=provider,
+    )
+    return PipecatTarget(
+        plan.relay_url,
+        ws_path="/v1/pipecat-cloud/unused",
+        answer_path=answer_path,
+        event_path=f"/{provider}/events",
+        recording_path=f"/{provider}/recordings",
+        amd_path=f"/{provider}/amd",
+        stream_url_override=pipecat_cloud_websocket_url(
+            region=plan.region,
+            organization=plan.organization,
+            agent_name=plan.agent_name,
+            provider=provider,
+        ),
+    )
+
+
+async def _verify_cloud_phone_smoke(
+    relay_url: str,
+    environment: Mapping[str, str],
+    call_id: str,
+    *,
+    timeout_s: float = 900,
+) -> None:
+    relay = RelayCredential.parse(environment.get("VOICEKIT_RELAY_CREDENTIAL", ""))
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    async with RelayClient(relay_url, relay) as client:
+        while True:
+            try:
+                call = await client.get_call(call_id)
+            except VoicekitError as exc:
+                if exc.code != "VK-OBS-003":
+                    raise
+                call = None
+            if call is not None and call.ended_at is not None:
+                if call.webhook_status == "delivered":
+                    return
+                if call.webhook_status == "dead_lettered":
+                    raise VoicekitError(
+                        "VK-DEP-004",
+                        detail=f"cloud smoke call {call_id!r} dead-lettered its result.",
+                    )
+            if asyncio.get_running_loop().time() >= deadline:
+                raise VoicekitError(
+                    "VK-DEP-004",
+                    detail=(
+                        f"cloud smoke call {call_id!r} did not terminalize and "
+                        "deliver its result before timeout."
+                    ),
+                )
+            await asyncio.sleep(2)
 
 
 def _provider_entry(context: ProjectContext, provider: str) -> ProviderCatalogEntry:

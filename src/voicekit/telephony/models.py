@@ -79,6 +79,7 @@ class PipecatTarget:
     recording_path: str = "/twilio/recordings"
     amd_path: str = "/twilio/amd"
     custom_parameters: dict[str, str] = field(default_factory=lambda: {})
+    stream_url_override: str | None = None
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.https_base)
@@ -89,6 +90,7 @@ class PipecatTarget:
             self.recording_path,
             self.amd_path,
         )
+        override = None if self.stream_url_override is None else urlsplit(self.stream_url_override)
         if (
             parsed.scheme != "https"
             or not parsed.hostname
@@ -97,6 +99,16 @@ class PipecatTarget:
             or parsed.query
             or parsed.fragment
             or any(not path.startswith("/") or "?" in path or "#" in path for path in paths)
+            or (
+                override is not None
+                and (
+                    override.scheme != "wss"
+                    or not override.hostname
+                    or override.username is not None
+                    or override.password is not None
+                    or override.fragment
+                )
+            )
         ):
             raise VoicekitError(
                 "VK-TEL-002",
@@ -113,7 +125,9 @@ class PipecatTarget:
 
     @property
     def stream_url(self) -> str:
-        """Return the WSS media URL without a query string."""
+        """Return the validated WSS media URL, including a platform query when required."""
+        if self.stream_url_override is not None:
+            return self.stream_url_override
         base = self.https_base.rstrip("/")
         return f"wss://{urlsplit(base).netloc}{urlsplit(base).path}{self.ws_path}"
 
