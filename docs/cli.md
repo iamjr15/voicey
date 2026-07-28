@@ -157,6 +157,32 @@ evidence. Storage topology, secret handling, proxy trust, drain, rolling
 replacement, and recovery are documented in the
 [Docker deployment guide](deploy/docker.md).
 
+## Fly results companion
+
+Deploy the user-owned durable companion for ephemeral cloud workers by making
+every placement, database plan, volume, and bucket choice explicit:
+
+```bash
+voicekit deploy fly \
+  --app my-agent-results \
+  --org my-fly-org \
+  --region iad \
+  --postgres-name my-agent-results-pg \
+  --postgres-plan Basic \
+  --postgres-volume-gb 10 \
+  --bucket my-agent-results-objects \
+  --yes
+```
+
+An unpublished checkout requires `--engine-wheel`. The command checkpoints
+every Fly app, Managed Postgres, Tigris, attachment, secret, release, and smoke
+step without putting secret values in the resource ledger. Pre-existing
+unledgered resources require explicit `--adopt`; credential replacement
+requires `--rotate-credentials`; destructive reverse rollback requires
+`--rollback-created --yes`. Every successful deployment prints the matching
+Pipecat Cloud or LiveKit Cloud command with its signed relay URL. See the
+[Fly companion guide](deploy/fly-companion.md).
+
 ## Doctor
 
 Run local preflight:

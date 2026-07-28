@@ -20,6 +20,7 @@ from voicekit.config.catalog import ProviderKind
 from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
 from voicekit.config.models import ModelAxis
 from voicekit.deploy.docker import DockerSmokeResult
+from voicekit.deploy.fly import FlyArtifacts, FlyPlan, FlyResourceState, FlySmokeReport
 from voicekit.obs.records import NewCall
 from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
 from voicekit.storage.sqlite import SQLiteRepository
@@ -331,6 +332,23 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
             ["deploy", "docker", "--help"],
             ("--smoke", "--skip-smoke", "--to", "--engine-wheel", "--yes", "--json"),
         ),
+        (
+            ["deploy", "fly", "--help"],
+            (
+                "--app",
+                "--org",
+                "--region",
+                "--postgres-name",
+                "--bucket",
+                "--adopt",
+                "--rotate-credentials",
+                "--rollback-created",
+                "--skip-smoke",
+                "--engine-wheel",
+                "--yes",
+                "--json",
+            ),
+        ),
     ):
         help_result = runner.invoke(app, command)
         assert help_result.exit_code == 0
@@ -530,6 +548,151 @@ def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
     assert payload["call_id"].startswith("CA")
     assert FakeTwilio.events == ["call:+14155550123:+14155550199:https://voice.example"]
     assert FakeTwilio.call_options == [{"amd": True, "record": False}]
+
+
+def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path)
+    captured_plans: list[FlyPlan] = []
+    captured_options: list[dict[str, object]] = []
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+            self.store = SimpleNamespace(
+                path=tmp_path / ".voicekit" / "deploy" / "fly-resources.json"
+            )
+
+        async def deploy(self, plan: FlyPlan, **options: object) -> object:
+            captured_plans.append(plan)
+            captured_options.append(options)
+            state = FlyResourceState.initial(plan).checkpoint(
+                app_created=True,
+                postgres_created=True,
+                bucket_created=True,
+                postgres_id="mpg_123",
+                postgres_attached=True,
+                bucket_attached=True,
+                deployed=True,
+                smoke_green=True,
+            )
+            directory = tmp_path / ".voicekit" / "deploy" / "fly"
+            return SimpleNamespace(
+                state=state,
+                artifacts=FlyArtifacts(
+                    directory=directory,
+                    dockerfile=directory / "Dockerfile.results",
+                    config=directory / "fly.results.toml",
+                    dockerignore=directory / "dockerignore",
+                    engine_wheel=tmp_path / "voicekit.whl",
+                    digest="a" * 64,
+                ),
+                smoke=FlySmokeReport(
+                    app_name="test-results",
+                    public_base="https://test-results.fly.dev",
+                    platform_checks=2,
+                    liveness=True,
+                    signed_readiness=True,
+                ),
+            )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.FlyDeploymentManager", Manager)
+    result = runner.invoke(
+        app,
+        [
+            "deploy",
+            "fly",
+            "--app",
+            "test-results",
+            "--org",
+            "test-org",
+            "--region",
+            "iad",
+            "--postgres-name",
+            "test-results-pg",
+            "--bucket",
+            "test-results-objects",
+            "--postgres-plan",
+            "Basic",
+            "--postgres-volume-gb",
+            "10",
+            "--engine-wheel",
+            str(tmp_path / "voicekit.whl"),
+            "--yes",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    plan = captured_plans[0]
+    assert plan.callback_providers == ("twilio",)
+    assert plan.postgres_name == "test-results-pg"
+    assert plan.bucket_name == "test-results-objects"
+    assert captured_options[0]["adopt"] is False
+    assert payload["resources"]["postgres_id"] == "mpg_123"
+    assert payload["smoke"]["signed_readiness"] is True
+    assert payload["next_step"] == (
+        "voicekit deploy pipecat-cloud --relay-url https://test-results.fly.dev --yes"
+    )
+    assert "vkr_" not in result.stdout
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == "fly"
+
+
+def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _project(tmp_path)
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"deploy_target": "fly"})
+    )
+    rolled_back: list[str] = []
+
+    class Manager:
+        def __init__(self, _root: Path) -> None:
+            self.store = SimpleNamespace(
+                path=tmp_path / ".voicekit" / "deploy" / "fly-resources.json"
+            )
+
+        def rollback_created(self, plan: FlyPlan) -> FlyResourceState:
+            rolled_back.append(plan.app_name)
+            return FlyResourceState.initial(plan).checkpoint(rolled_back=True)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.FlyDeploymentManager", Manager)
+    command = [
+        "deploy",
+        "fly",
+        "--app",
+        "test-results",
+        "--org",
+        "test-org",
+        "--region",
+        "iad",
+        "--postgres-name",
+        "test-results-pg",
+        "--bucket",
+        "test-results-objects",
+        "--postgres-plan",
+        "Basic",
+        "--postgres-volume-gb",
+        "10",
+        "--rollback-created",
+    ]
+    denied = runner.invoke(app, command)
+    assert denied.exit_code == 1
+    assert "VK-CLI-008" in denied.stderr
+    assert rolled_back == []
+
+    accepted = runner.invoke(app, [*command, "--yes", "--json"])
+    assert accepted.exit_code == 0, accepted.stderr
+    assert json.loads(accepted.stdout)["rolled_back"] is True
+    assert rolled_back == ["test-results"]
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
 
 
 def test_project_status_and_non_json_read_tables(

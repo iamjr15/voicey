@@ -27,7 +27,8 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
 | P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
 | P3 managed object-store compatibility | ready-to-run, pending credentials | Command below | Private S3-compatible bucket with create/read/delete permission |
-| P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
+| P3 Fly results companion | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Fly CLI, organization billing, Managed Postgres, and Tigris |
+| P3 cloud-worker deploys | not-ready | Added with each P3 worker target | Pipecat Cloud and LiveKit Cloud access |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
 | P4 24-hour soak | not-ready | Added with the P4 soak harness | 24 hours of uninterrupted runner time |
 
@@ -57,6 +58,78 @@ For a loopback MinIO test only, set
 `VOICEKIT_OBJECT_FORCE_PATH_STYLE=true`. A pass means the bucket was reachable,
 one checksummed probe was read back byte-for-byte, and that probe was deleted.
 It does not promote the Fly companion or either cloud deployment.
+
+## P3 Fly results companion
+
+Local tests prove command selection, explicit adoption, owner-only checkpoints,
+secret rotation continuity, reverse rollback ownership, generated topology,
+platform/signed smoke behavior, and the service's real Postgres preflight. This
+machine has no `fly`/`flyctl` executable or authenticated Fly account, so no
+external resource or paid service is represented as green.
+
+Install and authenticate the Fly CLI, choose a disposable web-only voicekit
+agent project, and run the complete gate from this repository:
+
+```bash
+export VOICEKIT_REPO_ROOT="$PWD"
+export VOICEKIT_AGENT_PROJECT='/absolute/path/to/web-only-agent-project'
+export VOICEKIT_FLY_APP='voicekit-results-cert'
+export VOICEKIT_FLY_ORG='exact-org-slug'
+export VOICEKIT_FLY_REGION='iad'
+export VOICEKIT_FLY_PG='voicekit-results-cert-pg'
+export VOICEKIT_FLY_BUCKET='voicekit-results-cert-objects'
+fly auth whoami
+uv build --out-dir dist
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy fly \
+    --app "$VOICEKIT_FLY_APP" \
+    --org "$VOICEKIT_FLY_ORG" \
+    --region "$VOICEKIT_FLY_REGION" \
+    --postgres-name "$VOICEKIT_FLY_PG" \
+    --postgres-plan Basic \
+    --postgres-volume-gb 10 \
+    --bucket "$VOICEKIT_FLY_BUCKET" \
+    --engine-wheel \
+      "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+    --yes \
+    --json
+)
+```
+
+The JSON must show `deployed=true`, `smoke_green=true`, at least one passing
+platform check, liveness, and signed readiness. Fly logs must show the
+checksummed migrations, S3 round trip, and rollback-only rolling-generation
+probe before server admission. Confirm the bucket is private and that the
+resource ledger contains identifiers/fingerprints but none of the values in
+`.env`.
+
+Rerun the identical deploy command and verify no new app, cluster, or bucket
+is created. Then exercise current/previous credential cutover:
+
+```bash
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy fly \
+    --app "$VOICEKIT_FLY_APP" \
+    --org "$VOICEKIT_FLY_ORG" \
+    --region "$VOICEKIT_FLY_REGION" \
+    --postgres-name "$VOICEKIT_FLY_PG" \
+    --postgres-plan Basic \
+    --postgres-volume-gb 10 \
+    --bucket "$VOICEKIT_FLY_BUCKET" \
+    --rotate-credentials \
+    --engine-wheel \
+      "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+    --yes
+)
+```
+
+Retain redacted app, MPG, bucket, release, Machine, health-check, and signed
+readiness evidence. To remove the disposable resources after evidence capture,
+run the exact same resource flags with `--rollback-created --yes`; verify
+Tigris, MPG, and app are deleted in that order. Do not run rollback against an
+adopted or production resource set.
 
 ## P3 tier-3 paid PSTN loopback
 

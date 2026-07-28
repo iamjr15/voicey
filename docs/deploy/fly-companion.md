@@ -5,8 +5,96 @@ peer is a user-owned Fly application running voicekit in results-service mode,
 with managed Postgres and a private S3-compatible object store. The companion
 does not run an agent or define conversation flow.
 
-The Fly provisioning command is the next P3.5 unit. This page documents the
-service process and its security contract independently of that automation.
+`voicekit deploy fly` owns the companion's provisioning and release lifecycle.
+It uses current Fly CLI surfaces: `fly apps`, `fly mpg` for Managed Postgres,
+`fly storage` for private Tigris, staged stdin secret import, and a rolling
+`fly deploy`. It never uses the legacy unmanaged `fly postgres` surface.
+
+## Provision and deploy
+
+Install and authenticate the
+[Fly CLI](https://fly.io/docs/flyctl/install/), then build a local wheel when
+running an unpublished checkout. From the agent project, provide every
+resource and cost choice explicitly:
+
+```bash
+fly auth whoami
+voicekit deploy fly \
+  --app my-agent-results \
+  --org my-fly-org \
+  --region iad \
+  --postgres-name my-agent-results-pg \
+  --postgres-plan Basic \
+  --postgres-volume-gb 10 \
+  --bucket my-agent-results-objects \
+  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --yes
+```
+
+Published releases omit `--engine-wheel`. The command:
+
+1. validates the complete plan, callback credentials, local wheel, and
+   existing owner-only checkpoint before any platform mutation;
+2. creates or reuses the exact app, Fly Managed Postgres 17 cluster, and
+   private Tigris bucket;
+3. attaches the pooled `DATABASE_URL`, verifies Tigris credentials are staged,
+   generates relay/results credentials when absent, and imports secrets over
+   stdin rather than process arguments;
+4. writes a two-Machine, drain-aware Fly config and companion-only image;
+5. deploys rolling, requires passing Fly service checks, probes unsigned
+   liveness, then performs authenticated relay readiness.
+
+Generated artifacts live under `.voicekit/deploy/fly/`. The non-secret resource
+ledger is `.voicekit/deploy/fly-resources.json` with mode `0600`. It records
+exact resource identifiers, ownership flags, artifact and secret fingerprints,
+and gate status, never secret values. Generated credential material is kept in
+the existing owner-only, ignored `.env`.
+
+Rerunning the same command resumes from the ledger and revalidates every
+resource. An existing unledgered app, cluster, bucket, `DATABASE_URL`, or
+Tigris credential set stops the command. After verifying ownership and
+attachment in Fly, rerun with `--adopt`; adopted resources are never deleted by
+voicekit rollback.
+
+Rotate the relay and protected-results pair with:
+
+```bash
+voicekit deploy fly \
+  --app my-agent-results \
+  --org my-fly-org \
+  --region iad \
+  --postgres-name my-agent-results-pg \
+  --postgres-plan Basic \
+  --postgres-volume-gb 10 \
+  --bucket my-agent-results-objects \
+  --rotate-credentials \
+  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --yes
+```
+
+The previous pair remains accepted during cutover. The command rejects a local
+current secret whose fingerprint differs from the ledger, so accidental
+replacement cannot silently strand deployed workers.
+
+Rollback is explicit, destructive, and reverse ordered:
+
+```bash
+voicekit deploy fly \
+  --app my-agent-results \
+  --org my-fly-org \
+  --region iad \
+  --postgres-name my-agent-results-pg \
+  --postgres-plan Basic \
+  --postgres-volume-gb 10 \
+  --bucket my-agent-results-objects \
+  --rollback-created \
+  --yes
+```
+
+Only bucket, MPG cluster, and app rows marked created by voicekit are destroyed.
+The command never auto-rolls back a failed deployment and never deletes adopted
+resources. This preserves evidence and avoids converting a recoverable partial
+provision into data loss.
 
 ## Install and start
 
@@ -124,3 +212,11 @@ VOICEKIT_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voiceki
 This validates the service and persistence invariants; it does not claim a
 real Fly, bucket, carrier callback, or cloud-runtime deployment. Those gates
 remain in `docs/GAPS.md` until their guarded commands actually pass.
+
+The command choices above are pinned to the official
+[app creation](https://fly.io/docs/flyctl/apps-create/),
+[Managed Postgres](https://fly.io/docs/flyctl/mpg-create/),
+[MPG attachment](https://fly.io/docs/flyctl/mpg-attach/),
+[Tigris](https://fly.io/docs/flyctl/storage-create/),
+[stdin secret import](https://fly.io/docs/flyctl/secrets-import/), and
+[rolling deploy](https://fly.io/docs/flyctl/deploy/) references.

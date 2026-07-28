@@ -370,6 +370,19 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="Docker or Compose could not validate the generated deployment.",
         fix="Install a supported Docker Compose release, fix the reported validation, and retry.",
     ),
+    "VK-DEP-006": ErrorDefinition(
+        code="VK-DEP-006",
+        cause="A managed deployment CLI is missing, unauthenticated, timed out, or failed.",
+        fix="Install and authenticate the printed platform CLI, then rerun the same command.",
+    ),
+    "VK-DEP-007": ErrorDefinition(
+        code="VK-DEP-007",
+        cause="Managed deployment resource identity, ownership, or checkpoint evidence drifted.",
+        fix=(
+            "Inspect the platform resources and owner-only resource ledger; explicitly adopt "
+            "only verified resources or restore the recorded identity before retrying."
+        ),
+    ),
     "VK-TST-001": ErrorDefinition(
         code="VK-TST-001",
         cause="A simulated-caller scenario, profile, filter, or test config is invalid.",

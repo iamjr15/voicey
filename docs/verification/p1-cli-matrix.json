@@ -194,6 +194,15 @@
       "paired_options": []
     },
     {
+      "path": "deploy fly",
+      "phase": "p3",
+      "interaction": "confirmed-external-mutation",
+      "json": "required",
+      "arguments": [],
+      "options": ["--adopt", "--app", "--bucket", "--engine-wheel", "--json", "--org", "--postgres-name", "--postgres-plan", "--postgres-volume-gb", "--region", "--rollback-created", "--rotate-credentials", "--skip-smoke", "--yes"],
+      "paired_options": []
+    },
+    {
       "path": "upgrade",
       "phase": "p4-reserved",
       "interaction": "confirmed-package-mutation",

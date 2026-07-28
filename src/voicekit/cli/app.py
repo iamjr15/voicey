@@ -39,7 +39,12 @@ from voicekit.cli.prompts import PromptChoice, QuestionaryPromptIO
 from voicekit.cli.wizard import InitOptions, InitWizard
 from voicekit.config.catalog import DEFAULT_PROVIDER_CATALOG, ProviderCatalogEntry
 from voicekit.config.manifest import ManifestStore, RecipeSelection
-from voicekit.deploy import DockerDeploymentGenerator, DockerSmokeVerifier
+from voicekit.deploy import (
+    DockerDeploymentGenerator,
+    DockerSmokeVerifier,
+    FlyDeploymentManager,
+    FlyPlan,
+)
 from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 from voicekit.obs.logging import scrub_secrets
 from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
@@ -961,6 +966,180 @@ def deploy_command(
                 )
         elif smoke_url is None and not skip_smoke:
             console.print("Then complete one browser conversation through your allowed web origin.")
+
+    _guard_async(operation, json_output=json_output)
+
+
+@deploy_app.command("fly")
+def deploy_fly_command(
+    app_name: Annotated[
+        str,
+        typer.Option("--app", help="Exact Fly application name for the results companion."),
+    ],
+    organization: Annotated[
+        str,
+        typer.Option("--org", help="Exact Fly organization slug."),
+    ],
+    region: Annotated[
+        str,
+        typer.Option("--region", help="Exact Fly/Managed Postgres region."),
+    ],
+    postgres_name: Annotated[
+        str,
+        typer.Option("--postgres-name", help="Existing or new Managed Postgres name."),
+    ],
+    bucket_name: Annotated[
+        str,
+        typer.Option("--bucket", help="Existing or new private Tigris bucket name."),
+    ],
+    postgres_plan: Annotated[
+        str,
+        typer.Option("--postgres-plan", help="Fly Managed Postgres plan."),
+    ],
+    postgres_volume_gb: Annotated[
+        int,
+        typer.Option("--postgres-volume-gb", help="Managed Postgres storage (10-500 GB)."),
+    ],
+    adopt: Annotated[
+        bool,
+        typer.Option("--adopt", help="Adopt exact pre-existing resources after verification."),
+    ] = False,
+    rotate_credentials: Annotated[
+        bool,
+        typer.Option(
+            "--rotate-credentials",
+            help="Rotate relay/results credentials while retaining the prior pair.",
+        ),
+    ] = False,
+    rollback_created: Annotated[
+        bool,
+        typer.Option(
+            "--rollback-created",
+            help="Permanently destroy only resources ledgered as created by voicekit.",
+        ),
+    ] = False,
+    skip_smoke: Annotated[
+        bool,
+        typer.Option("--skip-smoke", help="Deploy without platform and signed relay smoke."),
+    ] = False,
+    engine_wheel: Annotated[
+        Path | None,
+        typer.Option("--engine-wheel", help="Local unpublished voicekit wheel."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Confirm paid/destructive mutations.")] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable resource and smoke facts."),
+    ] = False,
+) -> None:
+    """Provision, resume, rotate, validate, or roll back the Fly companion."""
+
+    async def operation() -> None:
+        DEFAULT_CAPABILITIES.require("deploy", "fly")
+        if rollback_created and (
+            adopt or rotate_credentials or skip_smoke or engine_wheel is not None
+        ):
+            raise VoicekitError(
+                "VK-CLI-010",
+                detail=(
+                    "--rollback-created cannot be combined with adoption, rotation, "
+                    "smoke, or wheel options."
+                ),
+            )
+        context = _context()
+        manifest = require_manifest(context)
+        selected_carriers = tuple(
+            provider
+            for provider in manifest.carriers
+            if provider in {"twilio", "telnyx", "vobiz", "plivo"}
+        )
+        plan = FlyPlan(
+            app_name=app_name,
+            organization=organization,
+            region=region,
+            postgres_name=postgres_name,
+            bucket_name=bucket_name,
+            callback_providers=selected_carriers,
+            postgres_plan=postgres_plan,
+            postgres_volume_gb=postgres_volume_gb,
+        )
+        manager = FlyDeploymentManager(context.root)
+        manifest_store = ManifestStore(context.root / "voicekit.jsonc")
+        if rollback_created:
+            _confirm(
+                (
+                    "Permanently destroy only Fly resources marked created-by-voicekit "
+                    f"for {app_name}? Managed data cannot be recovered."
+                ),
+                yes=yes,
+            )
+            state = await asyncio.to_thread(manager.rollback_created, plan)
+            manifest_store.save(manifest.model_copy(update={"deploy_target": None}))
+            next_command = (
+                f"voicekit deploy fly --app {app_name} --org {organization} "
+                f"--region {region} --postgres-name {postgres_name} "
+                f"--bucket {bucket_name} --postgres-plan {postgres_plan} "
+                f"--postgres-volume-gb {postgres_volume_gb} --yes"
+            )
+            payload = {
+                "target": "fly",
+                "rolled_back": True,
+                "resources": asdict(state),
+                "next_step": next_command,
+            }
+            if json_output:
+                _json(payload)
+            else:
+                console.print("Fly resources created by voicekit were rolled back.")
+                console.print(f"Next: {next_command}")
+            return
+
+        _confirm(
+            (
+                f"Provision or reuse Fly app {app_name}, Managed Postgres "
+                f"{plan.postgres_name}, and private Tigris bucket {plan.bucket_name}? "
+                "These resources can incur charges."
+            ),
+            yes=yes,
+        )
+        report = await manager.deploy(
+            plan,
+            environment=context.environment,
+            engine_wheel=engine_wheel,
+            adopt=adopt,
+            rotate_credentials=rotate_credentials,
+            skip_smoke=skip_smoke,
+        )
+        manifest_store.save(manifest.model_copy(update={"deploy_target": "fly"}))
+        next_target = "pipecat-cloud" if manifest.runtime == "pipecat" else "livekit-cloud"
+        next_command = f"voicekit deploy {next_target} --relay-url {plan.public_base} --yes"
+        artifact_rows = {
+            "dockerfile": str(report.artifacts.dockerfile),
+            "config": str(report.artifacts.config),
+            "dockerignore": str(report.artifacts.dockerignore),
+            "engine_wheel": (
+                None
+                if report.artifacts.engine_wheel is None
+                else str(report.artifacts.engine_wheel)
+            ),
+        }
+        payload = {
+            "target": "fly",
+            "resources": asdict(report.state),
+            "artifacts": artifact_rows,
+            "smoke": None if report.smoke is None else asdict(report.smoke),
+            "next_step": next_command,
+        }
+        if json_output:
+            _json(payload)
+            return
+        console.print("Fly results companion deployment completed.")
+        console.print(f"URL: {plan.public_base}")
+        console.print(
+            "Signed readiness: " + ("green" if report.smoke is not None else "skipped by operator")
+        )
+        console.print(f"Resource ledger: {manager.store.path}")
+        console.print(f"Next: {next_command}")
 
     _guard_async(operation, json_output=json_output)
 

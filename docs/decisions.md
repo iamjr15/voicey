@@ -392,3 +392,27 @@ These choices apply the documented proposals authorized in the build mandate and
   package, retaining the Pipecat import as a compatibility alias. The durable
   companion and local Pipecat host now share the exact download, object-write,
   ready-event, bearer-access, and rotation logic.
+
+## 2026-07-28 — Fly companion provisioning and ownership
+
+- Use the current Fly Managed Postgres namespace (`fly mpg`), not the legacy
+  unmanaged `fly postgres` commands. Pin the generated cluster to Postgres 17
+  and attach its pooled URL as `DATABASE_URL`.
+- Use a private Tigris bucket through `fly storage create --app`. Require
+  `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` attachment evidence before
+  deployment; the service's startup object round trip proves those credentials
+  reach the named bucket.
+- Stage relay/results and carrier callback secrets through
+  `fly secrets import --stage` over stdin. Keep raw generated values only in
+  owner-only `.env` and Fly secrets; store only key ids and SHA-256
+  fingerprints in the owner-only resource ledger.
+- Require every CLI resource and cost choice explicitly. Reuse only a
+  matching ledgered resource; require `--adopt` for exact unledgered resources
+  and never grant adopted resources delete ownership.
+- Checkpoint after each external mutation and never auto-delete on failure.
+  Explicit rollback deletes only voicekit-created resources in reverse order:
+  Tigris bucket, MPG cluster, then app.
+- Run two companion Machines with Fly service-level liveness checks, rolling
+  replacement, `SIGTERM`, and a 45-second platform timeout. Promotion requires
+  passing platform checks plus signed protocol/storage readiness; unsigned
+  `/healthz` is not sufficient evidence.

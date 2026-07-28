@@ -188,8 +188,7 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
             kind="deploy",
             id="fly",
             description="Fly deployment with managed Postgres companion.",
-            enabled=False,
-            unavailable_reason="the Fly target lands in P3",
+            enabled=True,
         ),
         Capability(
             kind="deploy",

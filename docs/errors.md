@@ -446,6 +446,23 @@ the smoke command.
 **Fix:** Install a supported Docker Compose release, fix the reported
 validation, and retry.
 
+## VK-DEP-006
+
+**Cause:** A managed deployment CLI is missing, unauthenticated, timed out, or
+failed.
+
+**Fix:** Install and authenticate the printed platform CLI, then rerun the same
+command.
+
+## VK-DEP-007
+
+**Cause:** Managed deployment resource identity, ownership, or checkpoint
+evidence drifted.
+
+**Fix:** Inspect the platform resources and owner-only resource ledger;
+explicitly adopt only verified resources or restore the recorded identity
+before retrying.
+
 ## VK-TST-001
 
 **Cause:** A simulated-caller scenario, profile, filter, or test config is
