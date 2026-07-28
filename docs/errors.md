@@ -292,6 +292,14 @@ infrastructure error.
 
 **Fix:** Check carrier status and connectivity; reconcile mutations before retrying.
 
+## VK-TEL-012
+
+**Cause:** A warm-transfer handoff did not reach one safe, confirmed conference
+state.
+
+**Fix:** Keep the caller with the agent, inspect the reported transfer id, and
+retry only after its provider state is terminal.
+
 ## VK-RUN-001
 
 **Cause:** The selected runtime or a pinned optional dependency is unavailable.

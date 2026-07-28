@@ -1,5 +1,7 @@
 import asyncio
 import json
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -29,6 +31,7 @@ from voicekit.runtimes.pipecat.lifecycle import PipecatCall, PipecatCallLifecycl
 from voicekit.runtimes.pipecat.session import PipecatSessionBuilder
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony import CallEvent, PipecatTarget, TelephonyRequest
+from voicekit.telephony.ledger import WarmTransferRecord
 
 
 @tool
@@ -92,6 +95,10 @@ class _Twilio:
         self.amd_disposition = "hung_up"
         self.transfers: list[tuple[str, str]] = []
         self.recordings: list[tuple[str, PipecatTarget]] = []
+        self.warm_accepts: list[TelephonyRequest] = []
+        self.warm_events: list[TelephonyRequest] = []
+        self.warm_conferences: list[TelephonyRequest] = []
+        self.warm_recoveries = 0
 
     def verify_request(self, _request: TelephonyRequest) -> bool:
         return self.verified
@@ -146,6 +153,22 @@ class _Twilio:
 
     def cold_transfer(self, call_sid: str, to_number: str) -> None:
         self.transfers.append((call_sid, to_number))
+
+    def warm_transfer_accept_response(self, request: TelephonyRequest) -> str:
+        self.warm_accepts.append(request)
+        return "<Response><Dial><Conference>vk_test</Conference></Dial></Response>"
+
+    def parse_warm_transfer_event(self, request: TelephonyRequest) -> object:
+        self.warm_events.append(request)
+        return object()
+
+    def parse_warm_conference_event(self, request: TelephonyRequest) -> object:
+        self.warm_conferences.append(request)
+        return object()
+
+    def recover_warm_transfers(self) -> int:
+        self.warm_recoveries += 1
+        return 0
 
 
 class _Telnyx:
@@ -233,6 +256,51 @@ class _RunnerSpy:
     async def end(self, reason: str | None = None) -> None:
         del reason
         self.ended.set()
+
+
+class _WarmAdapter:
+    def __init__(self, *, bridge_fails: bool = False, accepts: bool = True) -> None:
+        now = datetime(2026, 7, 28, tzinfo=UTC)
+        self.record = WarmTransferRecord(
+            transfer_id="warm_" + "a" * 32,
+            provider="twilio",
+            caller_call_id="CA" + "1" * 32,
+            from_number="+14155550123",
+            to_number="+14155550124",
+            conference_name="vk_" + "b" * 32,
+            briefing_digest="c" * 64,
+            state="dialing",
+            human_call_id="CA" + "2" * 32,
+            conference_id=None,
+            last_status="queued",
+            created_at=now,
+            updated_at=now,
+        )
+        self.bridge_fails = bridge_fails
+        self.accepts = accepts
+        self.events: list[str] = []
+
+    def start_warm_transfer(self, **_arguments: object) -> WarmTransferRecord:
+        self.events.append("start")
+        return self.record
+
+    def warm_transfer(self, _transfer_id: str) -> WarmTransferRecord:
+        if self.accepts and self.record.state == "dialing":
+            self.record = replace(self.record, state="accepted")
+        return self.record
+
+    def bridge_warm_transfer(self, _transfer_id: str) -> WarmTransferRecord:
+        self.events.append("bridge")
+        if self.bridge_fails:
+            self.record = replace(self.record, state="failed")
+            raise VoicekitError("VK-TEL-012", detail="definitive bridge failure.")
+        self.record = replace(self.record, state="bridged")
+        return self.record
+
+    def abort_warm_transfer(self, _transfer_id: str, *, reason: str) -> WarmTransferRecord:
+        self.events.append(f"abort:{reason}")
+        self.record = replace(self.record, state="failed")
+        return self.record
 
 
 class _RecordingHandler:
@@ -566,6 +634,65 @@ def test_host_settings_load_credentials_from_environment(
     assert settings.twilio_auth_token == "token-from-env"
 
 
+async def test_twilio_warm_coordinator_marks_before_bridge_and_clears_definitive_failure() -> None:
+    reasons: list[str | None] = []
+    adapter = _WarmAdapter()
+    coordinator = host_module._TwilioWarmTransfer(  # pyright: ignore[reportPrivateUsage]
+        cast(TwilioRuntimeAdapter, adapter),
+        from_number="+14155550123",
+        target=PipecatTarget(https_base="https://voice.example"),
+        timeout_s=1,
+    )
+
+    await coordinator(
+        "CA" + "1" * 32,
+        "+14155550124",
+        "Billing needs a private handoff.",
+        reasons.append,
+    )
+
+    assert reasons == ["transferred"]
+    assert adapter.events == ["start", "bridge"]
+    assert adapter.record.state == "bridged"
+
+    failed = _WarmAdapter(bridge_fails=True)
+    failure = host_module._TwilioWarmTransfer(  # pyright: ignore[reportPrivateUsage]
+        cast(TwilioRuntimeAdapter, failed),
+        from_number="+14155550123",
+        target=PipecatTarget(https_base="https://voice.example"),
+        timeout_s=1,
+    )
+    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+        await failure(
+            "CA" + "1" * 32,
+            "+14155550124",
+            "Billing needs a private handoff.",
+            reasons.append,
+        )
+    assert reasons[-2:] == ["transferred", None]
+
+
+async def test_twilio_warm_coordinator_timeout_aborts_only_human_leg() -> None:
+    adapter = _WarmAdapter(accepts=False)
+    coordinator = host_module._TwilioWarmTransfer(  # pyright: ignore[reportPrivateUsage]
+        cast(TwilioRuntimeAdapter, adapter),
+        from_number="+14155550123",
+        target=PipecatTarget(https_base="https://voice.example"),
+        timeout_s=0.001,
+    )
+
+    with pytest.raises(VoicekitError, match="timed out"):
+        await coordinator(
+            "CA" + "1" * 32,
+            "+14155550124",
+            "Billing needs a private handoff.",
+            lambda _reason: None,
+        )
+
+    assert adapter.events == ["start", "abort:accept_timeout"]
+    assert adapter.record.state == "failed"
+
+
 async def test_twilio_answer_reserves_before_returning_stream(tmp_path: Path) -> None:
     host, repository, adapter = await _host(tmp_path)
     transport = httpx.ASGITransport(app=host.app)
@@ -660,6 +787,62 @@ async def test_twilio_recording_callback_and_artifact_route_are_runtime_wired(
     assert artifact.content == b"audio:rec_engine"
     assert artifact.headers["cache-control"] == "private, no-store"
     await repository.close()
+
+
+async def test_twilio_warm_transfer_callbacks_are_signed_and_route_bound(
+    tmp_path: Path,
+) -> None:
+    host, repository, adapter = await _host(tmp_path)
+    transfer_id = "warm_" + "a" * 32
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=host.app),
+        base_url="https://voice.example",
+    ) as client:
+        accept = await client.post(
+            f"/twilio/warm-transfer/{transfer_id}/accept",
+            data={"CallSid": "CA-human", "Digits": "1"},
+        )
+        event = await client.post(
+            f"/twilio/warm-transfer/{transfer_id}/events",
+            data={"CallSid": "CA-human", "CallStatus": "ringing"},
+        )
+        conference = await client.post(
+            f"/twilio/warm-transfer/{transfer_id}/conference",
+            data={
+                "ConferenceSid": "CF-conference",
+                "StatusCallbackEvent": "participant-join",
+            },
+        )
+
+    assert accept.status_code == 200
+    assert accept.headers["content-type"].startswith("application/xml")
+    assert event.status_code == 204
+    assert conference.status_code == 204
+    assert adapter.warm_accepts[0].route_params == {"transfer_id": transfer_id}
+    assert adapter.warm_events[0].route_params == {"transfer_id": transfer_id}
+    assert adapter.warm_conferences[0].route_params == {"transfer_id": transfer_id}
+    await repository.close()
+
+    denied, denied_repository, denied_adapter = await _host(
+        tmp_path / "denied",
+        twilio=_Twilio(verified=False),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=denied.app),
+        base_url="https://voice.example",
+    ) as client:
+        responses = [
+            await client.post(
+                f"/twilio/warm-transfer/{transfer_id}/{action}",
+                data={"CallSid": "CA-human"},
+            )
+            for action in ("accept", "events", "conference")
+        ]
+    assert {response.status_code for response in responses} == {403}
+    assert denied_adapter.warm_accepts == []
+    assert denied_adapter.warm_events == []
+    assert denied_adapter.warm_conferences == []
+    await denied_repository.close()
 
 
 async def test_recording_routes_fail_closed_and_telnyx_dispatches(

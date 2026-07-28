@@ -58,7 +58,7 @@ def test_checked_in_parity_matrix_is_complete_and_evidence_backed() -> None:
         for runtime in RUNTIMES
         if row[runtime]["status"] == "declared_exclusion"
     ]
-    assert exclusions == [("warm_transfer", "pipecat")]
+    assert exclusions == []
 
 
 def _assert_evidence(reference: str) -> None:

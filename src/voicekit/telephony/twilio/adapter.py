@@ -6,6 +6,7 @@ import os
 import re
 import uuid
 from datetime import timedelta
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal, NoReturn, cast
 from urllib.parse import urlsplit
@@ -18,7 +19,11 @@ from twilio.twiml.voice_response import VoiceResponse
 
 from voicekit.errors import VoicekitError
 from voicekit.storage.artifacts import ArtifactStore
-from voicekit.telephony.ledger import OutboundIntent, TelephonyLedger
+from voicekit.telephony.ledger import (
+    OutboundIntent,
+    TelephonyLedger,
+    WarmTransferRecord,
+)
 from voicekit.telephony.models import (
     CallEvent,
     Capabilities,
@@ -37,6 +42,8 @@ _CALL_SID = re.compile(r"^CA[0-9a-fA-F]{32}$")
 _ACCOUNT_SID = re.compile(r"^AC[0-9a-fA-F]{32}$")
 _NUMBER_SID = re.compile(r"^PN[0-9a-fA-F]{32}$")
 _RECORDING_SID = re.compile(r"^RE[0-9a-fA-F]{32}$")
+_CONFERENCE_SID = re.compile(r"^CF[0-9a-fA-F]{32}$")
+_WARM_TRANSFER_ID = re.compile(r"^warm_[0-9a-f]{32}$")
 _DTMF = re.compile(r"^[0-9*#wW]{1,32}$")
 _ROUTE_FIELDS = (
     "voice_url",
@@ -49,6 +56,24 @@ _ROUTE_FIELDS = (
     "trunk_sid",
 )
 _TERMINAL_STATUSES = frozenset({"completed", "busy", "no-answer", "failed", "canceled"})
+_WARM_HUMAN_STATUSES = frozenset(
+    {
+        "queued",
+        "initiated",
+        "ringing",
+        "answered",
+        "in-progress",
+        *_TERMINAL_STATUSES,
+    }
+)
+_WARM_CONFERENCE_EVENTS = frozenset(
+    {
+        "conference-start",
+        "conference-end",
+        "participant-join",
+        "participant-leave",
+    }
+)
 
 
 class TwilioAdapter:
@@ -600,6 +625,419 @@ class TwilioAdapter:
         response.dial(validate_e164(to_number), answer_on_bridge=True)
         self._update_call(call_sid, twiml=_checked_twiml(response))
 
+    def start_warm_transfer(
+        self,
+        *,
+        caller_call_sid: str,
+        from_number: str,
+        to_number: str,
+        briefing: str,
+        target: RuntimeTarget,
+        transfer_id: str | None = None,
+        timeout_s: int = 30,
+    ) -> WarmTransferRecord:
+        """Dial a privately briefed human only after durable intent fencing."""
+        pipecat = _pipecat_target(target)
+        if self.expected_public_base != pipecat.https_base.rstrip("/"):
+            raise VoicekitError(
+                "VK-TEL-002",
+                detail=(
+                    "warm-transfer target must exactly match expected_public_base before dialing."
+                ),
+            )
+        caller_sid = _validate_call_sid(caller_call_sid)
+        source = validate_e164(from_number)
+        destination = validate_e164(to_number)
+        private_briefing = _validate_briefing(briefing)
+        if not 5 <= timeout_s <= 120:
+            raise VoicekitError(
+                "VK-TEL-002",
+                detail="warm-transfer answer timeout must be between 5 and 120s.",
+            )
+        durable_id = _validate_warm_transfer_id(transfer_id or f"warm_{uuid.uuid4().hex}")
+        conference_name = f"vk_{uuid.uuid4().hex}"
+        self._ledger.prepare_warm_transfer(
+            transfer_id=durable_id,
+            provider=self.provider,
+            caller_call_id=caller_sid,
+            from_number=source,
+            to_number=destination,
+            conference_name=conference_name,
+            briefing_digest=sha256(private_briefing.encode("utf-8")).hexdigest(),
+        )
+        response = VoiceResponse()
+        gather = cast(
+            "Any",
+            response.gather(
+                input="dtmf",
+                num_digits=1,
+                action=_warm_url(pipecat, durable_id, "accept"),
+                method="POST",
+                timeout=15,
+            ),
+        )
+        gather.say(
+            "Private handoff from the voice assistant. "
+            f"{private_briefing} Press 1 to accept this call."
+        )
+        response.say("The transfer was not accepted. Goodbye.")
+        response.hangup()
+        try:
+            human_call = self._client.calls.create(
+                to=destination,
+                from_=source,
+                twiml=_checked_twiml(response),
+                status_callback=_warm_url(pipecat, durable_id, "events"),
+                status_callback_event=["initiated", "ringing", "answered", "completed"],
+                status_callback_method="POST",
+                timeout=timeout_s,
+                record=False,
+            )
+        except Exception as exc:
+            if _definitive_rejection(exc):
+                self._ledger.transition_warm_transfer(
+                    durable_id,
+                    expected=("prepared",),
+                    state="failed",
+                    last_status=_safe_carrier_status(exc),
+                )
+                _raise_carrier(exc, operation="dial warm-transfer participant")
+            self._ledger.transition_warm_transfer(
+                durable_id,
+                expected=("prepared",),
+                state="ambiguous",
+                last_status="human_leg_create_outcome_unknown",
+            )
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {durable_id!r} has an ambiguous human-leg create.",
+            ) from exc
+        try:
+            human_call_sid = _validate_call_sid(str(human_call.sid))
+        except VoicekitError as exc:
+            self._ledger.transition_warm_transfer(
+                durable_id,
+                expected=("prepared",),
+                state="ambiguous",
+                last_status="invalid_human_call_id",
+            )
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {durable_id!r} needs operator reconciliation.",
+            ) from exc
+        current = self._ledger.get_warm_transfer(durable_id)
+        if current.state == "prepared":
+            return self._ledger.transition_warm_transfer(
+                durable_id,
+                expected=("prepared",),
+                state="dialing",
+                human_call_id=human_call_sid,
+                last_status=str(getattr(human_call, "status", "queued")),
+            )
+        if current.state == "dialing" and current.human_call_id == human_call_sid:
+            return self._ledger.touch_warm_transfer(
+                durable_id,
+                expected_human_call_id=human_call_sid,
+                last_status=str(getattr(human_call, "status", "queued")),
+            )
+        if current.human_call_id == human_call_sid and current.state in {
+            "accepted",
+            "declined",
+            "failed",
+        }:
+            return current
+        raise VoicekitError(
+            "VK-TEL-012",
+            detail=f"warm transfer {durable_id!r} changed during human-leg creation.",
+        )
+
+    def warm_transfer_accept_response(self, request: TelephonyRequest) -> str:
+        """Validate one human DTMF decision and return the private conference leg."""
+        transfer_id = _warm_transfer_id_from_request(request)
+        record = self._ledger.get_warm_transfer(transfer_id)
+        call_sid = _validate_call_sid(_form_value(request.form, "CallSid"))
+        if record.state == "prepared" and record.human_call_id is None:
+            record = self._ledger.transition_warm_transfer(
+                transfer_id,
+                expected=("prepared",),
+                state="dialing",
+                human_call_id=call_sid,
+                last_status="accept_callback_bound",
+            )
+        if record.human_call_id != call_sid:
+            self._ledger.transition_warm_transfer(
+                transfer_id,
+                expected=(record.state,),
+                state="conflict",
+                last_status="accept_call_id_conflict",
+            )
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {transfer_id!r} accept callback changed CallSid.",
+            )
+        digits = _form_value(request.form, "Digits", required=False)
+        if digits != "1":
+            if record.state == "dialing":
+                self._ledger.transition_warm_transfer(
+                    transfer_id,
+                    expected=("dialing",),
+                    state="declined",
+                    last_status="declined",
+                )
+            declined = VoiceResponse()
+            declined.say("The transfer was declined. Goodbye.")
+            declined.hangup()
+            return _checked_twiml(declined)
+        if record.state == "dialing":
+            record = self._ledger.transition_warm_transfer(
+                transfer_id,
+                expected=("dialing",),
+                state="accepted",
+                last_status="accepted",
+            )
+        elif record.state not in {"accepted", "bridging", "bridged"}:
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {transfer_id!r} is no longer accepting digits.",
+            )
+        response = VoiceResponse()
+        dial = cast("Any", response.dial(answer_on_bridge=True))
+        dial.conference(
+            record.conference_name,
+            start_conference_on_enter=False,
+            end_conference_on_exit=False,
+            beep=False,
+            participant_label="human",
+            status_callback=_warm_url_from_base(
+                self.expected_public_base,
+                transfer_id,
+                "conference",
+            ),
+            status_callback_event="start join leave end",
+            status_callback_method="POST",
+        )
+        return _checked_twiml(response)
+
+    def parse_warm_transfer_event(
+        self,
+        request: TelephonyRequest,
+    ) -> WarmTransferRecord:
+        """Apply a signed human-leg status callback without reopening decisions."""
+        transfer_id = _warm_transfer_id_from_request(request)
+        record = self._ledger.get_warm_transfer(transfer_id)
+        call_sid = _validate_call_sid(_form_value(request.form, "CallSid"))
+        status = _form_value(request.form, "CallStatus")
+        if status not in _WARM_HUMAN_STATUSES:
+            raise VoicekitError(
+                "VK-TEL-008",
+                detail=f"unknown Twilio warm-transfer CallStatus {status!r}.",
+            )
+        if record.state == "prepared" and record.human_call_id is None:
+            initial_state: Literal["dialing", "declined", "failed"] = "dialing"
+            if status in {"completed", "busy", "no-answer", "canceled"}:
+                initial_state = "declined"
+            elif status == "failed":
+                initial_state = "failed"
+            return self._ledger.transition_warm_transfer(
+                transfer_id,
+                expected=("prepared",),
+                state=initial_state,
+                human_call_id=call_sid,
+                last_status=status,
+            )
+        if record.human_call_id != call_sid:
+            self._ledger.transition_warm_transfer(
+                transfer_id,
+                expected=(record.state,),
+                state="conflict",
+                last_status="human_status_call_id_conflict",
+            )
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {transfer_id!r} status callback changed CallSid.",
+            )
+        if status in _TERMINAL_STATUSES and record.state in {
+            "dialing",
+            "accepted",
+        }:
+            terminal_state: Literal["declined", "failed"] = (
+                "declined" if status in {"completed", "busy", "no-answer", "canceled"} else "failed"
+            )
+            return self._ledger.transition_warm_transfer(
+                transfer_id,
+                expected=(record.state,),
+                state=terminal_state,
+                last_status=status,
+            )
+        return self._ledger.touch_warm_transfer(
+            transfer_id,
+            expected_human_call_id=call_sid,
+            last_status=status,
+        )
+
+    def parse_warm_conference_event(
+        self,
+        request: TelephonyRequest,
+    ) -> WarmTransferRecord:
+        """Apply signed conference evidence and close completed bridges."""
+        transfer_id = _warm_transfer_id_from_request(request)
+        record = self._ledger.get_warm_transfer(transfer_id)
+        conference_sid = _validate_conference_sid(_form_value(request.form, "ConferenceSid"))
+        event = _form_value(request.form, "StatusCallbackEvent")
+        if event not in _WARM_CONFERENCE_EVENTS:
+            raise VoicekitError(
+                "VK-TEL-008",
+                detail=f"unknown Twilio conference callback event {event!r}.",
+            )
+        participant = _form_value(request.form, "CallSid", required=False)
+        if participant:
+            participant_sid = _validate_call_sid(participant)
+            if participant_sid not in {
+                record.caller_call_id,
+                record.human_call_id,
+            }:
+                self._ledger.transition_warm_transfer(
+                    transfer_id,
+                    expected=(record.state,),
+                    state="conflict",
+                    last_status="conference_participant_conflict",
+                )
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=f"warm transfer {transfer_id!r} changed participant identity.",
+                )
+        record = self._ledger.touch_warm_transfer(
+            transfer_id,
+            conference_id=conference_sid,
+            last_status=event,
+        )
+        if event == "conference-end":
+            if record.state == "bridged":
+                return self._ledger.transition_warm_transfer(
+                    transfer_id,
+                    expected=("bridged",),
+                    state="completed",
+                    conference_id=conference_sid,
+                    last_status=event,
+                )
+            if record.state in {"accepted", "bridging"}:
+                return self._ledger.transition_warm_transfer(
+                    transfer_id,
+                    expected=(record.state,),
+                    state="failed",
+                    conference_id=conference_sid,
+                    last_status=event,
+                )
+        return record
+
+    def bridge_warm_transfer(self, transfer_id: str) -> WarmTransferRecord:
+        """Move the caller into the accepted human's conference exactly once."""
+        durable_id = _validate_warm_transfer_id(transfer_id)
+        record = self._ledger.transition_warm_transfer(
+            durable_id,
+            expected=("accepted",),
+            state="bridging",
+            last_status="caller_bridge_submitting",
+        )
+        response = VoiceResponse()
+        dial = cast("Any", response.dial(answer_on_bridge=True))
+        dial.conference(
+            record.conference_name,
+            start_conference_on_enter=True,
+            end_conference_on_exit=True,
+            beep=False,
+            participant_label="caller",
+            status_callback=_warm_url_from_base(
+                self.expected_public_base,
+                durable_id,
+                "conference",
+            ),
+            status_callback_event="start join leave end",
+            status_callback_method="POST",
+        )
+        try:
+            self._client.calls(record.caller_call_id).update(twiml=_checked_twiml(response))
+        except Exception as exc:
+            if _definitive_rejection(exc):
+                self._ledger.transition_warm_transfer(
+                    durable_id,
+                    expected=("bridging",),
+                    state="failed",
+                    last_status=_safe_carrier_status(exc),
+                )
+            else:
+                self._ledger.transition_warm_transfer(
+                    durable_id,
+                    expected=("bridging",),
+                    state="ambiguous",
+                    last_status="caller_bridge_outcome_unknown",
+                )
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {durable_id!r} did not confirm its caller bridge.",
+            ) from exc
+        return self._ledger.transition_warm_transfer(
+            durable_id,
+            expected=("bridging",),
+            state="bridged",
+            last_status="caller_bridge_accepted",
+        )
+
+    def warm_transfer(self, transfer_id: str) -> WarmTransferRecord:
+        """Read durable handoff state for the runtime's bounded waiter."""
+        return self._ledger.get_warm_transfer(_validate_warm_transfer_id(transfer_id))
+
+    def abort_warm_transfer(self, transfer_id: str, *, reason: str) -> WarmTransferRecord:
+        """Stop an unaccepted human leg and terminalize its durable intent."""
+        durable_id = _validate_warm_transfer_id(transfer_id)
+        record = self._ledger.get_warm_transfer(durable_id)
+        if record.state not in {"prepared", "dialing", "accepted"}:
+            return record
+        if record.human_call_id is not None:
+            try:
+                self._client.calls(record.human_call_id).update(status="completed")
+            except Exception as exc:
+                if not _definitive_rejection(exc):
+                    return self._ledger.transition_warm_transfer(
+                        durable_id,
+                        expected=(record.state,),
+                        state="ambiguous",
+                        last_status="abort_outcome_unknown",
+                    )
+        return self._ledger.transition_warm_transfer(
+            durable_id,
+            expected=(record.state,),
+            state="failed",
+            last_status=_safe_warm_status(reason),
+        )
+
+    def recover_warm_transfers(self) -> int:
+        """Hang up known orphan human legs; never retry or guess an ambiguous bridge."""
+        recovered = 0
+        for record in self._ledger.open_warm_transfers(provider=self.provider):
+            if record.state in {"bridging", "ambiguous"}:
+                continue
+            if record.human_call_id is not None:
+                try:
+                    self._client.calls(record.human_call_id).update(status="completed")
+                except Exception as exc:
+                    if not _definitive_rejection(exc):
+                        self._ledger.transition_warm_transfer(
+                            record.transfer_id,
+                            expected=(record.state,),
+                            state="ambiguous",
+                            last_status="recovery_hangup_outcome_unknown",
+                        )
+                        continue
+            self._ledger.transition_warm_transfer(
+                record.transfer_id,
+                expected=(record.state,),
+                state="recovered",
+                last_status="startup_recovery",
+            )
+            recovered += 1
+        return recovered
+
     def hangup(self, call_sid: str) -> None:
         self._update_call(call_sid, status="completed")
 
@@ -781,6 +1219,58 @@ def _checked_twiml(response: VoiceResponse) -> str:
     if len(value.encode()) > 4096:
         raise VoicekitError("VK-TEL-002", detail="inline TwiML exceeds the 4KB carrier limit.")
     return value
+
+
+def _warm_url(target: PipecatTarget, transfer_id: str, action: str) -> str:
+    return _warm_url_from_base(target.https_base, transfer_id, action)
+
+
+def _warm_url_from_base(base: str | None, transfer_id: str, action: str) -> str:
+    if base is None:
+        raise VoicekitError(
+            "VK-TEL-002",
+            detail="warm transfer requires one expected public HTTPS base.",
+        )
+    if action not in {"accept", "events", "conference"}:
+        raise VoicekitError("VK-TEL-002", detail="unknown warm-transfer callback action.")
+    return f"{base.rstrip('/')}/twilio/warm-transfer/{transfer_id}/{action}"
+
+
+def _warm_transfer_id_from_request(request: TelephonyRequest) -> str:
+    value = request.route_params.get("transfer_id", "")
+    return _validate_warm_transfer_id(value)
+
+
+def _validate_warm_transfer_id(value: str) -> str:
+    if not _WARM_TRANSFER_ID.fullmatch(value):
+        raise VoicekitError("VK-TEL-012", detail="invalid warm-transfer id.")
+    return value
+
+
+def _validate_conference_sid(value: str) -> str:
+    if not _CONFERENCE_SID.fullmatch(value):
+        raise VoicekitError("VK-TEL-008", detail="invalid Twilio ConferenceSid.")
+    return value
+
+
+def _validate_briefing(value: str) -> str:
+    normalized = " ".join(value.split())
+    if not 1 <= len(normalized) <= 500:
+        raise VoicekitError(
+            "VK-TEL-002",
+            detail="private warm-transfer briefing must contain 1-500 characters.",
+        )
+    if any(ord(character) < 32 for character in normalized):
+        raise VoicekitError(
+            "VK-TEL-002",
+            detail="private warm-transfer briefing contains a control character.",
+        )
+    return normalized
+
+
+def _safe_warm_status(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_-]+", "_", value.lower()).strip("_")
+    return (normalized or "aborted")[:80]
 
 
 def _amd_hold_twiml() -> str:

@@ -125,7 +125,7 @@ agent = Agent(
         allow_interruptions=True,
         voicemail="hangup",                         # "hangup" | "leave_message" (uses prompts/voicemail.md)
         dtmf=True,
-        transfer_number=None,                       # enables warm-transfer tool when set
+        transfer_number=None,                       # enables consent-gated warm-transfer tool
         end_call_phrases=["goodbye", "bye now"],
     ),
 )
@@ -145,6 +145,14 @@ agent = Agent(
 - The ONLY engine touchpoint inside flow code is the results recorder: `from voicekit import results; results.set("slot", value)` (and `results.set_outcome("booked")`). One import, two functions; everything else in `flow.py` is pure framework code any Pipecat/LiveKit tutorial applies to.
 
 **Engine ↔ flow contract per runtime (bootstrap responsibilities):** register tools natively; install transcript + latency observers; enforce `limits`/`behavior` via native mechanisms (Pipecat: pipeline params, idle/duration processors; LiveKit: session options, tasks); flush `results` buffer into the call record at termination.
+
+When `behavior.transfer_number` is set, the native warm-transfer tool requires
+explicit caller consent and a concise private briefing. It must not report
+success until the destination accepts. Pipecat/Twilio uses a conference bridge
+that keeps the caller with the agent while the human hears the briefing;
+LiveKit uses its native warm-transfer workflow. Failed, declined, timed-out,
+and ambiguous handoffs keep a cataloged terminal state and never trigger a
+speculative carrier retry.
 
 ---
 

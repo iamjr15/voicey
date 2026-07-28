@@ -1180,3 +1180,56 @@ becomes waitlisted rather than confirmed. For lead intake, decline retention
 consent and confirm no lead is persisted. These gates remain pending until all
 commands return zero and those behaviors are observed; local compilation is not
 promoted as provider-conversation evidence.
+
+## P3.6 Pipecat/Twilio warm-transfer live certification
+
+The local protocol suite is green:
+
+```bash
+uv run pytest -q --no-cov \
+  tests/certification/test_twilio_warm_transfer.py \
+  tests/unit/test_pipecat_runtime.py \
+  tests/unit/test_pipecat_host.py
+```
+
+The paid two-handset gate is ready-to-run but pending a funded Twilio account,
+an owned number, a public Pipecat host, and two people/endpoints. In a generated
+`front-desk` Pipecat project with its provider keys in `.env`, run:
+
+```bash
+export VOICEKIT_TRANSFER_NUMBER='+1415...human-destination'
+voicekit dev --phone --tunnel url \
+  --url 'https://public-pipecat.example.com' \
+  --no-open
+```
+
+Then execute this physical checklist without stopping the host:
+
+1. Call the owned `phone.number` from handset A and ask for the configured
+   department.
+2. Decline consent once. Confirm `warm_transfer_to_human` is not called and the
+   caller remains with the agent.
+3. Give explicit consent. Confirm handset B rings while handset A continues to
+   hear the agent/media stream.
+4. Answer handset B. Confirm only B hears the concise private briefing and the
+   instruction to press 1. Before pressing 1, confirm A and B cannot hear each
+   other.
+5. Let one attempt time out or press a non-1 digit. Confirm B is hung up, A
+   remains with the agent, the agent offers to take a message, and the ledger
+   row is `declined` or `failed`.
+6. Repeat, press 1 on B, and confirm A joins only after acceptance. Verify both
+   people have two-way audio, no private briefing is replayed to A, and the
+   final call result has `ended_reason=transferred`.
+7. Replay the signed accept callback and confirm no second human call or caller
+   redirect is created. Send one callback with a changed CallSid and confirm
+   HTTP 400 plus a `conflict` ledger row.
+8. Kill the host during a third pre-accept attempt, restart the same command,
+   and confirm the known orphan B leg is completed without redial. An
+   `ambiguous` bridge must remain visible for operator review.
+9. Inspect `.voicekit/telephony.sqlite3`, application logs, and the terminal
+   payload. Retain transfer/call/conference ids and timestamps, but confirm the
+   raw private briefing appears in none of those artifacts.
+
+This gate is not green until all nine observations are recorded from real
+Twilio callbacks and physical endpoints. The current environment does not
+contain the required funded Twilio/public-host evidence.

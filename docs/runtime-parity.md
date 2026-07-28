@@ -36,9 +36,9 @@ CI rejects missing evidence, unknown features, stale runtime pins, or a mapping
 whose mechanism is blank or marked pending.
 
 A real runtime difference is represented as `declared_exclusion` with a reason,
-target phase, and evidence. It is never silently downgraded. The sole P2
-exclusion is Pipecat warm transfer: its Twilio conference bridge is the locked
-P3 implementation. LiveKit already uses its native warm-transfer workflow.
+target phase, and evidence. It is never silently downgraded. P3 closed the sole
+P2 exclusion: Pipecat/Twilio now uses a consent-gated, private-briefing
+conference bridge, while LiveKit uses its native warm-transfer workflow.
 
 ## Recording mapping
 

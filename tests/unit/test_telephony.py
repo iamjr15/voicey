@@ -2,6 +2,7 @@ import sqlite3
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -144,6 +145,88 @@ def test_duplicate_outbound_intent_is_never_overwritten(tmp_path: Path) -> None:
 
     assert caught.value.code == "VK-TEL-007"
     assert ledger.get_intent("intent_duplicate").from_number == "+14155550100"
+
+
+def test_warm_transfer_ledger_is_private_cas_fenced_and_reopenable(tmp_path: Path) -> None:
+    path = tmp_path / "warm.sqlite3"
+    ledger = TelephonyLedger(path)
+    record = ledger.prepare_warm_transfer(
+        transfer_id="warm_" + "a" * 32,
+        provider="twilio",
+        caller_call_id="CA" + "1" * 32,
+        from_number="+14155550100",
+        to_number="+14155550101",
+        conference_name="vk_" + "b" * 32,
+        briefing_digest="c" * 64,
+    )
+    dialing = ledger.transition_warm_transfer(
+        record.transfer_id,
+        expected=("prepared",),
+        state="dialing",
+        human_call_id="CA" + "2" * 32,
+        last_status="queued",
+    )
+    ledger.touch_warm_transfer(
+        record.transfer_id,
+        expected_human_call_id=dialing.human_call_id,
+        conference_id="CF" + "3" * 32,
+        last_status="participant-join",
+    )
+
+    with pytest.raises(VoicekitError) as stale:
+        ledger.transition_warm_transfer(
+            record.transfer_id,
+            expected=("prepared",),
+            state="failed",
+        )
+    assert stale.value.code == "VK-TEL-012"
+    assert ledger.open_warm_transfers(provider="twilio")[0].briefing_digest == "c" * 64
+    ledger.close()
+
+    reopened = TelephonyLedger(path)
+    persisted = reopened.get_warm_transfer(record.transfer_id)
+    assert persisted.human_call_id == "CA" + "2" * 32
+    assert persisted.conference_id == "CF" + "3" * 32
+    assert persisted.last_status == "participant-join"
+    assert persisted.state == "dialing"
+    reopened.close()
+
+
+def test_warm_transfer_ledger_rejects_duplicate_and_callback_identity_conflict(
+    tmp_path: Path,
+) -> None:
+    ledger = TelephonyLedger(tmp_path / "warm-conflict.sqlite3")
+    arguments = {
+        "transfer_id": "warm_" + "a" * 32,
+        "provider": "twilio",
+        "caller_call_id": "CA" + "1" * 32,
+        "from_number": "+14155550100",
+        "to_number": "+14155550101",
+        "conference_name": "vk_" + "b" * 32,
+        "briefing_digest": "c" * 64,
+    }
+    record = ledger.prepare_warm_transfer(**cast("dict[str, Any]", arguments))
+    ledger.transition_warm_transfer(
+        record.transfer_id,
+        expected=("prepared",),
+        state="dialing",
+        human_call_id="CA" + "2" * 32,
+    )
+
+    with pytest.raises(VoicekitError) as duplicate:
+        ledger.prepare_warm_transfer(**cast("dict[str, Any]", arguments))
+    with pytest.raises(VoicekitError) as conflict:
+        ledger.touch_warm_transfer(
+            record.transfer_id,
+            expected_human_call_id="CA" + "3" * 32,
+        )
+
+    assert duplicate.value.code == "VK-TEL-012"
+    assert conflict.value.code == "VK-TEL-012"
+    assert ledger.get_warm_transfer(record.transfer_id).state == "conflict"
+    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+        ledger.get_warm_transfer("warm_" + "f" * 32)
+    ledger.close()
 
 
 def test_ledger_unknown_records_naive_time_and_newer_schema_fail_closed(

@@ -12,6 +12,7 @@ from pipecat.frames.frames import EndFrame, TTSSpeakFrame
 
 from voicekit.config.models import ToolReference
 from voicekit.errors import VoicekitError
+from voicekit.storage.models import EndedReason
 from voicekit.tools import ToolExecutor, get_tool_metadata, load_tools
 from voicekit.tools.execution import ToolObservationSink, tool_execution_context
 
@@ -22,6 +23,18 @@ class TransferHandler(Protocol):
     """Runtime hook used by the native transfer tool."""
 
     async def __call__(self, call_id: str, number: str) -> None: ...
+
+
+class WarmTransferHandler(Protocol):
+    """Runtime hook for a consented private-briefing conference handoff."""
+
+    async def __call__(
+        self,
+        call_id: str,
+        number: str,
+        briefing: str,
+        set_reason: Callable[[EndedReason | None], None],
+    ) -> None: ...
 
 
 class LanguageFallbackHandler(Protocol):
@@ -97,6 +110,64 @@ def transfer_flow_tool(
         handler=handler,
         cancel_on_interruption=False,
         timeout_secs=15,
+    )
+
+
+def warm_transfer_flow_tool(
+    *,
+    call_id: str,
+    number: str,
+    transfer: WarmTransferHandler,
+    set_reason: Callable[[EndedReason | None], None],
+    timeout_s: float,
+) -> FlowsFunctionSchema:
+    """Expose a native, consent-gated private warm-handoff function."""
+
+    async def handler(
+        args: dict[str, Any],
+        flow_manager: FlowManager,
+    ) -> tuple[dict[str, object], NodeConfig | None]:
+        briefing = args.get("briefing")
+        if args.get("caller_consented") is not True:
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail="warm transfer requires explicit caller consent.",
+            )
+        if not isinstance(briefing, str):
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail="warm transfer requires one private briefing string.",
+            )
+        await transfer(call_id, number, briefing, set_reason)
+        await flow_manager.worker.queue_frame(EndFrame(reason="transferred"))
+        return {"ok": True, "status": "transferred"}, None
+
+    return FlowsFunctionSchema(
+        name="warm_transfer_to_human",
+        description=(
+            "After explicit caller consent, privately brief the configured human, "
+            "wait for their acceptance, then bridge the caller."
+        ),
+        properties={
+            "briefing": {
+                "type": "string",
+                "description": (
+                    "A concise private handoff summary of at most 500 characters; "
+                    "exclude credentials and unrelated sensitive data."
+                ),
+                "minLength": 1,
+                "maxLength": 500,
+            },
+            "caller_consented": {
+                "type": "boolean",
+                "description": "Must be true only after the caller explicitly consents.",
+                "const": True,
+            },
+        },
+        required=["briefing", "caller_consented"],
+        handler=handler,
+        cancel_on_interruption=False,
+        timeout_secs=timeout_s + 5,
     )
 
 

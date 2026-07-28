@@ -43,6 +43,19 @@ ProvisionState: TypeAlias = Literal[
     "conflict",
     "failed",
 ]
+WarmTransferState: TypeAlias = Literal[
+    "prepared",
+    "dialing",
+    "accepted",
+    "bridging",
+    "bridged",
+    "declined",
+    "failed",
+    "ambiguous",
+    "recovered",
+    "completed",
+    "conflict",
+]
 RouteSettings: TypeAlias = dict[str, str | None]
 
 
@@ -88,10 +101,29 @@ class ProvisioningRecord:
     updated_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class WarmTransferRecord:
+    """Durable, privacy-minimized evidence for one Twilio warm handoff."""
+
+    transfer_id: str
+    provider: str
+    caller_call_id: str
+    from_number: str
+    to_number: str
+    conference_name: str
+    briefing_digest: str
+    state: WarmTransferState
+    human_call_id: str | None
+    conference_id: str | None
+    last_status: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class TelephonyLedger:
     """Crash-reopenable carrier state with serialized immediate transactions."""
 
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -474,6 +506,178 @@ class TelephonyLedger:
         )
         return tuple(_provisioning_record(row) for row in rows)
 
+    def prepare_warm_transfer(
+        self,
+        *,
+        transfer_id: str,
+        provider: str,
+        caller_call_id: str,
+        from_number: str,
+        to_number: str,
+        conference_name: str,
+        briefing_digest: str,
+        now: datetime | None = None,
+    ) -> WarmTransferRecord:
+        """Fence the human-leg create without persisting the private briefing."""
+        timestamp = _utc(now)
+        try:
+            with self._transaction() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO telephony_warm_transfers(
+                        transfer_id, provider, caller_call_id, from_number,
+                        to_number, conference_name, briefing_digest, state,
+                        human_call_id, conference_id, last_status,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'prepared', NULL, NULL, NULL, ?, ?)
+                    """,
+                    (
+                        transfer_id,
+                        provider,
+                        caller_call_id,
+                        from_number,
+                        to_number,
+                        conference_name,
+                        briefing_digest,
+                        _iso(timestamp),
+                        _iso(timestamp),
+                    ),
+                )
+        except VoicekitError as exc:
+            if isinstance(exc.__cause__, sqlite3.IntegrityError):
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=f"warm-transfer id {transfer_id!r} already exists.",
+                ) from exc
+            raise
+        return self.get_warm_transfer(transfer_id)
+
+    def transition_warm_transfer(
+        self,
+        transfer_id: str,
+        *,
+        expected: tuple[WarmTransferState, ...],
+        state: WarmTransferState,
+        human_call_id: str | None = None,
+        conference_id: str | None = None,
+        last_status: str | None = None,
+        now: datetime | None = None,
+    ) -> WarmTransferRecord:
+        """CAS one handoff transition and preserve provider correlation ids."""
+        placeholders = ",".join("?" for _ in expected)
+        assignments = ["state = ?", "updated_at = ?"]
+        parameters: list[object] = [state, _iso(_utc(now))]
+        if human_call_id is not None:
+            assignments.append("human_call_id = ?")
+            parameters.append(human_call_id)
+        if conference_id is not None:
+            assignments.append("conference_id = ?")
+            parameters.append(conference_id)
+        if last_status is not None:
+            assignments.append("last_status = ?")
+            parameters.append(last_status)
+        parameters.extend((transfer_id, *expected))
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE telephony_warm_transfers
+                SET {", ".join(assignments)}
+                WHERE transfer_id = ? AND state IN ({placeholders})
+                """,
+                parameters,
+            )
+            if cursor.rowcount != 1:
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=f"warm transfer {transfer_id!r} changed concurrently.",
+                )
+        return self.get_warm_transfer(transfer_id)
+
+    def touch_warm_transfer(
+        self,
+        transfer_id: str,
+        *,
+        expected_human_call_id: str | None = None,
+        conference_id: str | None = None,
+        last_status: str | None = None,
+        now: datetime | None = None,
+    ) -> WarmTransferRecord:
+        """Attach callback evidence without changing the transfer state."""
+        current = self.get_warm_transfer(transfer_id)
+        if expected_human_call_id is not None and current.human_call_id != expected_human_call_id:
+            self.transition_warm_transfer(
+                transfer_id,
+                expected=(current.state,),
+                state="conflict",
+                last_status="human_call_id_conflict",
+                now=now,
+            )
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"warm transfer {transfer_id!r} received a conflicting CallSid.",
+            )
+        assignments = ["updated_at = ?"]
+        parameters: list[object] = [_iso(_utc(now))]
+        if conference_id is not None:
+            if current.conference_id not in {None, conference_id}:
+                self.transition_warm_transfer(
+                    transfer_id,
+                    expected=(current.state,),
+                    state="conflict",
+                    last_status="conference_id_conflict",
+                    now=now,
+                )
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=f"warm transfer {transfer_id!r} changed conference identity.",
+                )
+            assignments.append("conference_id = ?")
+            parameters.append(conference_id)
+        if last_status is not None:
+            assignments.append("last_status = ?")
+            parameters.append(last_status)
+        parameters.append(transfer_id)
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE telephony_warm_transfers
+                SET {", ".join(assignments)}
+                WHERE transfer_id = ?
+                """,
+                parameters,
+            )
+            if cursor.rowcount != 1:
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=f"unknown warm transfer {transfer_id!r}.",
+                )
+        return self.get_warm_transfer(transfer_id)
+
+    def get_warm_transfer(self, transfer_id: str) -> WarmTransferRecord:
+        row = self._fetchone(
+            "SELECT * FROM telephony_warm_transfers WHERE transfer_id = ?",
+            (transfer_id,),
+        )
+        if row is None:
+            raise VoicekitError(
+                "VK-TEL-012",
+                detail=f"unknown warm transfer {transfer_id!r}.",
+            )
+        return _warm_transfer_record(row)
+
+    def open_warm_transfers(self, *, provider: str) -> tuple[WarmTransferRecord, ...]:
+        rows = self._fetchall(
+            """
+            SELECT * FROM telephony_warm_transfers
+            WHERE provider = ? AND state IN (
+                'prepared', 'dialing', 'accepted', 'bridging', 'ambiguous'
+            )
+            ORDER BY created_at
+            """,
+            (provider,),
+        )
+        return tuple(_warm_transfer_record(row) for row in rows)
+
     def _initialize_schema(self) -> None:
         current = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
         if current > self.SCHEMA_VERSION:
@@ -536,7 +740,7 @@ class TelephonyLedger:
                     current = 1
                 if current == 1:
                     self._connection.executescript(
-                        f"""
+                        """
                 BEGIN IMMEDIATE;
                 CREATE TABLE telephony_provisioning (
                     operation_id TEXT PRIMARY KEY,
@@ -556,6 +760,38 @@ class TelephonyLedger:
                 );
                 CREATE INDEX telephony_provisioning_open_idx
                     ON telephony_provisioning(provider, state, created_at);
+                PRAGMA user_version=2;
+                COMMIT;
+                """
+                    )
+                    current = 2
+                if current == 2:
+                    self._connection.executescript(
+                        f"""
+                BEGIN IMMEDIATE;
+                CREATE TABLE telephony_warm_transfers (
+                    transfer_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    caller_call_id TEXT NOT NULL,
+                    from_number TEXT NOT NULL,
+                    to_number TEXT NOT NULL,
+                    conference_name TEXT NOT NULL UNIQUE,
+                    briefing_digest TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK (
+                        state IN (
+                            'prepared', 'dialing', 'accepted', 'bridging',
+                            'bridged', 'declined', 'failed', 'ambiguous',
+                            'recovered', 'completed', 'conflict'
+                        )
+                    ),
+                    human_call_id TEXT UNIQUE,
+                    conference_id TEXT,
+                    last_status TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX telephony_warm_transfers_open_idx
+                    ON telephony_warm_transfers(provider, state, created_at);
                 PRAGMA user_version={self.SCHEMA_VERSION};
                 COMMIT;
                 """
@@ -664,6 +900,24 @@ def _provisioning_record(row: sqlite3.Row) -> ProvisioningRecord:
         planned=cast("dict[str, object]", json.loads(str(row["planned_json"]))),
         resources=tuple(resources),
         state=cast("ProvisionState", str(row["state"])),
+        created_at=_parse(str(row["created_at"])),
+        updated_at=_parse(str(row["updated_at"])),
+    )
+
+
+def _warm_transfer_record(row: sqlite3.Row) -> WarmTransferRecord:
+    return WarmTransferRecord(
+        transfer_id=str(row["transfer_id"]),
+        provider=str(row["provider"]),
+        caller_call_id=str(row["caller_call_id"]),
+        from_number=str(row["from_number"]),
+        to_number=str(row["to_number"]),
+        conference_name=str(row["conference_name"]),
+        briefing_digest=str(row["briefing_digest"]),
+        state=cast("WarmTransferState", str(row["state"])),
+        human_call_id=None if row["human_call_id"] is None else str(row["human_call_id"]),
+        conference_id=None if row["conference_id"] is None else str(row["conference_id"]),
+        last_status=None if row["last_status"] is None else str(row["last_status"]),
         created_at=_parse(str(row["created_at"])),
         updated_at=_parse(str(row["updated_at"])),
     )

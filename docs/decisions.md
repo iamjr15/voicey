@@ -246,6 +246,28 @@ These choices apply the documented proposals authorized in the build mandate and
   returns `Cache-Control: private, no-store`; carrier URLs never leave the
   authenticated ingestion boundary.
 
+## 2026-07-28 — Pipecat/Twilio warm-transfer boundary
+
+- Use two Twilio call legs and one named conference. The caller remains on the
+  Pipecat Media Stream while the human hears a private briefing and presses 1;
+  only then is the caller redirected into the conference. Redirecting earlier
+  would terminate the agent media stream before acceptance.
+- Make `warm_transfer_to_human` a native global Pipecat Flows function with
+  required `briefing` and `caller_consented=true` fields. The recipe remains
+  native Flows code; voicekit adds no workflow DSL.
+- Persist only a SHA-256 briefing digest. Raw briefing text exists transiently
+  in escaped TwiML sent to Twilio and is excluded from the ledger, callback
+  URLs, results, and logs.
+- Fence the human-leg create before the non-idempotent API call. Fence the
+  caller redirect before update. Definite rejection is terminal; unknown
+  outcomes become `ambiguous` and are never retried.
+- Treat the signed Gather callback as the human acceptance point. The human
+  joins with `startConferenceOnEnter=false`; the caller joins with
+  `startConferenceOnEnter=true`. Duplicate callbacks are idempotent and
+  correlation-id drift fails closed.
+- On restart, hang up only known pre-bridge orphan human legs. Never tear down
+  or recreate an ambiguous/bridged conference based on inference.
+
 ## 2026-07-27 — P3 first-party recipe boundaries
 
 - Keep each Pipecat variant as a directly loadable native `NodeConfig` and each

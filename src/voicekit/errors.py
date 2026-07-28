@@ -247,6 +247,14 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The carrier API is unavailable or returned an indeterminate infrastructure error.",
         fix="Check carrier status and connectivity; reconcile mutations before any explicit retry.",
     ),
+    "VK-TEL-012": ErrorDefinition(
+        code="VK-TEL-012",
+        cause="A warm-transfer handoff did not reach one safe, confirmed conference state.",
+        fix=(
+            "Keep the caller with the agent, inspect the reported transfer id, "
+            "and retry only after its provider state is terminal."
+        ),
+    ),
     "VK-RUN-001": ErrorDefinition(
         code="VK-RUN-001",
         cause="The selected runtime or one of its pinned optional dependencies is unavailable.",

@@ -153,10 +153,8 @@
       "feature": "warm_transfer",
       "contract": "The agent briefs a human before connecting the caller.",
       "pipecat": {
-        "status": "declared_exclusion",
-        "reason": "The Twilio conference-bridge implementation is the locked P3 warm-transfer build unit.",
-        "target_phase": "P3",
-        "evidence": "docs/build-plan.md#p3--recipes-2--vobiz--plivosip-beta--live-tier--cloud-deploys--warm-transfer-pipecat"
+        "status": "supported",
+        "evidence": "tests/certification/test_twilio_warm_transfer.py::test_accept_then_bridge_uses_waiting_human_and_starts_with_caller"
       },
       "livekit": {
         "status": "supported",

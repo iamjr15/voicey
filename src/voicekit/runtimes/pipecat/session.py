@@ -38,10 +38,12 @@ from voicekit.errors import VoicekitError
 from voicekit.obs.records import TimelineEvent
 from voicekit.runtimes.pipecat.flows import (
     TransferHandler,
+    WarmTransferHandler,
     initialize_native_flow,
     language_fallback_flow_tool,
     shared_flow_tools,
     transfer_flow_tool,
+    warm_transfer_flow_tool,
 )
 from voicekit.runtimes.pipecat.lifecycle import (
     PipecatCall,
@@ -221,6 +223,12 @@ class PipecatSession:
             self._ended_reason = reason
         self._terminal_signal.set()
 
+    def clear_reason(self, reason: EndedReason) -> None:
+        """Undo only an uncommitted handoff marker after a definitive rejection."""
+        if self._ended_reason == reason:
+            self._ended_reason = None
+            self._terminal_signal.clear()
+
     async def _cancel_duration_timer(self) -> None:
         if self.duration_task is None:
             return
@@ -239,11 +247,15 @@ class PipecatSessionBuilder:
         *,
         provider_factory: ProviderFactory | None = None,
         transfer_handler: TransferHandler | None = None,
+        warm_transfer_handler: WarmTransferHandler | None = None,
+        warm_transfer_timeout_s: float = 45,
         tool_executor: ToolExecutor | None = None,
     ) -> None:
         self.repository = repository
         self.provider_factory = provider_factory or DefaultProviderFactory()
         self.transfer_handler = transfer_handler
+        self.warm_transfer_handler = warm_transfer_handler
+        self.warm_transfer_timeout_s = warm_transfer_timeout_s
         self.tool_executor = tool_executor or ToolExecutor()
 
     def build(
@@ -343,18 +355,33 @@ class PipecatSessionBuilder:
                 )
             )
         if agent.behavior.transfer_number is not None:
-            if self.transfer_handler is None:
+            if self.warm_transfer_handler is not None:
+                global_tools.append(
+                    warm_transfer_flow_tool(
+                        call_id=call.call_id,
+                        number=agent.behavior.transfer_number,
+                        transfer=self.warm_transfer_handler,
+                        set_reason=lambda reason: (
+                            session_holder["session"].clear_reason("transferred")
+                            if reason is None
+                            else session_holder["session"].set_reason(reason)
+                        ),
+                        timeout_s=self.warm_transfer_timeout_s,
+                    )
+                )
+            elif self.transfer_handler is not None:
+                global_tools.append(
+                    transfer_flow_tool(
+                        call_id=call.call_id,
+                        number=agent.behavior.transfer_number,
+                        transfer=self.transfer_handler,
+                    )
+                )
+            else:
                 raise VoicekitError(
                     "VK-RUN-002",
                     detail="behavior.transfer_number requires a runtime transfer handler.",
                 )
-            global_tools.append(
-                transfer_flow_tool(
-                    call_id=call.call_id,
-                    number=agent.behavior.transfer_number,
-                    transfer=self.transfer_handler,
-                )
-            )
         flow_manager = FlowManager(
             llm=services.llm,
             context_aggregator=aggregators,

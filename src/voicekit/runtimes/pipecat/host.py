@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import uuid
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, cast
@@ -35,7 +35,7 @@ from pipecat.workers.runner import WorkerRunner
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 from voicekit.runtimes.pipecat.admission import AdmissionController, AdmissionLease
-from voicekit.runtimes.pipecat.flows import TransferHandler
+from voicekit.runtimes.pipecat.flows import TransferHandler, WarmTransferHandler
 from voicekit.runtimes.pipecat.lifecycle import (
     PipecatCall,
     PipecatCallLifecycle,
@@ -44,6 +44,7 @@ from voicekit.runtimes.pipecat.lifecycle import (
 )
 from voicekit.runtimes.pipecat.session import PipecatSession, PipecatSessionBuilder
 from voicekit.storage.models import EndedReason
+from voicekit.telephony.ledger import WarmTransferRecord
 from voicekit.telephony.models import (
     CallEvent,
     PipecatTarget,
@@ -75,6 +76,40 @@ class TwilioRuntimeAdapter(Protocol):
     ) -> str: ...
 
     def cold_transfer(self, call_sid: str, to_number: str) -> None: ...
+
+    def start_warm_transfer(
+        self,
+        *,
+        caller_call_sid: str,
+        from_number: str,
+        to_number: str,
+        briefing: str,
+        target: RuntimeTarget,
+        transfer_id: str | None = None,
+        timeout_s: int = 30,
+    ) -> WarmTransferRecord: ...
+
+    def warm_transfer_accept_response(self, request: TelephonyRequest) -> str: ...
+
+    def parse_warm_transfer_event(self, request: TelephonyRequest) -> WarmTransferRecord: ...
+
+    def parse_warm_conference_event(
+        self,
+        request: TelephonyRequest,
+    ) -> WarmTransferRecord: ...
+
+    def bridge_warm_transfer(self, transfer_id: str) -> WarmTransferRecord: ...
+
+    def warm_transfer(self, transfer_id: str) -> WarmTransferRecord: ...
+
+    def abort_warm_transfer(
+        self,
+        transfer_id: str,
+        *,
+        reason: str,
+    ) -> WarmTransferRecord: ...
+
+    def recover_warm_transfers(self) -> int: ...
 
 
 class TelnyxRuntimeAdapter(Protocol):
@@ -180,6 +215,7 @@ class PipecatHostSettings:
     twilio_account_sid: str = field(repr=False)
     twilio_auth_token: str = field(repr=False)
     pending_media_timeout_s: float = 30
+    warm_transfer_timeout_s: float = 45
     web_sample_rate: int = 16000
     twilio_sample_rate: int = 8000
     telnyx_api_key: str = field(default="", repr=False)
@@ -208,6 +244,11 @@ class PipecatHostSettings:
             raise VoicekitError(
                 "VK-RUN-002",
                 detail="pending media timeout must be positive.",
+            )
+        if not 10 <= self.warm_transfer_timeout_s <= 120:
+            raise VoicekitError(
+                "VK-RUN-002",
+                detail="warm-transfer timeout must be between 10 and 120s.",
             )
         if (
             self.web_sample_rate < 8000
@@ -240,12 +281,86 @@ class DrainReport:
     remaining_calls: int
 
 
-class _TwilioTransfer(TransferHandler):
-    def __init__(self, adapter: TwilioRuntimeAdapter) -> None:
-        self._adapter = adapter
+class _TwilioWarmTransfer(WarmTransferHandler):
+    """Bounded waiter over the adapter's crash-safe warm-transfer ledger."""
 
-    async def __call__(self, call_id: str, number: str) -> None:
-        await asyncio.to_thread(self._adapter.cold_transfer, call_id, number)
+    def __init__(
+        self,
+        adapter: TwilioRuntimeAdapter,
+        *,
+        from_number: str,
+        target: PipecatTarget,
+        timeout_s: float,
+    ) -> None:
+        self._adapter = adapter
+        self._from_number = from_number
+        self._target = target
+        self._timeout_s = timeout_s
+
+    async def __call__(
+        self,
+        call_id: str,
+        number: str,
+        briefing: str,
+        set_reason: Callable[[EndedReason | None], None],
+    ) -> None:
+        record = await asyncio.to_thread(
+            self._adapter.start_warm_transfer,
+            caller_call_sid=call_id,
+            from_number=self._from_number,
+            to_number=number,
+            briefing=briefing,
+            target=self._target,
+            timeout_s=min(120, max(5, int(self._timeout_s))),
+        )
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._timeout_s
+        while True:
+            record = await asyncio.to_thread(
+                self._adapter.warm_transfer,
+                record.transfer_id,
+            )
+            if record.state == "accepted":
+                set_reason("transferred")
+                try:
+                    await asyncio.to_thread(
+                        self._adapter.bridge_warm_transfer,
+                        record.transfer_id,
+                    )
+                except Exception:
+                    failed = await asyncio.to_thread(
+                        self._adapter.warm_transfer,
+                        record.transfer_id,
+                    )
+                    set_reason(None if failed.state == "failed" else "carrier_error")
+                    raise
+                return
+            if record.state in {
+                "declined",
+                "failed",
+                "ambiguous",
+                "recovered",
+                "completed",
+                "conflict",
+            }:
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=(
+                        f"warm transfer {record.transfer_id!r} ended in state {record.state!r}."
+                    ),
+                )
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                await asyncio.to_thread(
+                    self._adapter.abort_warm_transfer,
+                    record.transfer_id,
+                    reason="accept_timeout",
+                )
+                raise VoicekitError(
+                    "VK-TEL-012",
+                    detail=f"warm transfer {record.transfer_id!r} timed out.",
+                )
+            await asyncio.sleep(min(0.2, remaining))
 
 
 class _TelnyxTransfer(TransferHandler):
@@ -396,17 +511,25 @@ class PipecatHost:
         self.runner_host = LongLivedRunner(runner)
         self.request_handler = request_handler or SmallWebRTCRequestHandler()
         transfer_handler: TransferHandler | None = None
+        warm_transfer_handler: WarmTransferHandler | None = None
         if provider == "telnyx" and telnyx is not None:
             transfer_handler = _TelnyxTransfer(telnyx)
         elif provider == "vobiz" and vobiz is not None:
             transfer_handler = _VobizTransfer(vobiz)
         elif provider == "plivo" and plivo is not None:
             transfer_handler = _PlivoTransfer(plivo)
-        elif twilio is not None:
-            transfer_handler = _TwilioTransfer(twilio)
+        elif provider == "twilio" and twilio is not None and agent.phone is not None:
+            warm_transfer_handler = _TwilioWarmTransfer(
+                twilio,
+                from_number=agent.phone.number,
+                target=self.twilio_target,
+                timeout_s=settings.warm_transfer_timeout_s,
+            )
         self.session_builder = session_builder or PipecatSessionBuilder(
             repository,
             transfer_handler=transfer_handler,
+            warm_transfer_handler=warm_transfer_handler,
+            warm_transfer_timeout_s=settings.warm_transfer_timeout_s,
         )
         self.web_sessions = web_sessions
         self.recording_handler = recording_handler
@@ -580,6 +703,13 @@ class PipecatHost:
     def _build_app(self) -> FastAPI:
         @asynccontextmanager
         async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+            if (
+                self.twilio is not None
+                and self.agent.phone is not None
+                and self.agent.phone.provider == "twilio"
+                and self.agent.behavior.transfer_number is not None
+            ):
+                await asyncio.to_thread(self.twilio.recover_warm_transfers)
             await self.runner_host.start()
             try:
                 yield
@@ -817,6 +947,62 @@ class PipecatHost:
             )
             if disposition == "hung_up":
                 await self._finish_pending(event.provider_call_id, "voicemail")
+            return Response(status_code=204)
+
+        @app.post("/twilio/warm-transfer/{transfer_id}/accept")
+        async def twilio_warm_accept(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            transfer_id: str,
+        ) -> Response:
+            adapter = self._require_twilio()
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                route_params={"transfer_id": transfer_id},
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            return Response(
+                content=await asyncio.to_thread(
+                    adapter.warm_transfer_accept_response,
+                    telephony,
+                ),
+                media_type="application/xml",
+            )
+
+        @app.post("/twilio/warm-transfer/{transfer_id}/events")
+        async def twilio_warm_events(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            transfer_id: str,
+        ) -> Response:
+            adapter = self._require_twilio()
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                route_params={"transfer_id": transfer_id},
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            await asyncio.to_thread(adapter.parse_warm_transfer_event, telephony)
+            return Response(status_code=204)
+
+        @app.post("/twilio/warm-transfer/{transfer_id}/conference")
+        async def twilio_warm_conference(  # pyright: ignore[reportUnusedFunction]
+            request: Request,
+            transfer_id: str,
+        ) -> Response:
+            adapter = self._require_twilio()
+            form = await request.form()
+            telephony = _http_telephony_request(
+                request,
+                form,
+                route_params={"transfer_id": transfer_id},
+            )
+            if not adapter.verify_request(telephony):
+                return _error_response("VK-RUN-007", 403)
+            await asyncio.to_thread(adapter.parse_warm_conference_event, telephony)
             return Response(status_code=204)
 
         @app.post("/telnyx/answer")

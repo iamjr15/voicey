@@ -37,7 +37,7 @@ does not implement a second signature algorithm.
 | Inbound / outbound | enabled | enabled through Elastic SIP |
 | Async AMD | enabled; media waits for callback | carrier/SIP disposition |
 | DTMF receive / send | enabled | native room event + LiveKit send tool |
-| Transfer | cold; P3 adds conference warm transfer | cold SIP REFER + native warm-transfer task |
+| Transfer | cold + consent-gated conference warm transfer | cold SIP REFER + native warm-transfer task |
 | Recording | dual-channel callback + authenticated ingestion | secure trunk recording + native session recording |
 | Native outbound idempotency | unavailable; durable intent fence | unavailable; durable intent fence |
 
@@ -116,8 +116,31 @@ machine policy, avoiding two competing audio consumers.
   answerOnBridge>`. Redirecting exits `<Connect>` and ends the Media Stream.
 - `hangup(call_sid)` completes the carrier leg.
 
-Warm transfer needs the P3 conference bridge and is intentionally absent from
-the Pipecat path until P3. It is already native on the LiveKit path.
+When `behavior.transfer_number` is set on Pipecat/Twilio, voicekit exposes the
+native Flows function `warm_transfer_to_human`. Its required arguments are a
+private briefing of at most 500 characters and `caller_consented=true`.
+Conversation policy must obtain explicit consent before invoking it.
+
+The handoff is ordered:
+
+1. write a `warm_<id>` intent and briefing digest to the FULL SQLite ledger;
+2. dial the human with inline TwiML that privately speaks the escaped briefing;
+3. require the human to press 1;
+4. place that human into a non-starting conference;
+5. redirect the caller from `<Connect><Stream>` into the same conference;
+6. report `transferred` only after Twilio accepts the caller redirect.
+
+The raw briefing is never stored in the ledger, callback path, application log,
+or result. Human-leg create and caller-bridge calls are non-idempotent: an
+unknown outcome becomes `ambiguous` and is not retried. Duplicate accept
+callbacks are idempotent; conflicting CallSids or ConferenceSids fail closed.
+A declined or timed-out handoff hangs up only the human leg and leaves the
+caller with the agent. Startup recovery hangs up known pre-bridge orphan human
+legs, but never guesses whether an ambiguous caller bridge happened.
+
+All three callback routes (`accept`, human-leg `events`, and `conference`) use
+the same exact Twilio signature verification as other voice callbacks.
+LiveKit uses its native warm-transfer task instead.
 
 Recording callbacks are signature-verified like every carrier callback.
 For inbound Pipecat calls, voicekit first reserves the engine call and then
@@ -189,6 +212,7 @@ Pipecat callback path. A timeout stays visibly pending for retry/recovery.
 | `VK-TEL-009` | Check recording SID, auth, availability, type, and size |
 | `VK-TEL-010` | Reject an invalid Media Streams frame/codec event |
 | `VK-TEL-011` | Carrier availability was indeterminate; reconcile mutations first |
+| `VK-TEL-012` | Inspect the warm-transfer id; do not retry until its state is terminal |
 
 Trial accounts may call only verified destinations and play a trial preamble.
 Unfunded accounts and countries with address/bundle/identity requirements must
@@ -202,6 +226,7 @@ Local carrier and media certification:
 ```bash
 uv run pytest --no-cov \
   tests/certification/test_twilio_adapter.py \
+  tests/certification/test_twilio_warm_transfer.py \
   tests/certification/test_twilio_media.py
 ```
 

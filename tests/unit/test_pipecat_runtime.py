@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -46,6 +47,7 @@ from voicekit.runtimes.pipecat.session import (
     PipecatSession,
     PipecatSessionBuilder,
 )
+from voicekit.storage.models import EndedReason
 from voicekit.storage.sqlite import SQLiteRepository
 
 
@@ -146,6 +148,26 @@ class _Transfer:
         self.calls.append((call_id, number))
 
 
+class _WarmTransfer:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+        self.fail = fail
+
+    async def __call__(
+        self,
+        call_id: str,
+        number: str,
+        briefing: str,
+        set_reason: Callable[[EndedReason | None], None],
+    ) -> None:
+        self.calls.append((call_id, number, briefing))
+        if self.fail:
+            set_reason("transferred")
+            set_reason(None)
+            raise VoicekitError("VK-TEL-012", detail="test handoff failed.")
+        set_reason("transferred")
+
+
 class _LifecycleStub:
     def __init__(self) -> None:
         self.buffer = CallResultBuffer(call_id="call_runtime")
@@ -202,12 +224,15 @@ def _session(
     *,
     repository: _MemoryRepository | None = None,
     transfer: _Transfer | None = None,
+    warm_transfer: _WarmTransfer | None = None,
 ) -> tuple[PipecatSession, _MemoryRepository]:
     store = repository or _MemoryRepository()
     builder = PipecatSessionBuilder(
         cast(PipecatRepository, store),
         provider_factory=_Factory(),
         transfer_handler=transfer,
+        warm_transfer_handler=warm_transfer,
+        warm_transfer_timeout_s=10,
     )
     session = builder.build(
         agent=agent,
@@ -447,6 +472,81 @@ async def test_transfer_tool_invokes_carrier_and_queues_native_end_frame(
     assert queued[0].reason == "transferred"
     assert result == {"ok": True, "status": "transferred"}
     assert next_node is None
+
+
+async def test_warm_transfer_tool_requires_consent_briefs_and_sets_terminal_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transfer = _WarmTransfer()
+    session, _ = _session(
+        _agent(behavior=Behavior(transfer_number="+14155550123")),
+        warm_transfer=transfer,
+    )
+    queued: list[Frame] = []
+
+    async def collect(
+        frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        queued.append(frame)
+
+    monkeypatch.setattr(session.worker, "queue_frame", collect)
+    schema = next(item for item in session.global_tools if item.name == "warm_transfer_to_human")
+    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+        await cast(Any, schema.handler)(
+            {"briefing": "Billing issue.", "caller_consented": False},
+            session.flow_manager,
+        )
+
+    result, next_node = await cast(Any, schema.handler)(
+        {
+            "briefing": "Billing needs help with a duplicate charge.",
+            "caller_consented": True,
+        },
+        session.flow_manager,
+    )
+
+    assert transfer.calls == [
+        (
+            "call_runtime",
+            "+14155550123",
+            "Billing needs help with a duplicate charge.",
+        )
+    ]
+    assert session.ended_reason == "transferred"
+    assert isinstance(queued[0], EndFrame)
+    assert queued[0].reason == "transferred"
+    assert result == {"ok": True, "status": "transferred"}
+    assert next_node is None
+
+
+async def test_warm_transfer_failure_does_not_queue_success_end_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transfer = _WarmTransfer(fail=True)
+    session, _ = _session(
+        _agent(behavior=Behavior(transfer_number="+14155550123")),
+        warm_transfer=transfer,
+    )
+    queued: list[Frame] = []
+
+    async def collect(
+        frame: Frame,
+        _direction: FrameDirection = FrameDirection.DOWNSTREAM,
+    ) -> None:
+        queued.append(frame)
+
+    monkeypatch.setattr(session.worker, "queue_frame", collect)
+    schema = next(item for item in session.global_tools if item.name == "warm_transfer_to_human")
+
+    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+        await cast(Any, schema.handler)(
+            {"briefing": "Billing issue.", "caller_consented": True},
+            session.flow_manager,
+        )
+
+    assert queued == []
+    assert session.ended_reason is None
 
 
 async def test_fallback_language_tool_activates_once(
