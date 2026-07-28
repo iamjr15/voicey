@@ -342,3 +342,24 @@ These choices apply the documented proposals authorized in the build mandate and
 - Retain SQLite only as the local protocol/crash-injection backend. The
   certified Fly companion remains Postgres plus object storage and must pass
   the same invariants before either cloud target is promoted.
+
+## 2026-07-28 — Managed storage implementation
+
+- Use Psycopg 3 async pools for managed Postgres. The local certification pin
+  resolved to `psycopg==3.3.4` and `psycopg-pool==3.3.1`; the published
+  compatibility range is `>=3.2.10,<4`.
+- Use packaged append-only SQL migrations with a transaction-scoped Postgres
+  advisory lock and immutable SHA-256 checksums. Apply the schema and checksum
+  rows in that same transaction. Use `TIMESTAMPTZ`, `JSONB`, and `BYTEA`; use
+  `FOR UPDATE SKIP LOCKED` for multi-replica delivery claims.
+- Default each engine-owned pool to 1–10 connections. Deploy-target preflight
+  may lower that ceiling to remain inside its managed-database connection
+  budget, but a configured minimum may never exceed the maximum.
+- Use boto3's S3-compatible client for AWS S3, Fly Tigris, R2, and MinIO. The
+  local resolver selected `boto3==1.43.57`; the compatibility range is
+  `>=1.40,<2`. Require HTTPS except for loopback emulators, namespace every key,
+  attach a voicekit SHA-256 digest, and run write/read/delete preflight before
+  admission.
+- Keep object credentials entirely in the target secret store or workload
+  identity. The resource ledger records only bucket/resource identifiers and
+  non-secret configuration.

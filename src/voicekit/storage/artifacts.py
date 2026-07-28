@@ -16,6 +16,20 @@ from voicekit.security.files import (
 from voicekit.storage.repository import StorageRepository
 
 
+def validate_artifact_key(storage_key: str) -> PurePosixPath:
+    """Return one safe, relative artifact key shared by every store backend."""
+    pure = PurePosixPath(storage_key)
+    if (
+        not storage_key
+        or pure.is_absolute()
+        or ".." in pure.parts
+        or "." in pure.parts
+        or "\\" in storage_key
+    ):
+        raise VoicekitError("VK-ART-001", detail=storage_key)
+    return pure
+
+
 class ArtifactStore(Protocol):
     """Durable recording/backup bytes owned by the deployment target."""
 
@@ -83,15 +97,7 @@ class LocalArtifactStore:
             raise VoicekitError("VK-ART-002", detail=f"{storage_key}: {exc}") from exc
 
     def _path(self, storage_key: str) -> Path:
-        pure = PurePosixPath(storage_key)
-        if (
-            not storage_key
-            or pure.is_absolute()
-            or ".." in pure.parts
-            or "." in pure.parts
-            or "\\" in storage_key
-        ):
-            raise VoicekitError("VK-ART-001", detail=storage_key)
+        pure = validate_artifact_key(storage_key)
         root = ensure_private_directory(self.root).resolve()
         candidate = root
         for part in pure.parts:

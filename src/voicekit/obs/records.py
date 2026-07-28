@@ -463,6 +463,15 @@ class SQLiteCallRecordStore:
                 values[pragma] = row[0]
         return values
 
+    async def ready(self) -> bool:
+        """Validate local durability settings for relay readiness."""
+        values = await self.pragmas()
+        return (
+            str(values.get("journal_mode", "")).casefold() == "wal"
+            and int(values.get("synchronous", 0)) == 2
+            and int(values.get("foreign_keys", 0)) == 1
+        )
+
     async def create_call(self, call: NewCall) -> None:
         """Durably create the lifecycle row before external call activity."""
         started_at = _to_iso(call.started_at)

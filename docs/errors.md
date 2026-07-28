@@ -35,7 +35,7 @@ An error not represented here is a product bug. The CLI reports it as
 
 **Cause:** A call-record observation could not be committed durably.
 
-**Fix:** Resolve the reported SQLite error before accepting more calls.
+**Fix:** Resolve the reported repository error before accepting more calls.
 
 ## VK-OBS-003
 
@@ -181,6 +181,14 @@ recovery.
 **Cause:** A protected artifact could not be written, read, or deleted.
 
 **Fix:** Check artifact-store permissions and disk health, then retry.
+
+## VK-ART-003
+
+**Cause:** Durable object storage is misconfigured, unreachable, or failed
+preflight.
+
+**Fix:** Correct the private bucket, HTTPS endpoint, credentials, and region,
+then rerun deploy.
 
 ## VK-TOL-001
 

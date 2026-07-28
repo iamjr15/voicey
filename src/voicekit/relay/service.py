@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import TypeVar, cast
+from typing import Protocol, TypeVar, cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -14,9 +14,15 @@ from pydantic import BaseModel, JsonValue, ValidationError
 from voicekit.errors import VoicekitError
 from voicekit.obs.latency import LatencySample
 from voicekit.obs.logging import scrub_secrets
-from voicekit.obs.records import TimelineEvent, ToolCallObservation, TranscriptTurn
+from voicekit.obs.records import (
+    CallRecord,
+    NewCall,
+    TimelineEvent,
+    ToolCallObservation,
+    TranscriptTurn,
+)
 from voicekit.relay.auth import FenceSigner, RelayKeyring, RelayRequestVerifier
-from voicekit.relay.journal import SQLiteRelayJournal
+from voicekit.relay.journal import RelayJournal
 from voicekit.relay.models import (
     RelayBeginRequest,
     RelayClaimRequest,
@@ -27,11 +33,127 @@ from voicekit.relay.models import (
 )
 from voicekit.storage.models import (
     CallLease,
+    PersistedEvent,
     RecordingReady,
+    RecordingSnapshot,
+    ResultDeliveryConfig,
     ResultSnapshot,
     TerminalRequest,
 )
-from voicekit.storage.sqlite import SQLiteRepository
+
+
+class RelayRepository(Protocol):
+    """Worker-facing repository mutations implemented by both durable backends."""
+
+    def ready(self) -> Awaitable[bool]: ...
+
+    def begin_call(
+        self,
+        call: NewCall,
+        *,
+        owner_id: str,
+        delivery: ResultDeliveryConfig,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> Awaitable[CallLease]: ...
+
+    def handoff_call(
+        self,
+        call_id: str,
+        *,
+        expected_owner_id: str,
+        owner_id: str,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> Awaitable[CallLease]: ...
+
+    def current_relay_lease(self, call_id: str) -> Awaitable[CallLease]: ...
+
+    def assert_relay_fence(self, lease: CallLease) -> Awaitable[None]: ...
+
+    def renew_lease(
+        self,
+        lease: CallLease,
+        *,
+        lease_ttl: timedelta,
+        now: datetime | None = None,
+    ) -> Awaitable[CallLease]: ...
+
+    def append_timeline_once(
+        self,
+        call_id: str,
+        event: TimelineEvent,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> Awaitable[None]: ...
+
+    def append_transcript_once(
+        self,
+        call_id: str,
+        turn: TranscriptTurn,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> Awaitable[None]: ...
+
+    def record_tool_call_once(
+        self,
+        call_id: str,
+        observation: ToolCallObservation,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> Awaitable[None]: ...
+
+    def record_latency_once(
+        self,
+        call_id: str,
+        sample: LatencySample,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> Awaitable[None]: ...
+
+    def flush_results(
+        self,
+        lease: CallLease,
+        snapshot: ResultSnapshot,
+    ) -> Awaitable[None]: ...
+
+    def update_provider_state(
+        self,
+        lease: CallLease,
+        state: str,
+    ) -> Awaitable[None]: ...
+
+    def terminalize(
+        self,
+        lease: CallLease,
+        request: TerminalRequest,
+    ) -> Awaitable[PersistedEvent]: ...
+
+    def mark_recording_ready(
+        self,
+        update: RecordingReady,
+        *,
+        relay_lease: CallLease | None = None,
+    ) -> Awaitable[PersistedEvent]: ...
+
+    def mark_recording_failed_fenced(self, lease: CallLease) -> Awaitable[None]: ...
+
+    def get_call(self, call_id: str) -> Awaitable[CallRecord]: ...
+
+    def get_recording_for_call(
+        self,
+        call_id: str,
+    ) -> Awaitable[RecordingSnapshot | None]: ...
+
+    def get_recording(self, recording_id: str) -> Awaitable[RecordingSnapshot]: ...
 
 
 class RepositoryRelayBackend:
@@ -39,8 +161,8 @@ class RepositoryRelayBackend:
 
     def __init__(
         self,
-        repository: SQLiteRepository,
-        journal: SQLiteRelayJournal,
+        repository: RelayRepository,
+        journal: RelayJournal,
         *,
         fences: FenceSigner,
     ) -> None:
@@ -49,8 +171,7 @@ class RepositoryRelayBackend:
         self.fences = fences
 
     async def ready(self) -> bool:
-        await self.repository.pragmas()
-        return await self.journal.ready()
+        return await self.repository.ready() and await self.journal.ready()
 
     async def begin(self, request: RelayBeginRequest, request_hash: str) -> RelayLeaseResponse:
         cached = await self.journal.reserve_request(

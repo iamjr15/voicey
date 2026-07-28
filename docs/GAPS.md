@@ -26,6 +26,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 Plivo Beta certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Plivo/LiveKit accounts, public Pipecat target, Zentrunk credentials, PSTN |
 | P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
 | P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
+| P3 managed object-store compatibility | ready-to-run, pending credentials | Command below | Private S3-compatible bucket with create/read/delete permission |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
 | P4 24-hour soak | not-ready | Added with the P4 soak harness | 24 hours of uninterrupted runner time |
@@ -33,6 +34,29 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+## P3 managed object-store compatibility
+
+Local tests exercise the exact S3 client contract without external
+credentials. To certify the selected private bucket, grant the test identity
+read/write/delete access only below a disposable prefix and run:
+
+```bash
+export VOICEKIT_LIVE_OBJECT_ACK='I_ACKNOWLEDGE_OBJECT_STORE_MUTATION'
+export VOICEKIT_OBJECT_BUCKET='private-voicekit-artifacts'
+export VOICEKIT_OBJECT_PREFIX='voicekit-certification'
+export VOICEKIT_OBJECT_ENDPOINT='https://fly.storage.tigris.dev'
+export AWS_REGION='auto'
+export AWS_ACCESS_KEY_ID='...'
+export AWS_SECRET_ACCESS_KEY='...'
+uv run pytest -q --no-cov -m live tests/live/test_s3_artifacts_live.py
+```
+
+For AWS S3, omit `VOICEKIT_OBJECT_ENDPOINT` and use the bucket's real region.
+For a loopback MinIO test only, set
+`VOICEKIT_OBJECT_FORCE_PATH_STYLE=true`. A pass means the bucket was reachable,
+one checksummed probe was read back byte-for-byte, and that probe was deleted.
+It does not promote the Fly companion or either cloud deployment.
 
 ## P3 tier-3 paid PSTN loopback
 

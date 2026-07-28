@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Self
+from typing import Protocol, Self
 
 import aiosqlite
 
@@ -50,6 +51,61 @@ CREATE TABLE IF NOT EXISTS relay_updates (
     CHECK(sequence >= 1)
 );
 """
+
+
+class RelayJournal(Protocol):
+    """Durable protocol state shared by SQLite and Postgres implementations."""
+
+    def ready(self) -> Awaitable[bool]: ...
+
+    def claim_nonce(
+        self,
+        *,
+        key_id: str,
+        nonce: str,
+        expires_at: datetime,
+        now: datetime,
+    ) -> Awaitable[None]: ...
+
+    def reserve_request(
+        self,
+        *,
+        idempotency_key: str,
+        request_hash: str,
+        request_kind: str,
+        call_id: str,
+        now: datetime,
+    ) -> Awaitable[bytes | None]: ...
+
+    def complete_request(
+        self,
+        *,
+        idempotency_key: str,
+        request_hash: str,
+        response_body: bytes,
+    ) -> Awaitable[None]: ...
+
+    def reserve_update(
+        self,
+        *,
+        call_id: str,
+        sequence: int,
+        idempotency_key: str,
+        request_hash: str,
+        now: datetime,
+    ) -> Awaitable[bytes | None]: ...
+
+    def complete_update(
+        self,
+        *,
+        call_id: str,
+        sequence: int,
+        idempotency_key: str,
+        request_hash: str,
+        response_body: bytes,
+    ) -> Awaitable[None]: ...
+
+    def next_sequence(self, call_id: str) -> Awaitable[int]: ...
 
 
 class SQLiteRelayJournal:

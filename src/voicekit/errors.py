@@ -40,7 +40,7 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
     "VK-OBS-002": ErrorDefinition(
         code="VK-OBS-002",
         cause="A call-record observation could not be committed durably.",
-        fix="Resolve the reported SQLite error before accepting more calls.",
+        fix="Resolve the reported repository error before accepting more calls.",
     ),
     "VK-OBS-003": ErrorDefinition(
         code="VK-OBS-003",
@@ -156,6 +156,14 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         code="VK-ART-002",
         cause="A protected artifact could not be written, read, or deleted.",
         fix="Check artifact-store permissions and disk health, then retry.",
+    ),
+    "VK-ART-003": ErrorDefinition(
+        code="VK-ART-003",
+        cause="Durable object storage is misconfigured, unreachable, or failed preflight.",
+        fix=(
+            "Correct the private bucket, HTTPS endpoint, credentials, and region, "
+            "then rerun deploy."
+        ),
     ),
     "VK-TOL-001": ErrorDefinition(
         code="VK-TOL-001",
