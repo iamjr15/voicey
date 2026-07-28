@@ -22,7 +22,7 @@ class ManagedReadyRepository(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ManagedPersistenceReport:
-    """Machine-readable proof for the Fly/Postgres/object-store assignment."""
+    """Machine-readable proof for a managed Postgres/object-store assignment."""
 
     target: str
     storage_backend: str
@@ -46,10 +46,17 @@ async def managed_persistence_preflight(
     artifact_backend: str,
 ) -> ManagedPersistenceReport:
     """Fail closed unless the managed target's complete persistence matrix works."""
-    if target != "fly" or storage_backend != "postgres" or artifact_backend != "s3" or not dsn:
+    if (
+        target not in {"fly", "railway"}
+        or storage_backend != "postgres"
+        or artifact_backend != "s3"
+        or not dsn
+    ):
         raise VoicekitError(
             "VK-DEP-002",
-            detail="Fly companion requires target=fly, backend=postgres, and artifacts=s3.",
+            detail=(
+                "managed companion requires target=fly|railway, backend=postgres, and artifacts=s3."
+            ),
         )
     schema_ready = await repository.ready()
     journal_ready = await journal.ready()

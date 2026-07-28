@@ -5,9 +5,9 @@ Last updated: 2026-07-28
 ## Current checkpoint
 
 - **Phase:** P4 — hardening, observability, Railway, drift tooling, release, docs, security
-- **Current unit:** P4.3 Railway deployment target
-- **Next task:** verify the current Railway CLI/API surface, then implement resumable managed-Postgres provisioning, migration/persistence preflight, deployment, smoke, rolling-generation proof, rollback, docs, and exact pending-live commands
-- **Completed:** all P0–P3 numbered units plus P4.1–P4.2 local automation. P4.2 adds bounded runtime-neutral Prometheus call/error/active/DLQ/latency metrics, a separately bound loopback-default exporter, optional PII-safe OTLP/HTTP call/turn/tool tracing, fork-safe Pipecat/LiveKit lifecycle integration, transactional repository observations, results-service/Fly wiring, and complete cross-runtime config mappings. Its actual loopback gate received two OTLP protobuf requests, exposed both runtime metric sets, and found no protected payload; the full suite passed 1,019 tests with 40 honest live skips at 90.11% branch coverage
+- **Current unit:** P4.4 upgrade and recipe drift tooling
+- **Next task:** implement non-overwriting `voicekit upgrade` and `voicekit recipes update-check`, including runtime/package range checks, three-way drift analysis, explicit AI-merge guidance, docs, snapshots, and verification
+- **Completed:** all P0–P3 numbered units plus P4.1–P4.3 local automation. P4.3 adds the Railway CLI `>=5.30.1,<6` target with explicit project/workspace/environment/service/bucket/region choices, exact adoption, owner-only resumable resource evidence, managed Postgres and private bucket references, stdin-only credentials, pre-deploy migrations/object/fencing, two-replica rolling release, platform/liveness/signed readiness, rotation, and reverse created-only rollback. The local gate executed Railway 5.30.1 and disposable PostgreSQL 17; the full suite passed 1,036 tests with 41 truthful skips at 90.15% branch coverage, and the Railway driver reached 92.21%
 
 ## Gate status
 
@@ -79,6 +79,8 @@ Last updated: 2026-07-28
 | P4.1 full 24-hour soak | pending-time | Self-hosted weekly workflow and exact `--duration-s 86400 --max-concurrent 8` command in `docs/GAPS.md`; a shortened run is never promoted |
 | P4.1 live rolling drain per target | pending-live | Active-call replacement checklist for Docker, Fly, Pipecat Cloud, LiveKit Cloud, and future Railway is exact in `docs/GAPS.md`; requires authenticated targets and paid calls |
 | P4.2 Prometheus and OTLP observability | green | Actual loopback exporters exposed bounded metrics for Pipecat and LiveKit and accepted two OTLP/HTTP protobuf trace requests (1,995 bytes); transcript/tool payload PII scan green; `uv run python tests/verification/run_p4_observability_gate.py`; full suite 1,019 passed/40 honest skips at 90.11% branch coverage |
+| P4.3 Railway local deployment automation | green | Railway CLI 5.30.1 contract executed; explicit plans, managed Postgres/private bucket references, stdin-only secrets, two replicas, resumable identity/adoption, rotation, created-only reverse rollback, CLI snapshot, and strict 92.21% driver branch coverage green; real PostgreSQL 17 migration/object/fencing preflight passed; `uv run python tests/verification/run_p4_railway_gate.py` |
+| P4.3 authenticated Railway deployment | pending-live | Exact provision/rerun/rotate/paired paid-call/active-call redeploy/rollback commands are in `docs/GAPS.md`; `railway whoami` is unauthenticated in this environment, so no paid resource or cloud smoke is promoted |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

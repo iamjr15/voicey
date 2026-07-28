@@ -72,7 +72,10 @@ class _MemoryObjects:
 
 
 @pytest.mark.asyncio
-async def test_managed_preflight_is_rollback_only_and_checks_all_backends() -> None:
+@pytest.mark.parametrize("target", ["fly", "railway"])
+async def test_managed_preflight_is_rollback_only_and_checks_all_backends(
+    target: str,
+) -> None:
     import psycopg
 
     async with _isolated_postgres_dsn() as dsn:
@@ -91,7 +94,7 @@ async def test_managed_preflight_is_rollback_only_and_checks_all_backends() -> N
                 repository=repository,
                 journal=journal,
                 artifact_store=artifacts,
-                target="fly",
+                target=target,
                 storage_backend="postgres",
                 artifact_backend="s3",
             )
@@ -100,6 +103,7 @@ async def test_managed_preflight_is_rollback_only_and_checks_all_backends() -> N
                 row = await cursor.fetchone()
 
     assert report.schema_ready
+    assert report.target == target
     assert report.relay_journal_ready
     assert report.artifact_round_trip
     assert report.rolling_generation == 2

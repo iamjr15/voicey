@@ -1,13 +1,15 @@
-"""PID-1 runtime for the Fly-hosted user-owned results companion."""
+"""PID-1 runtime for Fly/Railway user-owned results companions."""
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import os
 import signal
 import socket
+import sys
 import tempfile
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -188,13 +190,13 @@ class ResultsServiceSettings:
             recovery_owner=settings.owner_id,
         )
         if (
-            settings.target != "fly"
+            settings.target not in {"fly", "railway"}
             or settings.storage_backend != "postgres"
             or settings.artifact_backend != "s3"
         ):
             raise VoicekitError(
                 "VK-DEP-002",
-                detail="results-service requires fly/postgres/s3 topology.",
+                detail="results-service requires fly-or-railway/postgres/s3 topology.",
             )
         settings.keyring()
         WebhookSigner(settings.result_current, settings.result_previous)
@@ -306,6 +308,46 @@ async def run_results_service(
             await maintenance.close()
             await telemetry_server.stop()
             recording_runtime.close()
+
+
+async def run_results_preflight(
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> ManagedPersistenceReport:
+    """Apply/validate migrations and prove managed persistence without serving."""
+    values = dict(os.environ if environment is None else environment)
+    settings = ResultsServiceSettings.from_environment(values)
+    repository = PostgresRepository(
+        settings.database_url,
+        min_size=settings.pool_min,
+        max_size=settings.pool_max,
+    )
+    journal = PostgresRelayJournal(
+        settings.database_url,
+        min_size=settings.pool_min,
+        max_size=settings.pool_max,
+    )
+    artifacts = S3ArtifactStore(
+        settings.object_bucket,
+        prefix=settings.object_prefix,
+        endpoint_url=settings.object_endpoint,
+        region_name=settings.object_region,
+        access_key_id=settings.object_access_key,
+        secret_access_key=settings.object_secret_key,
+        force_path_style=settings.object_force_path_style,
+    )
+    async with repository, journal:
+        report = await managed_persistence_preflight(
+            dsn=settings.database_url,
+            repository=repository,
+            journal=journal,
+            artifact_store=artifacts,
+            target=settings.target,
+            storage_backend=settings.storage_backend,
+            artifact_backend=settings.artifact_backend,
+        )
+    _log_preflight(report)
+    return report
 
 
 @dataclass(slots=True)
@@ -663,10 +705,20 @@ def _log_preflight(report: ManagedPersistenceReport) -> None:
     )
 
 
-def main() -> None:
+def main(argv: Sequence[str] = ()) -> None:
     configure_logging(format="json")
+    parser = argparse.ArgumentParser(prog="voicekit-results-service")
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="apply migrations and verify Postgres/object storage, then exit",
+    )
+    arguments = parser.parse_args(list(argv))
     try:
-        asyncio.run(run_results_service())
+        if arguments.preflight_only:
+            asyncio.run(run_results_preflight())
+        else:
+            asyncio.run(run_results_service())
     except VoicekitError as exc:
         _LOG.error(
             "results_service_start_failed",
@@ -677,4 +729,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

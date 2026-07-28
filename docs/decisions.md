@@ -510,3 +510,32 @@ These choices apply the documented proposals authorized in the build mandate and
 - Keep OTLP attributes to opaque ids and bounded operational metadata.
   Transcript text, telephone identifiers, tool arguments/results, exception
   messages, and auth headers never enter spans.
+
+## 2026-07-28 — Railway companion provisioning and ownership
+
+- Pin the supported operator surface to Railway CLI `>=5.30.1,<6`; execute
+  5.30.1 in the local gate. Use only its project, service, managed Postgres,
+  first-party bucket, domain, variable, deployment, and scale commands. The
+  product does not use Railway's optional MCP feature.
+- Keep Railway aligned with the locked managed-storage matrix: it runs the
+  runtime-neutral results-service companion, while native Pipecat and LiveKit
+  conversation workers remain separate cloud artifacts. Managed Postgres and
+  the private Railway bucket are connected through Railway variable
+  references, not copied credentials.
+- Require project, workspace, environment, service, service region, bucket,
+  and bucket region explicitly. Adoption of an existing project requires its
+  exact id plus `--adopt`; other exact resources may be adopted only after that
+  project identity is proven.
+- Keep generated relay/results and carrier credentials only in the ignored,
+  owner-only `.env`; send values one at a time through
+  `railway variable set NAME --stdin`. The resource ledger contains ids,
+  ownership flags, and SHA-256 fingerprints only.
+- Use Railway's pre-deploy command for the real migration lock/checksum,
+  checksummed object round-trip, and rollback-only generation-1→2 fencing
+  probe. Run two service replicas in one explicitly selected region with a
+  30-second deployment overlap, then require release success, `/healthz`, and
+  authenticated `/v1/ready`.
+- Checkpoint every mutation and do not auto-delete failed work. Explicit
+  rollback removes only voicekit-created domain, bucket, Postgres service,
+  application service, and project in reverse order. Adopted resources are
+  never deleted.

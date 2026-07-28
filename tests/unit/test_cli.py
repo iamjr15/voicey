@@ -29,6 +29,12 @@ from voicekit.deploy.cloud import (
 )
 from voicekit.deploy.docker import DockerSmokeResult
 from voicekit.deploy.fly import FlyArtifacts, FlyPlan, FlyResourceState, FlySmokeReport
+from voicekit.deploy.railway import (
+    RailwayArtifacts,
+    RailwayPlan,
+    RailwayResourceState,
+    RailwaySmokeReport,
+)
 from voicekit.errors import VoicekitError
 from voicekit.obs.records import NewCall
 from voicekit.relay.auth import RelayCredential
@@ -350,6 +356,26 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
                 "--region",
                 "--postgres-name",
                 "--bucket",
+                "--adopt",
+                "--rotate-credentials",
+                "--rollback-created",
+                "--skip-smoke",
+                "--engine-wheel",
+                "--yes",
+                "--json",
+            ),
+        ),
+        (
+            ["deploy", "railway", "--help"],
+            (
+                "--project",
+                "--workspace",
+                "--environment",
+                "--service",
+                "--bucket",
+                "--service-region",
+                "--bucket-region",
+                "--project-id",
                 "--adopt",
                 "--rotate-credentials",
                 "--rollback-created",
@@ -738,6 +764,142 @@ def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
     assert "VK-CLI-008" in denied.stderr
     assert rolled_back == []
 
+    accepted = runner.invoke(app, [*command, "--yes", "--json"])
+    assert accepted.exit_code == 0, accepted.stderr
+    assert json.loads(accepted.stdout)["rolled_back"] is True
+    assert rolled_back == ["test-results"]
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+
+
+def _railway_args() -> list[str]:
+    return [
+        "deploy",
+        "railway",
+        "--project",
+        "test-results",
+        "--workspace",
+        "test-workspace",
+        "--environment",
+        "production",
+        "--service",
+        "test-results",
+        "--bucket",
+        "test-results-objects",
+        "--service-region",
+        "us-east",
+        "--bucket-region",
+        "iad",
+    ]
+
+
+def test_railway_deploy_updates_manifest_and_prints_cloud_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _phone_project(tmp_path)
+    captured: list[tuple[RailwayPlan, dict[str, object]]] = []
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+            self.store = SimpleNamespace(
+                path=tmp_path / ".voicekit" / "deploy" / "railway-resources.json"
+            )
+
+        async def deploy(self, plan: RailwayPlan, **options: object) -> object:
+            captured.append((plan, options))
+            directory = tmp_path / ".voicekit" / "deploy" / "railway"
+            state = RailwayResourceState.initial(plan).checkpoint(
+                project_id="project_123",
+                environment_id="environment_123",
+                service_id="service_123",
+                postgres_id="postgres_123",
+                postgres_name="Postgres",
+                bucket_id="bucket_123",
+                domain_id="domain_123",
+                public_base="https://test-results.up.railway.app",
+                deployment_id="deployment_123",
+                preflight_green=True,
+                smoke_green=True,
+            )
+            return SimpleNamespace(
+                state=state,
+                artifacts=RailwayArtifacts(
+                    directory=directory,
+                    dockerfile=directory / "Dockerfile.results",
+                    config=directory / "railway.json",
+                    ignore=directory / ".railwayignore",
+                    engine_wheel=tmp_path / "voicekit.whl",
+                    digest="a" * 64,
+                ),
+                smoke=RailwaySmokeReport(
+                    project_id="project_123",
+                    service_id="service_123",
+                    deployment_id="deployment_123",
+                    public_base="https://test-results.up.railway.app",
+                    deployment_status="SUCCESS",
+                    liveness=True,
+                    signed_readiness=True,
+                    migration_preflight=True,
+                    rolling_generation_preflight=True,
+                ),
+            )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.RailwayDeploymentManager", Manager)
+    result = runner.invoke(
+        app,
+        [
+            *_railway_args(),
+            "--engine-wheel",
+            str(tmp_path / "voicekit.whl"),
+            "--yes",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    plan, options = captured[0]
+    assert plan.callback_providers == ("twilio",)
+    assert options["rotate_credentials"] is False
+    assert payload["smoke"]["migration_preflight"] is True
+    assert payload["next_step"] == (
+        "voicekit deploy pipecat-cloud --relay-url https://test-results.up.railway.app --yes"
+    )
+    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == "railway"
+
+
+def test_railway_adoption_and_rollback_confirmation_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _project(tmp_path)
+    ManifestStore(tmp_path / "voicekit.jsonc").save(
+        manifest.model_copy(update={"deploy_target": "railway"})
+    )
+    rolled_back: list[str] = []
+
+    class Manager:
+        def __init__(self, _root: Path) -> None:
+            self.store = SimpleNamespace(
+                path=tmp_path / ".voicekit" / "deploy" / "railway-resources.json"
+            )
+
+        def rollback_created(self, plan: RailwayPlan) -> RailwayResourceState:
+            rolled_back.append(plan.project_name)
+            return RailwayResourceState.initial(plan).checkpoint(rolled_back=True)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("voicekit.cli.app.RailwayDeploymentManager", Manager)
+    invalid_adopt = runner.invoke(app, [*_railway_args(), "--adopt", "--yes"])
+    assert invalid_adopt.exit_code == 1
+    assert "VK-CLI-010" in invalid_adopt.stderr
+
+    command = [*_railway_args(), "--rollback-created"]
+    denied = runner.invoke(app, command)
+    assert denied.exit_code == 1
+    assert "VK-CLI-008" in denied.stderr
     accepted = runner.invoke(app, [*command, "--yes", "--json"])
     assert accepted.exit_code == 0, accepted.stderr
     assert json.loads(accepted.stdout)["rolled_back"] is True

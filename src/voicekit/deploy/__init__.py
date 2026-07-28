@@ -37,6 +37,17 @@ from voicekit.deploy.persistence import (
     docker_persistence_preflight,
     rolling_generation_invariant,
 )
+from voicekit.deploy.railway import (
+    RailwayArtifactGenerator,
+    RailwayArtifacts,
+    RailwayCliRunner,
+    RailwayDeploymentManager,
+    RailwayDeploymentReport,
+    RailwayPlan,
+    RailwayResourceState,
+    RailwayResourceStore,
+    RailwaySmokeReport,
+)
 
 __all__ = [
     "CloudArtifactGenerator",
@@ -65,6 +76,15 @@ __all__ = [
     "PipecatCloudDeploymentManager",
     "PipecatCloudPlan",
     "PlatformCliRunner",
+    "RailwayArtifactGenerator",
+    "RailwayArtifacts",
+    "RailwayCliRunner",
+    "RailwayDeploymentManager",
+    "RailwayDeploymentReport",
+    "RailwayPlan",
+    "RailwayResourceState",
+    "RailwayResourceStore",
+    "RailwaySmokeReport",
     "RollingGenerationReport",
     "docker_persistence_preflight",
     "rolling_generation_invariant",

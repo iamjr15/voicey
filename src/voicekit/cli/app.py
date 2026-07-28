@@ -48,6 +48,8 @@ from voicekit.deploy import (
     LiveKitCloudPlan,
     PipecatCloudDeploymentManager,
     PipecatCloudPlan,
+    RailwayDeploymentManager,
+    RailwayPlan,
 )
 from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 from voicekit.obs.logging import scrub_secrets
@@ -1146,6 +1148,208 @@ def deploy_fly_command(
             return
         console.print("Fly results companion deployment completed.")
         console.print(f"URL: {plan.public_base}")
+        console.print(
+            "Signed readiness: " + ("green" if report.smoke is not None else "skipped by operator")
+        )
+        console.print(f"Resource ledger: {manager.store.path}")
+        console.print(f"Next: {next_command}")
+
+    _guard_async(operation, json_output=json_output)
+
+
+@deploy_app.command("railway")
+def deploy_railway_command(
+    project_name: Annotated[
+        str,
+        typer.Option("--project", help="Exact Railway project name."),
+    ],
+    workspace: Annotated[
+        str,
+        typer.Option("--workspace", help="Exact Railway workspace id or name."),
+    ],
+    environment_name: Annotated[
+        str,
+        typer.Option("--environment", help="Exact Railway environment name."),
+    ],
+    service_name: Annotated[
+        str,
+        typer.Option("--service", help="Exact results-companion service name."),
+    ],
+    bucket_name: Annotated[
+        str,
+        typer.Option("--bucket", help="Exact private Railway bucket display name."),
+    ],
+    service_region: Annotated[
+        str,
+        typer.Option(
+            "--service-region",
+            help="Railway replica region: us-west|us-east|eu-west|southeast-asia.",
+        ),
+    ],
+    bucket_region: Annotated[
+        str,
+        typer.Option(
+            "--bucket-region",
+            help="Railway bucket region: sjc|iad|ams|sin.",
+        ),
+    ],
+    project_id: Annotated[
+        str | None,
+        typer.Option("--project-id", help="Exact existing project id required for adoption."),
+    ] = None,
+    adopt: Annotated[
+        bool,
+        typer.Option("--adopt", help="Adopt exact pre-existing resources after verification."),
+    ] = False,
+    rotate_credentials: Annotated[
+        bool,
+        typer.Option(
+            "--rotate-credentials",
+            help="Rotate relay/results credentials while retaining the prior pair.",
+        ),
+    ] = False,
+    rollback_created: Annotated[
+        bool,
+        typer.Option(
+            "--rollback-created",
+            help="Delete only Railway resources ledgered as created by voicekit.",
+        ),
+    ] = False,
+    skip_smoke: Annotated[
+        bool,
+        typer.Option("--skip-smoke", help="Deploy without endpoint and signed relay smoke."),
+    ] = False,
+    engine_wheel: Annotated[
+        Path | None,
+        typer.Option("--engine-wheel", help="Local unpublished voicekit wheel."),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Confirm paid or destructive Railway mutations."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable resource and smoke facts."),
+    ] = False,
+) -> None:
+    """Provision, resume, rotate, validate, or roll back the Railway companion."""
+
+    async def operation() -> None:
+        DEFAULT_CAPABILITIES.require("deploy", "railway")
+        if adopt and project_id is None:
+            raise VoicekitError(
+                "VK-CLI-010",
+                detail="--adopt requires the exact existing --project-id.",
+            )
+        if rollback_created and (
+            adopt or rotate_credentials or skip_smoke or engine_wheel is not None
+        ):
+            raise VoicekitError(
+                "VK-CLI-010",
+                detail=(
+                    "--rollback-created cannot be combined with adoption, rotation, "
+                    "smoke, or wheel options."
+                ),
+            )
+        context = _context()
+        manifest = require_manifest(context)
+        selected_carriers = tuple(
+            provider
+            for provider in manifest.carriers
+            if provider in {"twilio", "telnyx", "vobiz", "plivo"}
+        )
+        plan = RailwayPlan(
+            project_name=project_name,
+            workspace=workspace,
+            environment=environment_name,
+            service_name=service_name,
+            bucket_name=bucket_name,
+            service_region=service_region,
+            bucket_region=bucket_region,
+            callback_providers=selected_carriers,
+            project_id=project_id,
+        )
+        manager = RailwayDeploymentManager(context.root)
+        manifest_store = ManifestStore(context.root / "voicekit.jsonc")
+        base_command = (
+            f"voicekit deploy railway --project {shlex.quote(project_name)} "
+            f"--workspace {shlex.quote(workspace)} "
+            f"--environment {shlex.quote(environment_name)} "
+            f"--service {shlex.quote(service_name)} "
+            f"--bucket {shlex.quote(bucket_name)} "
+            f"--service-region {service_region} --bucket-region {bucket_region}"
+        )
+        if project_id is not None:
+            base_command += f" --project-id {shlex.quote(project_id)}"
+        if rollback_created:
+            _confirm(
+                (
+                    "Delete only Railway resources marked created-by-voicekit for "
+                    f"{project_name}? Database and bucket data may become unrecoverable."
+                ),
+                yes=yes,
+            )
+            state = await asyncio.to_thread(manager.rollback_created, plan)
+            manifest_store.save(manifest.model_copy(update={"deploy_target": None}))
+            payload = {
+                "target": "railway",
+                "rolled_back": True,
+                "resources": asdict(state),
+                "next_step": f"{base_command} --yes",
+            }
+            if json_output:
+                _json(payload)
+            else:
+                console.print("Railway resources created by voicekit were rolled back.")
+                console.print(f"Next: {payload['next_step']}")
+            return
+
+        _confirm(
+            (
+                f"Provision or reuse Railway project {project_name}, service "
+                f"{service_name}, managed Postgres, and private bucket {bucket_name}? "
+                "These resources can incur charges."
+            ),
+            yes=yes,
+        )
+        report = await manager.deploy(
+            plan,
+            environment=context.environment,
+            engine_wheel=engine_wheel,
+            adopt=adopt,
+            rotate_credentials=rotate_credentials,
+            skip_smoke=skip_smoke,
+        )
+        manifest_store.save(manifest.model_copy(update={"deploy_target": "railway"}))
+        if report.state.public_base is None:
+            raise VoicekitError(
+                "VK-DEP-007",
+                detail="Railway deployment completed without a public companion URL.",
+            )
+        next_target = "pipecat-cloud" if manifest.runtime == "pipecat" else "livekit-cloud"
+        next_command = f"voicekit deploy {next_target} --relay-url {report.state.public_base} --yes"
+        artifact_rows = {
+            "dockerfile": str(report.artifacts.dockerfile),
+            "config": str(report.artifacts.config),
+            "ignore": str(report.artifacts.ignore),
+            "engine_wheel": (
+                None
+                if report.artifacts.engine_wheel is None
+                else str(report.artifacts.engine_wheel)
+            ),
+        }
+        payload = {
+            "target": "railway",
+            "resources": asdict(report.state),
+            "artifacts": artifact_rows,
+            "smoke": None if report.smoke is None else asdict(report.smoke),
+            "next_step": next_command,
+        }
+        if json_output:
+            _json(payload)
+            return
+        console.print("Railway results companion deployment completed.")
+        console.print(f"URL: {report.state.public_base}")
         console.print(
             "Signed readiness: " + ("green" if report.smoke is not None else "skipped by operator")
         )

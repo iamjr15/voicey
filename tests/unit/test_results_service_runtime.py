@@ -135,8 +135,11 @@ def test_results_service_settings_parse_full_contract_and_error_paths() -> None:
     assert callback.value.code == "VK-DEP-003"
 
     topology = {**environment, "VOICEKIT_DEPLOY_TARGET": "railway"}
+    assert runtime.ResultsServiceSettings.from_environment(topology).target == "railway"
+
+    incompatible_topology = {**environment, "VOICEKIT_DEPLOY_TARGET": "docker"}
     with pytest.raises(VoicekitError) as incompatible:
-        runtime.ResultsServiceSettings.from_environment(topology)
+        runtime.ResultsServiceSettings.from_environment(incompatible_topology)
     assert incompatible.value.code == "VK-DEP-002"
 
     alternate_dsn = dict(environment)
@@ -343,6 +346,29 @@ async def test_run_results_service_wires_preflight_supervisor_and_cleanup(
     assert callbacks.closed
 
 
+@pytest.mark.asyncio
+async def test_preflight_only_applies_complete_managed_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def preflight(**kwargs: object) -> ManagedPersistenceReport:
+        captured.update(kwargs)
+        return _preflight_report()
+
+    monkeypatch.setattr(runtime, "PostgresRepository", _AsyncResource)
+    monkeypatch.setattr(runtime, "PostgresRelayJournal", _AsyncResource)
+    monkeypatch.setattr(runtime, "S3ArtifactStore", _Artifacts)
+    monkeypatch.setattr(runtime, "managed_persistence_preflight", preflight)
+
+    report = await runtime.run_results_preflight(environment=_environment())
+
+    assert report.schema_ready
+    assert captured["target"] == "fly"
+    assert captured["storage_backend"] == "postgres"
+    assert captured["artifact_backend"] == "s3"
+
+
 class _FakeServer:
     exit_immediately: ClassVar[bool] = False
 
@@ -537,17 +563,26 @@ def test_results_service_main_success_and_catalogued_failure(
     async def failure() -> None:
         raise VoicekitError("VK-DEP-003", detail="injected")
 
+    preflight_runs: list[bool] = []
+
+    async def preflight() -> ManagedPersistenceReport:
+        preflight_runs.append(True)
+        return _preflight_report()
+
     def configure(*, format: str) -> None:
         configured.append(format)
 
     monkeypatch.setattr(runtime, "configure_logging", configure)
     monkeypatch.setattr(runtime, "run_results_service", success)
+    monkeypatch.setattr(runtime, "run_results_preflight", preflight)
     runtime.main()
+    runtime.main(["--preflight-only"])
     monkeypatch.setattr(runtime, "run_results_service", failure)
     with pytest.raises(SystemExit) as exited:
         runtime.main()
 
-    assert configured == ["json", "json"]
+    assert configured == ["json", "json", "json"]
+    assert preflight_runs == [True]
     assert exited.value.code == 1
 
 

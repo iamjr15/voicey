@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import re
-import secrets
 import shutil
 import stat
 import subprocess
@@ -23,26 +22,21 @@ import httpx
 from pydantic import TypeAdapter, ValidationError
 
 from voicekit._version import __version__
-from voicekit.cli.environment import EnvFileStore, ensure_env_ignored
+from voicekit.cli.environment import ensure_env_ignored
+from voicekit.deploy.managed_secrets import (
+    ManagedSecretBundle,
+    fingerprint,
+    prepare_managed_secrets,
+    validate_secret_continuity,
+)
 from voicekit.errors import VoicekitError
 from voicekit.relay.auth import RelayCredential
 from voicekit.relay.client import RelayClient
-from voicekit.results.signing import WebhookSigner, encode_secret
 
 _RESOURCE_SCHEMA = 1
 _FLY_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{2,62}$")
 _REGION = re.compile(r"^[a-z0-9]{3,8}$")
 _CALLBACK_PROVIDERS = frozenset({"twilio", "telnyx", "vobiz", "plivo"})
-_PROVIDER_SECRETS: dict[str, tuple[str, ...]] = {
-    "twilio": ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"),
-    "telnyx": (
-        "TELNYX_API_KEY",
-        "TELNYX_PUBLIC_KEY",
-        "TELNYX_CONNECTION_ID",
-    ),
-    "vobiz": ("VOBIZ_AUTH_ID", "VOBIZ_AUTH_TOKEN"),
-    "plivo": ("PLIVO_AUTH_ID", "PLIVO_AUTH_TOKEN"),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,33 +276,6 @@ class FlyResourceStore:
         _atomic_write(self.path, payload.encode(), mode=0o600)
 
 
-@dataclass(frozen=True, slots=True, repr=False)
-class FlySecretBundle:
-    """Validated current/previous relay and results-service credentials."""
-
-    relay_current: str
-    relay_previous: str | None
-    results_current: str
-    results_previous: str | None
-    carrier: Mapping[str, str]
-
-    @property
-    def relay(self) -> RelayCredential:
-        return RelayCredential.parse(self.relay_current)
-
-    def platform_values(self) -> dict[str, str]:
-        values = {
-            "VOICEKIT_RELAY_CREDENTIAL": self.relay_current,
-            "VOICEKIT_RESULTS_SECRET": self.results_current,
-            **self.carrier,
-        }
-        if self.relay_previous is not None:
-            values["VOICEKIT_RELAY_PREVIOUS_CREDENTIAL"] = self.relay_previous
-        if self.results_previous is not None:
-            values["VOICEKIT_RESULTS_PREVIOUS_SECRET"] = self.results_previous
-        return values
-
-
 @dataclass(frozen=True, slots=True)
 class FlySmokeReport:
     """Platform and signed application readiness evidence."""
@@ -444,7 +411,7 @@ class FlyDeploymentManager:
         state = FlyResourceState.initial(plan) if loaded is None or loaded.rolled_back else loaded
         state.validate_plan(plan)
         generated = self.artifacts.generate(plan, engine_wheel=engine_wheel)
-        bundle = _prepare_secrets(
+        bundle = prepare_managed_secrets(
             self.project_root,
             environment,
             plan.callback_providers,
@@ -452,7 +419,7 @@ class FlyDeploymentManager:
             expected_relay_fingerprint=state.relay_fingerprint,
             expected_results_fingerprint=state.results_fingerprint,
         )
-        _validate_secret_continuity(state, bundle, rotate=rotate_credentials)
+        validate_secret_continuity(state, bundle, rotate=rotate_credentials)
         state = state.checkpoint(artifact_digest=generated.digest)
         self.store.save(state)
 
@@ -719,7 +686,7 @@ class FlyDeploymentManager:
         self,
         plan: FlyPlan,
         state: FlyResourceState,
-        bundle: FlySecretBundle,
+        bundle: ManagedSecretBundle,
     ) -> FlyResourceState:
         values = bundle.platform_values()
         payload = "".join(f"{name}={value}\n" for name, value in sorted(values.items()))
@@ -737,8 +704,8 @@ class FlyDeploymentManager:
             )
         checkpoint = state.checkpoint(
             relay_key_id=bundle.relay.key_id,
-            relay_fingerprint=_fingerprint(bundle.relay_current),
-            results_fingerprint=_fingerprint(bundle.results_current),
+            relay_fingerprint=fingerprint(bundle.relay_current),
+            results_fingerprint=fingerprint(bundle.results_current),
         )
         self.store.save(checkpoint)
         return checkpoint
@@ -840,118 +807,6 @@ class FlyDeploymentManager:
             for item in _json_items(_parse_json(result.stdout, label="Fly secret list"))
             if (name := _item_text(item, "name"))
         }
-
-
-def _prepare_secrets(
-    project_root: Path,
-    environment: Mapping[str, str],
-    callback_providers: tuple[str, ...],
-    *,
-    rotate: bool,
-    expected_relay_fingerprint: str | None,
-    expected_results_fingerprint: str | None,
-) -> FlySecretBundle:
-    store = EnvFileStore(project_root / ".env")
-    persisted = store.read()
-    combined = persisted | dict(environment)
-    carrier: dict[str, str] = {}
-    for provider in callback_providers:
-        for name in _PROVIDER_SECRETS[provider]:
-            value = combined.get(name, "").strip()
-            if not value:
-                raise VoicekitError(
-                    "VK-DEP-003",
-                    detail=f"{provider} callback ingestion requires {name}.",
-                )
-            carrier[name] = value
-
-    relay_current = combined.get("VOICEKIT_RELAY_CREDENTIAL", "").strip()
-    results_current = combined.get("VOICEKIT_RESULTS_SECRET", "").strip()
-    relay_previous = combined.get("VOICEKIT_RELAY_PREVIOUS_CREDENTIAL", "").strip() or None
-    results_previous = combined.get("VOICEKIT_RESULTS_PREVIOUS_SECRET", "").strip() or None
-    if expected_relay_fingerprint is not None and (
-        not relay_current or _fingerprint(relay_current) != expected_relay_fingerprint
-    ):
-        raise VoicekitError(
-            "VK-DEP-007",
-            detail="local relay credential differs from the ledger; use the recorded secret.",
-        )
-    if expected_results_fingerprint is not None and (
-        not results_current or _fingerprint(results_current) != expected_results_fingerprint
-    ):
-        raise VoicekitError(
-            "VK-DEP-007",
-            detail="local results secret differs from the ledger; use the recorded secret.",
-        )
-    updates: dict[str, str] = {}
-    if rotate:
-        if not relay_current or not results_current:
-            raise VoicekitError(
-                "VK-DEP-003",
-                detail="credential rotation requires existing relay and results secrets.",
-            )
-        RelayCredential.parse(relay_current)
-        WebhookSigner(results_current)
-        relay_previous = relay_current
-        results_previous = results_current
-        relay_current = RelayCredential.issue(f"k-{secrets.token_hex(6)}").reveal()
-        results_current = encode_secret(secrets.token_bytes(32))
-        updates.update(
-            {
-                "VOICEKIT_RELAY_CREDENTIAL": relay_current,
-                "VOICEKIT_RELAY_PREVIOUS_CREDENTIAL": relay_previous,
-                "VOICEKIT_RESULTS_SECRET": results_current,
-                "VOICEKIT_RESULTS_PREVIOUS_SECRET": results_previous,
-            }
-        )
-    else:
-        if not relay_current:
-            relay_current = RelayCredential.issue(f"k-{secrets.token_hex(6)}").reveal()
-            updates["VOICEKIT_RELAY_CREDENTIAL"] = relay_current
-        if not results_current:
-            results_current = encode_secret(secrets.token_bytes(32))
-            updates["VOICEKIT_RESULTS_SECRET"] = results_current
-    RelayCredential.parse(relay_current)
-    if relay_previous is not None:
-        RelayCredential.parse(relay_previous)
-    WebhookSigner(results_current, results_previous)
-    if updates:
-        store.update(updates)
-    return FlySecretBundle(
-        relay_current=relay_current,
-        relay_previous=relay_previous,
-        results_current=results_current,
-        results_previous=results_previous,
-        carrier=carrier,
-    )
-
-
-def _validate_secret_continuity(
-    state: FlyResourceState,
-    bundle: FlySecretBundle,
-    *,
-    rotate: bool,
-) -> None:
-    if rotate:
-        if state.relay_fingerprint not in {
-            None,
-            _fingerprint(bundle.relay_previous or ""),
-        } or state.results_fingerprint not in {None, _fingerprint(bundle.results_previous or "")}:
-            raise VoicekitError(
-                "VK-DEP-007",
-                detail="credential rotation source differs from the resource ledger.",
-            )
-        return
-    if state.relay_fingerprint not in {None, _fingerprint(bundle.relay_current)}:
-        raise VoicekitError(
-            "VK-DEP-007",
-            detail="local relay credential differs from the ledger; use explicit rotation.",
-        )
-    if state.results_fingerprint not in {None, _fingerprint(bundle.results_current)}:
-        raise VoicekitError(
-            "VK-DEP-007",
-            detail="local results secret differs from the ledger; use explicit rotation.",
-        )
 
 
 def _dockerfile(wheel: Path | None) -> str:
@@ -1136,10 +991,6 @@ def _require_tigris_secrets(names: set[str]) -> None:
             "VK-DEP-007",
             detail="Tigris bucket is not attached to the app with private access credentials.",
         )
-
-
-def _fingerprint(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()[:16]
 
 
 __all__ = [

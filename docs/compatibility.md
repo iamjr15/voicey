@@ -15,6 +15,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Plivo Python | `plivo==4.61.0` | Installed on 2026-07-27; Voice/number/recording calls and the six-argument V3 signature helper were introspected and exercised |
 | ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |
 | cloudflared CLI | `2026.3.0` observed locally | Quick-tunnel URL emission and bounded process cleanup ran; public hostname DNS remained unavailable, so external WS evidence is pending |
+| Railway CLI | `>=5.30.1,<6` (`5.30.1` executed locally) | Current project/service/Postgres/bucket/domain/variable/deploy/scale/delete JSON surfaces inspected and the version contract executed on 2026-07-28; authenticated mutations remain pending-live |
 | websockets Python | `>=13.1,<17` (`15.0.1` selected with both runtime extras) | Pipecat uses APIs present across the range; LiveKit 1.6.7's OpenAI plugin requires `<16` |
 | Pipecat client JS | `@pipecat-ai/client-js==1.13.0` | npm registry checked 2026-07-26 |
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
@@ -58,6 +59,12 @@ This table records versions empirically installed and inspected during P0. Runti
 - Twilio outbound: `CallList.create` has no idempotency-key parameter; async AMD uses `async_amd` plus its callback fields, and call redirects use `CallContext.update(twiml=...)`.
 - ngrok Python: synchronous `forward()` returns a listener; `Listener.close()` is awaitable. HTTP endpoints carry WebSocket upgrades without a second endpoint.
 - Cloudflared quick tunnels emit their public URL on stderr before edge DNS is necessarily ready; the WebSocket probe retries within one bounded deadline.
+- Railway 5.30.1 uses `init`/`link`, `add --service`,
+  `add --database postgres`, `bucket create`, `variable set --stdin`,
+  detached `up`, JSON deployment polling, `scale <region>=2`, and explicit
+  domain/bucket/service/project deletion. Service variables reference managed
+  dependencies as `${{Namespace.VARIABLE}}`; voicekit never invokes Railway's
+  optional MCP surface.
 
 ## Upgrade rule
 

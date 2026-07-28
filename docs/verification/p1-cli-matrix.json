@@ -203,6 +203,15 @@
       "paired_options": []
     },
     {
+      "path": "deploy railway",
+      "phase": "p4",
+      "interaction": "confirmed-external-mutation",
+      "json": "required",
+      "arguments": [],
+      "options": ["--adopt", "--bucket", "--bucket-region", "--engine-wheel", "--environment", "--json", "--project", "--project-id", "--rollback-created", "--rotate-credentials", "--service", "--service-region", "--skip-smoke", "--workspace", "--yes"],
+      "paired_options": []
+    },
+    {
       "path": "deploy pipecat-cloud",
       "phase": "p3",
       "interaction": "confirmed-external-mutation",

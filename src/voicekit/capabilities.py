@@ -191,9 +191,8 @@ DEFAULT_CAPABILITIES = CapabilityRegistry(
         Capability(
             kind="deploy",
             id="railway",
-            description="Railway deployment with managed Postgres.",
-            enabled=False,
-            unavailable_reason="the Railway target lands in P4",
+            description="Railway results companion with managed Postgres and object storage.",
+            enabled=True,
         ),
     )
 )

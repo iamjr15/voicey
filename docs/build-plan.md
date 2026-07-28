@@ -187,6 +187,26 @@ full suite are green: 1,019 passed, 40 honest live skips, 90.11% branch
 coverage. Operator contract: `docs/observability.md`; exact gate:
 `uv run python tests/verification/run_p4_observability_gate.py`.
 
+**P4.3 checkpoint complete locally 2026-07-28; authenticated Railway evidence
+pending:** `voicekit deploy railway` now provisions or exactly adopts a named
+project/environment, two-replica results service, managed Postgres, private
+Railway bucket, and service domain through the empirically executed Railway CLI
+`>=5.30.1,<6` contract. It checkpoints exact ids and ownership after every
+mutation, passes database and bucket values through Railway variable
+references, passes every credential through stdin, retains current/previous
+relay and result credentials during rotation, runs the real migration/object/
+rolling-generation preflight before release, and requires platform success,
+unsigned liveness, and signed relay readiness. Failed work remains resumable;
+explicit rollback deletes only voicekit-created domain, bucket, Postgres,
+service, and project in reverse order. The local P4.3 gate executed Railway CLI
+5.30.1 and a disposable PostgreSQL 17 preflight successfully. The external
+project/deploy/rerun/rotation/rollback sequence remains unpromoted with exact
+commands in `docs/GAPS.md` because this environment is not authenticated to a
+billed Railway workspace. Operator contract: `docs/deploy/railway.md`; exact
+gate: `uv run python tests/verification/run_p4_railway_gate.py`. Ruff,
+formatting, strict pyright, and the full suite are green: 1,036 passed, 41
+honest skips, 90.15% branch coverage; the Railway driver is 92.21%.
+
 ## Verification approach
 
 Per-phase exit = that phase's slice of spec §17, mechanized: quickstart e2e script (fresh venv → talking agent, timed); audio-path latency harness with hard budgets (p50 + p95); webhook-invariant chaos suite (kill provider WS mid-call, tool timeouts, process crash/SIGKILL, dual sweepers, fenced late writers — always exactly one terminal event, delivery attempted until acknowledged or visibly dead-lettered); carrier certification pytest suites (nightly live, incl. §5.3 audio rig); parity + config-mapping matrix CI (P2+); wizard/flag-twin/`--json` coverage tests; tunneled-admin negative test; deploy-target scripted e2e with smoke call + persistence preflight + rolling-generation test; docs quickstarts executed in CI. Manual gates per phase: one real phone call on a physical handset, one full wizard run by a human, `doctor` run on a broken-on-purpose machine.

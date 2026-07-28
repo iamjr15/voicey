@@ -29,8 +29,8 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 managed object-store compatibility | ready-to-run, pending credentials | Command below | Private S3-compatible bucket with create/read/delete permission |
 | P3 Fly results companion | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Fly CLI, organization billing, Managed Postgres, and Tigris |
 | P3 cloud-worker deploys | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Pipecat Cloud and LiveKit Cloud projects, deployed companion, registry, provider credentials, and paid PSTN |
-| P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
-| P4 24-hour soak | not-ready | Added with the P4 soak harness | 24 hours of uninterrupted runner time |
+| P4 Railway deploy | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated billed Railway workspace, managed Postgres, private bucket, and paired cloud worker for paid media evidence |
+| P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
 
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
@@ -1234,6 +1234,146 @@ This gate is not green until all nine observations are recorded from real
 Twilio callbacks and physical endpoints. The current environment does not
 contain the required funded Twilio/public-host evidence.
 
+## P4.3 Railway results companion
+
+The local gate executed Railway CLI 5.30.1, exercised create/resume/adopt/
+rotation/reverse-rollback command contracts, checked that secret values appear
+only on stdin, generated the two-replica non-root deployment, and passed the
+real migration/object/fencing preflight against disposable PostgreSQL 17. This
+machine is not authenticated to a billed Railway workspace, so no external
+resource is represented as green.
+
+Choose a disposable voicekit phone-agent project and empty Railway project
+identity. Authenticate, build the unpublished engine wheel, and run:
+
+```bash
+export VOICEKIT_REPO_ROOT="$PWD"
+export VOICEKIT_AGENT_PROJECT='/absolute/path/to/disposable-agent-project'
+export VOICEKIT_ENGINE_WHEEL="$PWD/dist/voicekit-0.0.0.dev0-py3-none-any.whl"
+export VOICEKIT_RAILWAY_PROJECT='voicekit-results-cert'
+export VOICEKIT_RAILWAY_WORKSPACE='exact-workspace-id-or-name'
+export VOICEKIT_RAILWAY_ENVIRONMENT='production'
+export VOICEKIT_RAILWAY_SERVICE='voicekit-results-cert'
+export VOICEKIT_RAILWAY_BUCKET='voicekit-results-cert-objects'
+export VOICEKIT_RAILWAY_SERVICE_REGION='us-east'
+export VOICEKIT_RAILWAY_BUCKET_REGION='iad'
+railway whoami
+uv build --wheel --out-dir dist
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy railway \
+    --project "$VOICEKIT_RAILWAY_PROJECT" \
+    --workspace "$VOICEKIT_RAILWAY_WORKSPACE" \
+    --environment "$VOICEKIT_RAILWAY_ENVIRONMENT" \
+    --service "$VOICEKIT_RAILWAY_SERVICE" \
+    --bucket "$VOICEKIT_RAILWAY_BUCKET" \
+    --service-region "$VOICEKIT_RAILWAY_SERVICE_REGION" \
+    --bucket-region "$VOICEKIT_RAILWAY_BUCKET_REGION" \
+    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --yes \
+    --json
+)
+```
+
+The JSON must show `resources.preflight_green=true`,
+`resources.smoke_green=true`, two matching service replicas in the selected
+region, and a smoke row with successful deployment, liveness, migration,
+rolling-generation, and signed-readiness facts. Railway pre-deploy logs must
+show checksummed migration validation, the private-bucket round trip, generation
+1→2, stale-writer rejection, exactly one terminal event, and rollback-only
+cleanup before server startup. Confirm the generated domain serves
+`/healthz`, authenticated `/v1/ready` succeeds, the bucket is private, and the
+owner-only ledger contains no value from the project's `.env`.
+
+Rerun the identical command and verify the exact project, service, Postgres,
+bucket, domain, and ids are reused. No second resource may appear. Then rotate
+the current/previous relay and results pairs:
+
+```bash
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy railway \
+    --project "$VOICEKIT_RAILWAY_PROJECT" \
+    --workspace "$VOICEKIT_RAILWAY_WORKSPACE" \
+    --environment "$VOICEKIT_RAILWAY_ENVIRONMENT" \
+    --service "$VOICEKIT_RAILWAY_SERVICE" \
+    --bucket "$VOICEKIT_RAILWAY_BUCKET" \
+    --service-region "$VOICEKIT_RAILWAY_SERVICE_REGION" \
+    --bucket-region "$VOICEKIT_RAILWAY_BUCKET_REGION" \
+    --rotate-credentials \
+    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --yes \
+    --json
+)
+```
+
+Deploy a paired Pipecat Cloud worker from the same project and place its paid
+smoke through the Railway relay:
+
+```bash
+export VOICEKIT_RELAY_URL='https://exact-generated-domain.up.railway.app'
+export VOICEKIT_PCC_AGENT='voicekit-railway-cert'
+export VOICEKIT_PCC_ORG='exact-pipecat-org'
+export VOICEKIT_PCC_REGION='us-west'
+export VOICEKIT_PCC_SECRET_SET='voicekit-railway-cert-secrets' # pragma: allowlist secret
+export VOICEKIT_PCC_IMAGE='registry.example.com/voicekit/railway-cert:git-sha'
+export VOICEKIT_CLOUD_SMOKE_TO='+14155550199'
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
+    --agent "$VOICEKIT_PCC_AGENT" \
+    --org "$VOICEKIT_PCC_ORG" \
+    --region "$VOICEKIT_PCC_REGION" \
+    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
+    --image "$VOICEKIT_PCC_IMAGE" \
+    --min-agents 1 \
+    --max-agents 4 \
+    --profile agent-1x \
+    --relay-url "$VOICEKIT_RELAY_URL" \
+    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --smoke-to "$VOICEKIT_CLOUD_SMOKE_TO" \
+    --yes \
+    --json
+)
+```
+
+Prepare/build/push that immutable image using the P3 Pipecat Cloud
+`--prepare-only` command before the paid invocation. Promotion requires the
+platform-session begin/terminal pair, the paid-call terminal result, and
+acknowledged delivery in Railway Postgres. A LiveKit-runtime project may
+instead run the exact P3 LiveKit Cloud command with this Railway relay URL.
+
+For rolling-drain evidence, start a second paid call and keep it active. While
+it is active, rerun the Railway deploy command above from another terminal
+with a newly built immutable wheel. Confirm the old replica closes readiness,
+the already fenced call terminalizes once, a new call is admitted by the
+replacement, and the stale generation cannot append or terminalize. Retain
+redacted project/service/database/bucket/domain/deployment/replica/call/event/
+delivery ids and timestamps.
+
+After evidence capture, delete only this disposable, voicekit-created set:
+
+```bash
+(
+  cd "$VOICEKIT_AGENT_PROJECT"
+  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy railway \
+    --project "$VOICEKIT_RAILWAY_PROJECT" \
+    --workspace "$VOICEKIT_RAILWAY_WORKSPACE" \
+    --environment "$VOICEKIT_RAILWAY_ENVIRONMENT" \
+    --service "$VOICEKIT_RAILWAY_SERVICE" \
+    --bucket "$VOICEKIT_RAILWAY_BUCKET" \
+    --service-region "$VOICEKIT_RAILWAY_SERVICE_REGION" \
+    --bucket-region "$VOICEKIT_RAILWAY_BUCKET_REGION" \
+    --rollback-created \
+    --yes \
+    --json
+)
+```
+
+Verify deletion order is domain, bucket, Postgres service, application
+service, then project. Do not run rollback on an adopted or production
+resource set.
+
 ## P4.1 full soak and live rolling drain
 
 The credential-free chaos, drain, two-backend fencing, and bounded soak gate is
@@ -1275,6 +1415,6 @@ confirm:
    event; and
 5. both terminal deliveries are acknowledged or visibly dead-lettered.
 
-Repeat the same target invariant for Railway after P4.3 lands. No target row is
-green until the authenticated deployment and active-call replacement actually
-run.
+Run the P4.3 Railway paid-call/redeploy procedure immediately above for its
+target row. No target row is green until the authenticated deployment and
+active-call replacement actually run.
