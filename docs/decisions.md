@@ -363,3 +363,32 @@ These choices apply the documented proposals authorized in the build mandate and
 - Keep object credentials entirely in the target secret store or workload
   identity. The resource ledger records only bucket/resource identifiers and
   non-secret configuration.
+
+## 2026-07-28 — Results-service process and callback ownership
+
+- Keep the Fly companion free of both runtime dependencies. The
+  `voicekit[companion]` extra contains managed storage plus carrier callback
+  verification/download dependencies; native Pipecat and LiveKit workers
+  remain separate deploy artifacts.
+- Use two bounded Postgres pools, one for repository work and one for the relay
+  journal. Validate their combined maximum against an explicit database
+  connection budget before opening either.
+- Make the target preflight rollback-only for database evidence: exercise the
+  actual calls/events schema, advance generation 1→2, reject the stale writer,
+  and insert one terminal event inside a forced-rollback transaction. Object
+  preflight writes and deletes exactly one checksummed probe.
+- Keep `/healthz` unsigned but make it liveness/drain-only. The only admission
+  readiness is the signed relay response covering repository, journal, object
+  storage, protocol, and replica admission state.
+- Install no carrier callback routes by default. An explicit
+  `VOICEKIT_CALLBACK_PROVIDERS` list installs both signed status and recording
+  endpoints for those carriers. Answer/media endpoints remain on the cloud
+  worker.
+- Let a verified carrier status callback update only the latest durable
+  provider observation, never call ownership. On an expired worker lease,
+  recovery advances the fence and maps terminal provider truth; missing or
+  non-terminal truth becomes `recovery_unknown` instead of invented success.
+- Move the recording ingestion implementation to the runtime-neutral results
+  package, retaining the Pipecat import as a compatibility alias. The durable
+  companion and local Pipecat host now share the exact download, object-write,
+  ready-event, bearer-access, and rotation logic.

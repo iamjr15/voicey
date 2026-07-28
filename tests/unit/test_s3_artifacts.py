@@ -167,7 +167,11 @@ async def test_s3_transport_failures_are_catalogued() -> None:
         ("Bad_Bucket", None, ""),
         ("192.168.1.1", None, ""),
         ("voicekit-artifacts", "http://objects.example.test", ""),
-        ("voicekit-artifacts", "https://user:secret@objects.example.test", ""),
+        (
+            "voicekit-artifacts",
+            "https://user:secret@objects.example.test",  # pragma: allowlist secret
+            "",
+        ),  # pragma: allowlist secret
         ("voicekit-artifacts", "https://objects.example.test/path", ""),
         ("voicekit-artifacts", None, "../escape"),
     ],
@@ -219,14 +223,14 @@ def test_s3_builds_the_installed_client_with_explicit_security_settings(
         endpoint_url="https://objects.example.test",
         region_name="auto",
         access_key_id="access-id",
-        secret_access_key="secret-value",
+        secret_access_key="secret-value",  # pragma: allowlist secret
         force_path_style=True,
     )
 
     assert store.bucket == "voicekit-artifacts"
     assert captured[0].session_kwargs == {
         "aws_access_key_id": "access-id",
-        "aws_secret_access_key": "secret-value",
+        "aws_secret_access_key": "secret-value",  # pragma: allowlist secret
     }
     assert captured[0].client_kwargs["endpoint_url"] == "https://objects.example.test"
     assert captured[0].client_kwargs["region_name"] == "auto"

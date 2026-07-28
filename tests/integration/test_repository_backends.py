@@ -99,6 +99,9 @@ async def test_repository_backend_contract(backend: str, tmp_path: Path) -> None
             lease_ttl=timedelta(seconds=30),
             now=now,
         )
+        assert call.provider_call_id is not None
+        await repository.record_provider_observation(call.provider_call_id, "active")
+        assert await repository.get_provider_state(call.call_id) == "active"
         await repository.append_timeline(
             call.call_id,
             TimelineEvent(event_type="runtime.admitted", occurred_at=now),

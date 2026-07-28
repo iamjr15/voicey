@@ -21,6 +21,7 @@ from voicekit.storage.models import (
     DeliveryClaim,
     DeliveryRecord,
     PersistedEvent,
+    ProviderCallState,
     PurgeItem,
     RecordingReady,
     RecordingSnapshot,
@@ -879,6 +880,68 @@ class SQLiteRepository(SQLiteCallRecordStore):
         rows = list(await cursor.fetchall())
         await cursor.close()
         return tuple(str(row["call_id"]) for row in rows)
+
+    async def get_provider_state(self, call_id: str) -> str | None:
+        """Return the latest fenced or authenticated provider observation."""
+        row = await _fetch_one(
+            self._connection(),
+            "SELECT last_provider_state FROM calls WHERE call_id = ?",
+            (call_id,),
+        )
+        if row is None:
+            raise VoicekitError("VK-OBS-003", detail=call_id)
+        value = row["last_provider_state"]
+        return None if value is None else str(value)
+
+    async def record_provider_observation(
+        self,
+        provider_call_id: str,
+        state: ProviderCallState,
+    ) -> None:
+        """Persist carrier-authenticated truth without granting lifecycle ownership."""
+        if not provider_call_id or state not in {"active", "completed", "failed", "unknown"}:
+            raise VoicekitError("VK-RES-008", detail="provider observation is invalid.")
+        database = self._connection()
+        async with self._write_lock:
+            try:
+                await database.execute("BEGIN IMMEDIATE")
+                cursor = await database.execute(
+                    """
+                    UPDATE calls
+                    SET last_provider_state = ?, updated_at = ?
+                    WHERE status = 'active'
+                      AND (call_id = ? OR provider_call_id = ?)
+                    """,
+                    (
+                        state,
+                        _iso(datetime.now(UTC)),
+                        provider_call_id,
+                        provider_call_id,
+                    ),
+                )
+                changed = cursor.rowcount
+                await cursor.close()
+                if changed == 0:
+                    row = await _fetch_one(
+                        database,
+                        """
+                        SELECT status FROM calls
+                        WHERE call_id = ? OR provider_call_id = ?
+                        """,
+                        (provider_call_id, provider_call_id),
+                    )
+                    if row is None:
+                        raise VoicekitError("VK-OBS-003", detail=provider_call_id)
+                await database.commit()
+            except VoicekitError:
+                await database.rollback()
+                raise
+            except sqlite3.Error as exc:
+                await database.rollback()
+                raise VoicekitError(
+                    "VK-RES-008",
+                    detail="provider observation could not be persisted.",
+                ) from exc
 
     async def current_relay_lease(self, call_id: str) -> CallLease:
         """Return current ownership for relay retry recovery and fencing checks."""

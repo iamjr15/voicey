@@ -54,6 +54,14 @@ cloud = [
     "boto3>=1.40,<2",
     "psycopg[binary,pool]>=3.2.10,<4",
 ]
+companion = [
+    "boto3>=1.40,<2",
+    "cryptography>=49,<50",
+    "plivo==4.61.0",
+    "psycopg[binary,pool]>=3.2.10,<4",
+    "python-multipart>=0.0.22,<1",
+    "twilio==9.10.9",
+]
 
 [project.scripts]
 voicekit = "voicekit.cli.app:app"
@@ -148,7 +156,9 @@ markers = [
 [tool.coverage.run]
 omit = [
   "src/voicekit/_p0/*",
-  # Required Postgres 17 CI covers these optional managed backends separately.
+  # Required Postgres 17 CI covers these optional managed surfaces separately.
+  "src/voicekit/deploy/managed.py",
+  "src/voicekit/deploy/results_service.py",
   "src/voicekit/relay/postgres.py",
   "src/voicekit/storage/postgres.py",
 ]

@@ -12,6 +12,7 @@ from voicekit.storage.models import (
     DeliveryClaim,
     DeliveryRecord,
     PersistedEvent,
+    ProviderCallState,
     PurgeItem,
     RecordingReady,
     RecordingSnapshot,
@@ -124,6 +125,14 @@ class StorageRepository(Protocol):
     ) -> tuple[DeliveryRecord, ...]: ...
 
     async def list_stale_calls(self, *, now: datetime | None = None) -> tuple[str, ...]: ...
+
+    async def get_provider_state(self, call_id: str) -> str | None: ...
+
+    async def record_provider_observation(
+        self,
+        provider_call_id: str,
+        state: ProviderCallState,
+    ) -> None: ...
 
     async def get_call(self, call_id: str) -> CallRecord: ...
 

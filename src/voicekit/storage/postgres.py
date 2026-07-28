@@ -34,6 +34,7 @@ from voicekit.storage.models import (
     DeliveryClaim,
     DeliveryRecord,
     PersistedEvent,
+    ProviderCallState,
     PurgeItem,
     RecordingReady,
     RecordingSnapshot,
@@ -1160,6 +1161,62 @@ class PostgresRepository:
             )
             rows = list(await cursor.fetchall())
         return tuple(str(row["call_id"]) for row in rows)
+
+    async def get_provider_state(self, call_id: str) -> str | None:
+        """Return the latest fenced or authenticated provider observation."""
+        row = await self._fetch_one(
+            "SELECT last_provider_state FROM calls WHERE call_id = %s",
+            (call_id,),
+        )
+        if row is None:
+            raise VoicekitError("VK-OBS-003", detail=call_id)
+        value = row["last_provider_state"]
+        return None if value is None else str(value)
+
+    async def record_provider_observation(
+        self,
+        provider_call_id: str,
+        state: ProviderCallState,
+    ) -> None:
+        """Persist carrier-authenticated truth without granting lifecycle ownership."""
+        if not provider_call_id or state not in {"active", "completed", "failed", "unknown"}:
+            raise VoicekitError("VK-RES-008", detail="provider observation is invalid.")
+        try:
+            async with self._pool.connection() as connection, connection.transaction():
+                cursor = await connection.execute(
+                    """
+                    UPDATE calls
+                    SET last_provider_state = %s, updated_at = %s
+                    WHERE status = 'active'
+                      AND (call_id = %s OR provider_call_id = %s)
+                    RETURNING status
+                    """,
+                    (
+                        state,
+                        datetime.now(UTC),
+                        provider_call_id,
+                        provider_call_id,
+                    ),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    existing = await _connection_fetch_one(
+                        connection,
+                        """
+                        SELECT status FROM calls
+                        WHERE call_id = %s OR provider_call_id = %s
+                        """,
+                        (provider_call_id, provider_call_id),
+                    )
+                    if existing is None:
+                        raise VoicekitError("VK-OBS-003", detail=provider_call_id)
+        except VoicekitError:
+            raise
+        except psycopg.Error as exc:
+            raise VoicekitError(
+                "VK-RES-008",
+                detail="provider observation could not be persisted.",
+            ) from exc
 
     async def current_relay_lease(self, call_id: str) -> CallLease:
         row = await self._fetch_one(

@@ -165,15 +165,36 @@ class RepositoryRelayBackend:
         journal: RelayJournal,
         *,
         fences: FenceSigner,
+        readiness_checks: tuple[Callable[[], Awaitable[bool]], ...] = (),
     ) -> None:
         self.repository = repository
         self.journal = journal
         self.fences = fences
+        self._readiness_checks = readiness_checks
+        self._accepting = True
+
+    @property
+    def accepting(self) -> bool:
+        """Whether this replica may acknowledge new call ownership."""
+        return self._accepting
 
     async def ready(self) -> bool:
-        return await self.repository.ready() and await self.journal.ready()
+        if not self._accepting:
+            return False
+        if not await self.repository.ready() or not await self.journal.ready():
+            return False
+        for check in self._readiness_checks:
+            if not await check():
+                return False
+        return True
+
+    def begin_drain(self) -> None:
+        """Fail readiness and reject new ownership while in-flight updates finish."""
+        self._accepting = False
 
     async def begin(self, request: RelayBeginRequest, request_hash: str) -> RelayLeaseResponse:
+        if not self._accepting:
+            raise VoicekitError("VK-REL-002", detail="relay is draining.")
         cached = await self.journal.reserve_request(
             idempotency_key=request.idempotency_key,
             request_hash=request_hash,
@@ -211,6 +232,8 @@ class RepositoryRelayBackend:
         return response
 
     async def claim(self, request: RelayClaimRequest, request_hash: str) -> RelayLeaseResponse:
+        if not self._accepting:
+            raise VoicekitError("VK-REL-002", detail="relay is draining.")
         cached = await self.journal.reserve_request(
             idempotency_key=request.idempotency_key,
             request_hash=request_hash,
@@ -391,6 +414,16 @@ def create_relay_app(
         status = 503 if exc.code in {"VK-REL-002", "VK-REL-006"} else 409
         if exc.code in {"VK-REL-003", "VK-REL-004"}:
             status = 401
+        elif exc.code in {"VK-RUN-007", "VK-WEB-004"}:
+            status = 403
+        elif exc.code == "VK-TEL-001":
+            status = 404
+        elif exc.code == "VK-TEL-008":
+            status = 400
+        elif exc.code == "VK-TEL-009":
+            status = 503
+        elif exc.code in {"VK-OBS-003", "VK-RES-009", "VK-RES-010"}:
+            status = 404
         return JSONResponse(
             status_code=status,
             content={

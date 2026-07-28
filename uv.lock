@@ -4524,6 +4524,14 @@ cloud = [
     { name = "boto3" },
     { name = "psycopg", extra = ["binary", "pool"] },
 ]
+companion = [
+    { name = "boto3" },
+    { name = "cryptography" },
+    { name = "plivo" },
+    { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "python-multipart" },
+    { name = "twilio" },
+]
 livekit = [
     { name = "livekit-agents", extra = ["anthropic", "cartesia", "deepgram", "elevenlabs", "google", "openai", "silero"] },
     { name = "livekit-api" },
@@ -4568,6 +4576,8 @@ dev = [
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22,<1" },
     { name = "boto3", marker = "extra == 'cloud'", specifier = ">=1.40,<2" },
+    { name = "boto3", marker = "extra == 'companion'", specifier = ">=1.40,<2" },
+    { name = "cryptography", marker = "extra == 'companion'", specifier = ">=49,<50" },
     { name = "cryptography", marker = "extra == 'telnyx'", specifier = ">=49,<50" },
     { name = "fastapi", specifier = ">=0.138,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
@@ -4576,10 +4586,13 @@ requires-dist = [
     { name = "livekit-api", marker = "extra == 'livekit'", specifier = "==1.2.0" },
     { name = "ngrok", marker = "extra == 'tunnel'", specifier = "==1.4.0" },
     { name = "pipecat-ai", extras = ["anthropic", "cartesia", "deepgram", "evals", "google", "webrtc", "websocket"], marker = "extra == 'pipecat'", specifier = "==1.6.0" },
+    { name = "plivo", marker = "extra == 'companion'", specifier = "==4.61.0" },
     { name = "plivo", marker = "extra == 'plivo'", specifier = "==4.61.0" },
     { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'cloud'", specifier = ">=3.2.10,<4" },
+    { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'companion'", specifier = ">=3.2.10,<4" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pydantic-settings", specifier = ">=2.12,<3" },
+    { name = "python-multipart", marker = "extra == 'companion'", specifier = ">=0.0.22,<1" },
     { name = "python-multipart", marker = "extra == 'plivo'", specifier = ">=0.0.22,<1" },
     { name = "python-multipart", marker = "extra == 'telnyx'", specifier = ">=0.0.22,<1" },
     { name = "python-multipart", marker = "extra == 'twilio'", specifier = ">=0.0.22,<1" },
@@ -4587,13 +4600,14 @@ requires-dist = [
     { name = "questionary", specifier = "==2.1.1" },
     { name = "rich", specifier = ">=13.9.4,<16" },
     { name = "structlog", specifier = ">=25.5,<26" },
+    { name = "twilio", marker = "extra == 'companion'", specifier = "==9.10.9" },
     { name = "twilio", marker = "extra == 'twilio'", specifier = "==9.10.9" },
     { name = "typer", specifier = "==0.27.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.40,<1" },
     { name = "watchfiles", specifier = ">=1.1,<2" },
     { name = "websockets", specifier = ">=13.1,<17" },
 ]
-provides-extras = ["pipecat", "livekit", "twilio", "telnyx", "vobiz", "plivo", "tunnel", "cloud"]
+provides-extras = ["pipecat", "livekit", "twilio", "telnyx", "vobiz", "plivo", "tunnel", "cloud", "companion"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -92,6 +92,14 @@ terminalization, and recording ready/failed state. Delivery claims, retention,
 and stale-call recovery stay on the durable companion; cloud-worker
 credentials do not receive those repository operations.
 
+Carrier status and recording callbacks terminate on the companion when their
+provider is explicitly configured. Carrier-native signatures are verified
+before a status observation is persisted or recording bytes are downloaded.
+Those observations never grant a lifecycle fence. If a worker lease expires,
+recovery takes a new generation and reconciles the latest authenticated
+observation; missing or non-terminal truth becomes `recovery_unknown`, never a
+fabricated success.
+
 The relay verifies the cryptographic fence and compares its owner/generation
 with durable repository state before it reserves or applies an update.
 Observation inserts repeat safely through an operation id bound to call id and
@@ -142,3 +150,6 @@ The complete P3.5 gate additionally requires the Postgres repository and
 object store, the Fly results-service companion, both cloud deployment
 wrappers, external-relay validation, persistence invariants, and real cloud
 smokes where credentials are available.
+
+The process-level companion contract and environment are documented in
+`docs/deploy/fly-companion.md`.

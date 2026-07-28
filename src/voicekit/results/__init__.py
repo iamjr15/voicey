@@ -8,6 +8,7 @@ from voicekit.results.recorder import (
     set_outcome,
 )
 from voicekit.results.recovery import (
+    DurableProviderObservationReconciler,
     ProviderReconciler,
     ProviderReconciliation,
     RecoveryCoordinator,
@@ -24,6 +25,7 @@ __all__ = [
     "CallResultBuffer",
     "DeliveryRun",
     "DeliveryWorker",
+    "DurableProviderObservationReconciler",
     "ProviderReconciler",
     "ProviderReconciliation",
     "RecoveryCoordinator",

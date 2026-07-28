@@ -8,10 +8,17 @@ write through the authenticated results relay.
 
 ## Install and configure
 
-Install the managed adapters with the cloud extra:
+Install repository/object adapters alone with the cloud extra:
 
 ```bash
 pip install 'voicekit[cloud]'
+```
+
+For the executable results companion, install the companion extra. It adds the
+carrier-signature/download dependencies without installing Pipecat or LiveKit:
+
+```bash
+pip install 'voicekit[companion]'
 ```
 
 The resolved P3 implementation uses Psycopg 3 with `psycopg_pool` and boto3.
@@ -21,11 +28,13 @@ secrets or workload identity, never in `voicekit.jsonc`, generated artifacts,
 or the resource ledger.
 
 ```python
+import os
+
 from voicekit.storage.postgres import PostgresRepository
 from voicekit.storage.s3 import S3ArtifactStore
 
 repository = PostgresRepository(
-    "postgresql://user:password@host/database",  # load from a secret
+    os.environ["VOICEKIT_DATABASE_URL"],
     min_size=1,
     max_size=10,
 )
@@ -88,7 +97,8 @@ docker run --rm --name voicekit-postgres-p35 \
   -e POSTGRES_PASSWORD=voicekit-test \
   -e POSTGRES_DB=voicekit \
   -p 55432:5432 -d postgres:17-alpine
-VOICEKIT_TEST_POSTGRES_DSN='postgresql://voicekit:voicekit-test@127.0.0.1:55432/voicekit' \
+TEST_DB_AUTH='voicekit:voicekit-test'
+VOICEKIT_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicekit" \
   uv run pytest -q --no-cov \
   tests/integration/test_repository_backends.py \
   tests/integration/test_postgres_repository.py
@@ -98,6 +108,16 @@ docker stop voicekit-postgres-p35
 The suite verifies observation parity, terminal/outbox atomicity, duplicate
 terminal collapse, generation fencing, delivery claim exclusivity, retention,
 signed relay operation, migration locking/checksums, and schema rejection.
+
+`tests/integration/test_managed_results_service.py` additionally runs the
+target preflight against the actual Postgres schema under forced rollback and
+proves that no synthetic rows survive:
+
+```bash
+TEST_DB_AUTH='voicekit:voicekit-test'
+VOICEKIT_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicekit" \
+  uv run pytest -q --no-cov tests/integration/test_managed_results_service.py
+```
 
 For a real AWS S3, Tigris, R2, or MinIO-compatible bucket, use the guarded
 command in `docs/GAPS.md`. The probe creates and removes only one object under

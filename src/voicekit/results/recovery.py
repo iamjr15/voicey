@@ -29,6 +29,75 @@ class ProviderReconciler(Protocol):
     async def reconcile(self, call: CallRecord) -> ProviderReconciliation: ...
 
 
+class ProviderObservationRepository(Protocol):
+    """Repository read needed to reconcile the last durable provider observation."""
+
+    async def get_provider_state(self, call_id: str) -> str | None: ...
+
+
+class DurableProviderObservationReconciler:
+    """Normalize the latest authenticated provider observation after a crash.
+
+    Active observations are preserved only while their worker lease is valid.
+    Once recovery owns an expired generation, a non-terminal or unknown
+    observation becomes ``unknown`` so the call cannot remain silently active.
+    """
+
+    _ACTIVE = frozenset(
+        {
+            "active",
+            "answered",
+            "connected",
+            "in-progress",
+            "in_progress",
+            "initiated",
+            "queued",
+            "ringing",
+        }
+    )
+    _COMPLETED = frozenset(
+        {
+            "complete",
+            "completed",
+            "disconnected",
+            "ended",
+            "hangup",
+        }
+    )
+    _FAILED = frozenset(
+        {
+            "busy",
+            "canceled",
+            "cancelled",
+            "error",
+            "failed",
+            "no-answer",
+            "no_answer",
+        }
+    )
+
+    def __init__(self, repository: ProviderObservationRepository) -> None:
+        self._repository = repository
+
+    async def reconcile(self, call: CallRecord) -> ProviderReconciliation:
+        """Map one durable observation without inventing provider success."""
+        raw = await self._repository.get_provider_state(call.call_id)
+        normalized = "" if raw is None else raw.strip().casefold()
+        if normalized in self._COMPLETED:
+            return ProviderReconciliation(
+                state="completed",
+                ended_reason="provider_hangup",
+            )
+        if normalized in self._FAILED:
+            return ProviderReconciliation(
+                state="failed",
+                ended_reason="provider_error",
+            )
+        if normalized in self._ACTIVE or not normalized:
+            return ProviderReconciliation(state="unknown")
+        return ProviderReconciliation(state="unknown")
+
+
 @dataclass(frozen=True, slots=True)
 class RecoveryRun:
     """Outcome counts for a bounded stale-call sweep."""

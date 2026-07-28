@@ -111,11 +111,13 @@ jobs:
       - name: Install uv
         run: python -m pip install uv==0.11.7
       - name: Sync locked managed-backend environment
-        run: uv sync --frozen --extra cloud
-      - name: Managed backend contract and strict coverage
+        run: uv sync --frozen --extra companion
+      - name: Managed backend and results-service strict coverage
         run: |
           uv run pytest -q -o addopts='' \
             --strict-config --strict-markers \
+            --cov=voicekit.deploy.managed \
+            --cov=voicekit.deploy.results_service \
             --cov=voicekit.storage.postgres \
             --cov=voicekit.relay.postgres \
             --cov=voicekit.storage.s3 \
@@ -123,6 +125,8 @@ jobs:
             --cov-branch \
             --cov-report=term-missing \
             --cov-fail-under=90 \
+            tests/unit/test_results_service_runtime.py \
+            tests/integration/test_managed_results_service.py \
             tests/integration/test_postgres_repository.py \
             tests/integration/test_repository_backends.py \
             tests/unit/test_s3_artifacts.py
