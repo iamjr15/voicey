@@ -488,3 +488,25 @@ These choices apply the documented proposals authorized in the build mandate and
 - During drain, preserve only reservations already exposed to callers. Reject
   every new browser reservation and unreserved SIP job with `VK-RUN-008` before
   invoking the native runtime drain.
+
+## 2026-07-28 — Metrics and tracing boundary
+
+- Keep the metric registry process-local and label it only by runtime, agent,
+  latency kind, and stable error-catalog code. Call ids and all customer/tool
+  payloads are prohibited from metric labels.
+- Expose Prometheus on a dedicated listener, loopback by default. This keeps
+  carrier/browser routes unchanged and gives the process one identical
+  lifecycle on Pipecat, LiveKit, Docker, and the managed companion.
+- Treat `voicekit_calls_total` as the call-rate source; operators use PromQL
+  `rate()` rather than a second periodically sampled gauge.
+- Use the stable OpenTelemetry Python 1.39 OTLP/HTTP protobuf API with a local
+  `TracerProvider`, `BatchSpanProcessor`, and explicit shutdown. Do not replace
+  an embedding application's global provider.
+- Initialize exporter configuration before admission and recreate it after a
+  worker-process PID change. A bad endpoint/header/bind fails with
+  `VK-OBS-006`; an unavailable collector after successful startup follows the
+  SDK's asynchronous retry/drop behavior and cannot break terminal
+  persistence.
+- Keep OTLP attributes to opaque ids and bounded operational metadata.
+  Transcript text, telephone identifiers, tool arguments/results, exception
+  messages, and auth headers never enter spans.

@@ -55,6 +55,13 @@ An error not represented here is a product bug. The CLI reports it as
 
 **Fix:** Choose a result limit from 1 through 1000.
 
+## VK-OBS-006
+
+**Cause:** Prometheus or OTLP observability could not be configured or served.
+
+**Fix:** Correct the observability endpoint, header env, bind address, or port
+and retry before accepting calls.
+
 ## VK-SEC-001
 
 **Cause:** A protected local path has unsafe permissions.

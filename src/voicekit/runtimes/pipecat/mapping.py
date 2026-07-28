@@ -29,6 +29,12 @@ class PipecatPolicy:
     end_call_phrases: tuple[str, ...]
     fallback_language: str | None
     record: bool
+    prometheus_enabled: bool = False
+    prometheus_bind: str = "127.0.0.1"
+    prometheus_port: int = 9464
+    prometheus_path: str = "/metrics"
+    otlp_endpoint: str | None = None
+    otlp_headers_env: str | None = None
 
     @classmethod
     def from_agent(cls, agent: Agent) -> PipecatPolicy:
@@ -44,6 +50,12 @@ class PipecatPolicy:
             end_call_phrases=tuple(agent.behavior.end_call_phrases),
             fallback_language=agent.voice.fallback_language,
             record=bool(agent.phone and agent.phone.record),
+            prometheus_enabled=agent.observability.prometheus_enabled,
+            prometheus_bind=agent.observability.prometheus_bind,
+            prometheus_port=agent.observability.prometheus_port,
+            prometheus_path=agent.observability.prometheus_path,
+            otlp_endpoint=agent.observability.otlp_endpoint,
+            otlp_headers_env=agent.observability.otlp_headers_env,
         )
 
 
@@ -118,5 +130,35 @@ PIPECAT_CONFIG_MAPPINGS: tuple[ConfigMapping, ...] = (
         "carrier live-call recording command plus signed callback parsing "
         "and authenticated download",
         "test_config_field_mapping[pipecat-phone.record]",
+    ),
+    ConfigMapping(
+        "observability.prometheus_enabled",
+        "process-local TelemetryServer enabled explicitly",
+        "test_config_field_mapping[pipecat-observability.prometheus_enabled]",
+    ),
+    ConfigMapping(
+        "observability.prometheus_bind",
+        "uvicorn metrics listener host",
+        "test_config_field_mapping[pipecat-observability.prometheus_bind]",
+    ),
+    ConfigMapping(
+        "observability.prometheus_port",
+        "uvicorn metrics listener port",
+        "test_config_field_mapping[pipecat-observability.prometheus_port]",
+    ),
+    ConfigMapping(
+        "observability.prometheus_path",
+        "Prometheus ASGI exposition route",
+        "test_config_field_mapping[pipecat-observability.prometheus_path]",
+    ),
+    ConfigMapping(
+        "observability.otlp_endpoint",
+        "fork-safe OTLPSpanExporter with BatchSpanProcessor",
+        "test_config_field_mapping[pipecat-observability.otlp_endpoint]",
+    ),
+    ConfigMapping(
+        "observability.otlp_headers_env",
+        "secret OTLP headers loaded from the named environment variable",
+        "test_config_field_mapping[pipecat-observability.otlp_headers_env]",
     ),
 )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Literal
 
@@ -15,6 +16,8 @@ from voicekit.config.catalog import (
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 from voicekit.results.signing import WebhookSigner
+
+_HTTP_HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 
 class ConfigIssue(BaseModel):
@@ -98,6 +101,27 @@ def collect_config_issues(
         key_owners[agent.results.previous_secret_env] = (  # pragma: allowlist secret
             "webhook"
         )
+    otlp_headers_env = agent.observability.otlp_headers_env
+    if otlp_headers_env is not None:
+        value = environ.get(otlp_headers_env)
+        if not value:
+            issues.append(
+                ConfigIssue(
+                    code="VK-CFG-105",
+                    path=f"env.{otlp_headers_env}",
+                    message=f"{otlp_headers_env} is missing.",
+                    fix=f"Inject {otlp_headers_env} in the process secret environment.",
+                )
+            )
+        elif not _valid_otlp_headers(value):
+            issues.append(
+                ConfigIssue(
+                    code="VK-CFG-107",
+                    path=f"env.{otlp_headers_env}",
+                    message=f"{otlp_headers_env} is not a valid OTLP header list.",
+                    fix="Use comma-separated HTTP name=value pairs and rotate the value.",
+                )
+            )
     for env_name, owner in sorted(key_owners.items()):
         if not environ.get(env_name):
             issues.append(
@@ -128,6 +152,21 @@ def collect_config_issues(
             )
 
     return tuple(issues)
+
+
+def _valid_otlp_headers(value: str) -> bool:
+    items = value.split(",")
+    if not items:
+        return False
+    for item in items:
+        name, separator, header_value = item.partition("=")
+        if (
+            not separator
+            or not _HTTP_HEADER_NAME.fullmatch(name.strip())
+            or not header_value.strip()
+        ):
+            return False
+    return True
 
 
 def validate_agent_config(

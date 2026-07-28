@@ -10,15 +10,19 @@ from voicekit.obs.records import (
     ToolCallObservation,
     TranscriptTurn,
 )
+from voicekit.obs.telemetry import InstrumentedRepository, Telemetry, TelemetryServer
 
 __all__ = [
     "CallRecord",
+    "InstrumentedRepository",
     "LatencyMetric",
     "LatencySample",
     "LatencySeries",
     "LatencySummary",
     "NewCall",
     "SQLiteCallRecordStore",
+    "Telemetry",
+    "TelemetryServer",
     "TimelineEvent",
     "ToolCallObservation",
     "TranscriptTurn",

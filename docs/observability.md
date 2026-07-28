@@ -94,3 +94,82 @@ repository operation.
 
 Next step after diagnosing a call: use `voicekit calls show <call-id>` once the
 P1.3 pull surface is installed.
+
+## Prometheus
+
+Prometheus export is explicit and disabled by default:
+
+```python
+from voicekit import Observability
+
+observability = Observability(prometheus_enabled=True)
+```
+
+Both runtime hosts then serve a dedicated
+`http://127.0.0.1:9464/metrics` listener. Configure
+`prometheus_bind`, `prometheus_port`, and `prometheus_path` only when the
+collector topology requires it. Do not route the endpoint through public
+carrier or browser ingress. A Docker collector can share the application
+network and use `prometheus_bind="0.0.0.0"` without publishing the port. The
+Fly companion generator does this automatically and emits Fly's native
+`[metrics]` stanza.
+
+The stable metric surface is:
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `voicekit_active_calls` | gauge | `runtime`, `agent` | currently admitted process-local calls |
+| `voicekit_calls_total` | counter | `runtime`, `agent` | durably admitted calls |
+| `voicekit_errors_total` | counter | `runtime`, `agent`, `code` | failures by bounded `VK-*` catalog code |
+| `voicekit_results_dlq_depth` | gauge | `runtime`, `agent` | current durable dead-letter count |
+| `voicekit_turn_latency_ms` | histogram | `runtime`, `agent`, `metric` | STT/LLM/TTS/e2e latency |
+
+Call and error rates are derived without another unbounded metric:
+
+```promql
+rate(voicekit_calls_total[5m])
+rate(voicekit_errors_total[5m])
+```
+
+No call id, telephone number, transcript, tool arguments, or result value is a
+metric label.
+
+## OTLP tracing
+
+One configuration line enables batched OTLP/HTTP protobuf traces:
+
+```python
+observability = Observability(
+    otlp_endpoint="https://collector.example/v1/traces",
+)
+```
+
+Voicekit uses the pinned OpenTelemetry Python SDK and HTTP exporter. It creates
+one server-kind `voicekit.call` root span and `voicekit.turn` /
+`voicekit.tool` child spans. Attributes are bounded to stable ids, runtime,
+channel, direction, provider, role, tool name, status, and duration. Protected
+payloads and exception messages are excluded.
+
+For authenticated collectors, keep the header value in the environment:
+
+```python
+observability = Observability(
+    otlp_endpoint="https://collector.example/v1/traces",
+    otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+)
+```
+
+`VOICEKIT_OTLP_HEADERS` uses `name=value,name2=value2` syntax. It is parsed
+only while constructing the exporter and is never emitted. Exporters are
+initialized before admission, recreated safely in LiveKit job processes, and
+force-flushed during graceful shutdown.
+
+Run the real loopback wire gate:
+
+```bash
+uv run python tests/verification/run_p4_observability_gate.py
+```
+
+It starts actual Prometheus and OTLP HTTP listeners for both runtime labels,
+checks active/terminal/error/DLQ/latency samples, receives protobuf spans, and
+scans both outputs for protected transcript and tool payloads.

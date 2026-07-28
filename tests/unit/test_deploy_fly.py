@@ -228,6 +228,10 @@ def test_fly_plan_and_artifacts_enforce_managed_topology(tmp_path: Path) -> None
     assert 'VOICEKIT_STORAGE_BACKEND = "postgres"' in config
     assert 'VOICEKIT_ARTIFACT_BACKEND = "s3"' in config
     assert 'VOICEKIT_CALLBACK_PROVIDERS = "twilio"' in config
+    assert 'VOICEKIT_PROMETHEUS_ENABLED = "1"' in config
+    assert 'VOICEKIT_PROMETHEUS_BIND = "0.0.0.0"' in config
+    assert '[metrics]\n  port = 9464\n  path = "/metrics"' in config
+    assert "EXPOSE 8080 9464" in dockerfile
     assert "min_machines_running = 2" in config
     assert 'path = "/healthz"' in config
     assert "VOICEKIT_RELAY_CREDENTIAL" not in config

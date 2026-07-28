@@ -15,10 +15,13 @@ from types import FrameType
 from typing import cast
 
 import uvicorn
+from pydantic import ValidationError
 
+from voicekit.config.models import Observability
 from voicekit.deploy.managed import ManagedPersistenceReport, managed_persistence_preflight
 from voicekit.errors import VoicekitError
 from voicekit.obs.logging import configure_logging, get_logger
+from voicekit.obs.telemetry import InstrumentedRepository, Telemetry, TelemetryServer
 from voicekit.relay.auth import RelayCredential, RelayKeyring
 from voicekit.relay.companion import (
     CompanionMaintenance,
@@ -79,6 +82,7 @@ class ResultsServiceSettings:
     drain_grace_s: float
     owner_id: str
     callback_providers: tuple[CallbackProvider, ...]
+    observability: Observability
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str]) -> ResultsServiceSettings:
@@ -117,6 +121,33 @@ class ResultsServiceSettings:
         owner = environment.get("VOICEKIT_RESULTS_OWNER", "").strip()
         if not owner:
             owner = f"results-{socket.gethostname()}-{os.getpid()}"
+        try:
+            observability = Observability(
+                prometheus_enabled=_flag(environment, "VOICEKIT_PROMETHEUS_ENABLED"),
+                prometheus_bind=environment.get(
+                    "VOICEKIT_PROMETHEUS_BIND",
+                    "127.0.0.1",
+                ),
+                prometheus_port=_integer(
+                    environment,
+                    "VOICEKIT_PROMETHEUS_PORT",
+                    default=9464,
+                ),
+                prometheus_path=environment.get(
+                    "VOICEKIT_PROMETHEUS_PATH",
+                    "/metrics",
+                ),
+                otlp_endpoint=environment.get("VOICEKIT_OTLP_ENDPOINT") or None,
+                otlp_headers_env=(
+                    environment.get("VOICEKIT_OTLP_HEADERS_ENV")
+                    or ("VOICEKIT_OTLP_HEADERS" if "VOICEKIT_OTLP_HEADERS" in environment else None)
+                ),
+            )
+        except ValidationError as exc:
+            raise VoicekitError(
+                "VK-OBS-006",
+                detail="the results-service observability environment is invalid.",
+            ) from exc
         settings = cls(
             public_base=_required(environment, "VOICEKIT_PUBLIC_BASE"),
             database_url=_required_any(
@@ -150,6 +181,7 @@ class ResultsServiceSettings:
             callback_providers=parse_callback_providers(
                 environment.get("VOICEKIT_CALLBACK_PROVIDERS", "")
             ),
+            observability=observability,
         )
         CompanionSettings(
             public_base=settings.public_base,
@@ -222,11 +254,21 @@ async def run_results_service(
             storage_backend=settings.storage_backend,
             artifact_backend=settings.artifact_backend,
         )
-        companion_repository = cast("CompanionRepository", repository)
+        telemetry = Telemetry(
+            agent_name="results-service",
+            runtime="companion",
+            settings=settings.observability,
+            environment=values,
+        )
+        instrumented_repository = InstrumentedRepository(repository, telemetry)
+        if settings.observability.prometheus_enabled:
+            await instrumented_repository.refresh_dlq_depth()
+        companion_repository = cast("CompanionRepository", instrumented_repository)
+        telemetry_server = TelemetryServer(telemetry)
         recording_runtime = _build_recording_runtime(
             settings,
             values,
-            repository=repository,
+            repository=cast("PostgresRepository", instrumented_repository),
             artifacts=artifacts,
         )
         service = CompanionService(
@@ -252,6 +294,7 @@ async def run_results_service(
         )
         _log_preflight(report)
         try:
+            await telemetry_server.start()
             await _supervise(
                 service,
                 maintenance,
@@ -261,6 +304,7 @@ async def run_results_service(
             )
         finally:
             await maintenance.close()
+            await telemetry_server.stop()
             recording_runtime.close()
 
 

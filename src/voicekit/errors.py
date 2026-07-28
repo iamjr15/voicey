@@ -57,6 +57,11 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="The requested call-record query is outside safe limits.",
         fix="Choose a result limit from 1 through 1000.",
     ),
+    "VK-OBS-006": ErrorDefinition(
+        code="VK-OBS-006",
+        cause="Prometheus or OTLP observability could not be configured or served.",
+        fix="Correct the observability endpoint, header env, bind address, or port and retry.",
+    ),
     "VK-SEC-001": ErrorDefinition(
         code="VK-SEC-001",
         cause="A protected local path has unsafe permissions.",

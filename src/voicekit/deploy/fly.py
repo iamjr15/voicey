@@ -982,7 +982,7 @@ ENV PATH="/opt/voicekit/bin:$PATH" \\
     PYTHONUNBUFFERED="1" \\
     PYTHONDONTWRITEBYTECODE="1"
 USER 10001:10001
-EXPOSE 8080
+EXPOSE 8080 9464
 CMD ["python", "-m", "voicekit.deploy.results_service"]
 """
 
@@ -1003,6 +1003,10 @@ def _fly_config(plan: FlyPlan) -> str:
         "VOICEKIT_DB_POOL_MAX": "5",
         "VOICEKIT_DB_CONNECTION_BUDGET": "20",
         "VOICEKIT_DRAIN_GRACE_S": "20",
+        "VOICEKIT_PROMETHEUS_ENABLED": "1",
+        "VOICEKIT_PROMETHEUS_BIND": "0.0.0.0",
+        "VOICEKIT_PROMETHEUS_PORT": "9464",
+        "VOICEKIT_PROMETHEUS_PATH": "/metrics",
         "PORT": "8080",
     }
     environment = "\n".join(
@@ -1039,6 +1043,10 @@ kill_timeout = 45
     method = "GET"
     path = "/healthz"
     timeout = "5s"
+
+[metrics]
+  port = 9464
+  path = "/metrics"
 
 [[vm]]
   size = "shared-cpu-1x"

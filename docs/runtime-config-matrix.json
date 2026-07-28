@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "pipecat_version": "1.6.0",
   "livekit_version": "1.6.7",
   "rows": [
@@ -100,6 +100,48 @@
       "pipecat_test": "test_config_field_mapping[pipecat-phone.record]",
       "livekit": "AgentSession.start(record=...) plus provider recording reconciliation",
       "livekit_test": "test_config_field_mapping[livekit-phone.record]"
+    },
+    {
+      "field": "observability.prometheus_enabled",
+      "pipecat": "process-local TelemetryServer enabled explicitly",
+      "pipecat_test": "test_config_field_mapping[pipecat-observability.prometheus_enabled]",
+      "livekit": "parent AgentServer process-local TelemetryServer enabled explicitly",
+      "livekit_test": "test_config_field_mapping[livekit-observability.prometheus_enabled]"
+    },
+    {
+      "field": "observability.prometheus_bind",
+      "pipecat": "uvicorn metrics listener host",
+      "pipecat_test": "test_config_field_mapping[pipecat-observability.prometheus_bind]",
+      "livekit": "uvicorn metrics listener host",
+      "livekit_test": "test_config_field_mapping[livekit-observability.prometheus_bind]"
+    },
+    {
+      "field": "observability.prometheus_port",
+      "pipecat": "uvicorn metrics listener port",
+      "pipecat_test": "test_config_field_mapping[pipecat-observability.prometheus_port]",
+      "livekit": "uvicorn metrics listener port",
+      "livekit_test": "test_config_field_mapping[livekit-observability.prometheus_port]"
+    },
+    {
+      "field": "observability.prometheus_path",
+      "pipecat": "Prometheus ASGI exposition route",
+      "pipecat_test": "test_config_field_mapping[pipecat-observability.prometheus_path]",
+      "livekit": "Prometheus ASGI exposition route",
+      "livekit_test": "test_config_field_mapping[livekit-observability.prometheus_path]"
+    },
+    {
+      "field": "observability.otlp_endpoint",
+      "pipecat": "fork-safe OTLPSpanExporter with BatchSpanProcessor",
+      "pipecat_test": "test_config_field_mapping[pipecat-observability.otlp_endpoint]",
+      "livekit": "job-process fork-safe OTLPSpanExporter with BatchSpanProcessor",
+      "livekit_test": "test_config_field_mapping[livekit-observability.otlp_endpoint]"
+    },
+    {
+      "field": "observability.otlp_headers_env",
+      "pipecat": "secret OTLP headers loaded from the named environment variable",
+      "pipecat_test": "test_config_field_mapping[pipecat-observability.otlp_headers_env]",
+      "livekit": "secret OTLP headers loaded from the named environment variable",
+      "livekit_test": "test_config_field_mapping[livekit-observability.otlp_headers_env]"
     }
   ]
 }

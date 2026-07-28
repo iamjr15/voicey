@@ -8,7 +8,7 @@ from typing import Any, cast
 import pytest
 from livekit.agents.inference import TurnDetector
 
-from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Voice, Web
+from voicekit import Agent, Behavior, Limits, Models, Observability, Phone, Results, Voice, Web
 from voicekit.config.models import RuntimeName
 from voicekit.runtimes.livekit.mapping import (
     LIVEKIT_CONFIG_MAPPINGS,
@@ -62,6 +62,14 @@ def _agent(runtime: RuntimeName) -> Agent:
             silence_hangup_s=12,
             daily_spend_alert_usd=4.25,
         ),
+        observability=Observability(
+            prometheus_enabled=True,
+            prometheus_bind="127.0.0.2",
+            prometheus_port=9465,
+            prometheus_path="/internal/metrics",
+            otlp_endpoint="https://collector.example.test/v1/traces",
+            otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+        ),
         behavior=Behavior(
             allow_interruptions=False,
             voicemail="leave_message",
@@ -105,6 +113,12 @@ def test_config_field_mapping(runtime: RuntimeName, field: str) -> None:
         "behavior.end_call_phrases": "end_call_phrases",
         "voice.fallback_language": "fallback_language",
         "phone.record": "record",
+        "observability.prometheus_enabled": "prometheus_enabled",
+        "observability.prometheus_bind": "prometheus_bind",
+        "observability.prometheus_port": "prometheus_port",
+        "observability.prometheus_path": "prometheus_path",
+        "observability.otlp_endpoint": "otlp_endpoint",
+        "observability.otlp_headers_env": "otlp_headers_env",
     }[field]
     expected: object = {
         "limits.max_duration_s": 90,
@@ -118,6 +132,12 @@ def test_config_field_mapping(runtime: RuntimeName, field: str) -> None:
         "behavior.end_call_phrases": ("finish now",),
         "voice.fallback_language": "es",
         "phone.record": True,
+        "observability.prometheus_enabled": True,
+        "observability.prometheus_bind": "127.0.0.2",
+        "observability.prometheus_port": 9465,
+        "observability.prometheus_path": "/internal/metrics",
+        "observability.otlp_endpoint": "https://collector.example.test/v1/traces",
+        "observability.otlp_headers_env": "VOICEKIT_OTLP_HEADERS",
     }[field]
     assert getattr(policy, attribute) == expected
 
@@ -133,7 +153,7 @@ def test_config_matrix_is_complete_versioned_and_matches_runtime_sources() -> No
     document = json.loads((ROOT / "docs" / "runtime-config-matrix.json").read_text())
     rows = document["rows"]
 
-    assert document["schema_version"] == 2
+    assert document["schema_version"] == 3
     assert document["pipecat_version"] == version("pipecat-ai")
     assert document["livekit_version"] == version("livekit-agents")
     assert [row["field"] for row in rows] == list(FIELDS)

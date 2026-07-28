@@ -169,6 +169,24 @@ self-hosted runner and `docs/GAPS.md` retains the exact 24-hour and live
 rolling-deploy commands. The credential-free full suite passed 991 tests with
 40 honest live skips at 90.05% branch coverage.
 
+**P4.2 checkpoint complete locally 2026-07-28:** a runtime-neutral,
+process-local Prometheus registry now exposes bounded call-rate, active-call,
+stable error-code, result-DLQ, and per-turn latency series on a separately
+bound, loopback-default listener. Optional OTLP/HTTP tracing exports only
+bounded call, turn, and tool metadata; exporter headers are read indirectly
+from a named environment variable, and neither protected transcript nor tool
+payload data enters labels or spans. The repository decorator observes only
+successful durable mutations, refreshes DLQ depth after delivery state
+changes, and initializes exporters before admission. Pipecat, LiveKit,
+container, managed-results, and Fly lifecycles are wired with fork-safe trace
+providers and deterministic flush/shutdown. Both runtime mappings cover all
+six observability fields. The actual loopback verification accepted two OTLP
+protobuf requests totaling 1,995 bytes, exposed both runtime metric sets, and
+passed the protected-payload scan. Ruff, formatting, strict pyright, and the
+full suite are green: 1,019 passed, 40 honest live skips, 90.11% branch
+coverage. Operator contract: `docs/observability.md`; exact gate:
+`uv run python tests/verification/run_p4_observability_gate.py`.
+
 ## Verification approach
 
 Per-phase exit = that phase's slice of spec §17, mechanized: quickstart e2e script (fresh venv → talking agent, timed); audio-path latency harness with hard budgets (p50 + p95); webhook-invariant chaos suite (kill provider WS mid-call, tool timeouts, process crash/SIGKILL, dual sweepers, fenced late writers — always exactly one terminal event, delivery attempted until acknowledged or visibly dead-lettered); carrier certification pytest suites (nightly live, incl. §5.3 audio rig); parity + config-mapping matrix CI (P2+); wizard/flag-twin/`--json` coverage tests; tunneled-admin negative test; deploy-target scripted e2e with smoke call + persistence preflight + rolling-generation test; docs quickstarts executed in CI. Manual gates per phase: one real phone call on a physical handset, one full wizard run by a human, `doctor` run on a broken-on-purpose machine.

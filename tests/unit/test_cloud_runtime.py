@@ -271,7 +271,8 @@ async def test_pipecat_cloud_session_runs_native_worker_and_closes_relay(
 
     class FakeBuilder:
         def __init__(self, selected_repository: object, **_kwargs: object) -> None:
-            assert selected_repository is repository
+            assert isinstance(selected_repository, cloud_runtime.InstrumentedRepository)
+            assert selected_repository.repository is repository
 
         def build(self, **kwargs: object) -> FakeSession:
             assert kwargs["sample_rate"] == 16000

@@ -18,6 +18,7 @@ from livekit.plugins import silero
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 from voicekit.obs.records import Channel, Direction, NewCall, TimelineEvent
+from voicekit.obs.telemetry import InstrumentedRepository, Telemetry, TelemetryServer
 from voicekit.runtimes.livekit.lifecycle import (
     LiveKitCall,
     LiveKitCallLifecycle,
@@ -200,12 +201,16 @@ class LiveKitHost:
         recording_reconciler_factory: (
             Callable[[LiveKitRepository], LiveKitRecordingReconciler] | None
         ) = None,
+        telemetry: Telemetry | None = None,
     ) -> None:
         if agent.runtime != "livekit":
             raise VoicekitError("VK-RUN-001", detail="LiveKitHost requires runtime='livekit'.")
         self.agent = agent
         self.repository_factory = repository_factory
         self.settings = settings or LiveKitHostSettings()
+        self.telemetry = telemetry or Telemetry.from_agent(agent)
+        self.telemetry_server = TelemetryServer(self.telemetry)
+        self._job_calls: dict[str, str] = {}
         self.gate = LiveKitAdmissionGate(
             agent.limits.max_concurrent,
             reservation_ttl_s=self.settings.browser_reservation_ttl_s,
@@ -231,24 +236,37 @@ class LiveKitHost:
         metadata = _metadata(request.job.metadata)
         call_id = metadata.get("call_id") or f"lk_{request.id}"
         if not await self.gate.admit(request.id, call_id):
+            self.telemetry.record_error("VK-RUN-004")
             await request.reject(terminate=True)
             return
-        await request.accept(
-            identity=f"voicekit-{self.agent.name}",
-            name=self.agent.name,
-            metadata=json.dumps(
-                {"call_id": call_id},
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
-        )
+        try:
+            await request.accept(
+                identity=f"voicekit-{self.agent.name}",
+                name=self.agent.name,
+                metadata=json.dumps(
+                    {"call_id": call_id},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        except Exception:
+            await self.gate.release(request.id)
+            self.telemetry.record_error("VK-RUN-006")
+            raise
+        self.telemetry.admit_call(call_id)
+        self._job_calls[request.id] = call_id
 
     async def on_session_end(self, context: JobContext) -> None:
         await self.gate.release(context.job.id)
+        call_id = self._job_calls.pop(context.job.id, None)
+        if call_id is None:
+            metadata = _metadata(getattr(context.job, "metadata", ""))
+            call_id = metadata.get("call_id") or f"lk_{context.job.id}"
+        self.telemetry.release_call(call_id)
 
     async def entrypoint(self, context: JobContext) -> None:
         """Run one native call and close its fenced lifecycle on every path."""
-        repository = await self.repository_factory()
+        repository = await self._instrumented_repository()
         call = _call_from_context(context)
         admission = AdmissionController(1)
         lifecycle: LiveKitCallLifecycle | None = None
@@ -268,6 +286,21 @@ class LiveKitHost:
                 )
             else:
                 lifecycle = await lifecycle_manager.begin(self.agent, call, lease)
+            if isinstance(repository, InstrumentedRepository):
+                repository.telemetry.begin_call(
+                    NewCall(
+                        call_id=call.call_id,
+                        agent_name=self.agent.name,
+                        runtime="livekit",
+                        channel=call.channel,
+                        direction=call.direction,
+                        provider=call.provider,
+                        provider_call_id=call.provider_call_id,
+                        from_number=call.from_number,
+                        to_number=call.to_number,
+                        config_hash=self.agent.config_hash,
+                    )
+                )
             control = JobCallControl(
                 context,
                 participant_identity=_participant_identity(context),
@@ -381,7 +414,11 @@ class LiveKitHost:
 
     async def run(self, *, devmode: bool = False) -> None:
         """Run the installed AgentServer; ``start`` mode owns SIGTERM drain."""
-        await self.server.run(devmode=devmode)
+        await self.telemetry_server.start()
+        try:
+            await self.server.run(devmode=devmode)
+        finally:
+            await self.telemetry_server.stop()
 
     async def reload_agent(self, agent: Agent, *, restart_runner: bool) -> bool:
         """Apply the next-call revision once process-per-call work is idle."""
@@ -425,6 +462,7 @@ class LiveKitHost:
                 call_id,
                 TimelineEvent(event_type="runtime.reserved"),
             )
+            self.telemetry.admit_call(call_id)
         except Exception:
             await self.gate.release(call_id)
             raise
@@ -457,7 +495,20 @@ class LiveKitHost:
             )
         finally:
             await self.gate.release(call_id)
+            self.telemetry.release_call(call_id)
             await _close_repository(repository)
+
+    async def _instrumented_repository(self) -> LiveKitRepository:
+        repository = await self.repository_factory()
+        telemetry = Telemetry.from_agent(self.agent)
+        return cast(
+            "LiveKitRepository",
+            InstrumentedRepository(
+                repository,
+                telemetry,
+                shutdown_telemetry=True,
+            ),
+        )
 
 
 def _prewarm_process(process: JobProcess) -> None:

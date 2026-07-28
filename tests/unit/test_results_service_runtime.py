@@ -76,6 +76,7 @@ def test_results_service_settings_parse_full_contract_and_error_paths() -> None:
     assert settings.object_force_path_style
     assert settings.callback_providers == ("twilio", "telnyx", "vobiz", "plivo")
     assert settings.keyring().previous is not None
+    assert not settings.observability.prometheus_enabled
 
     defaults = _environment()
     del defaults["VOICEKIT_RESULTS_OWNER"]
@@ -94,6 +95,26 @@ def test_results_service_settings_parse_full_contract_and_error_paths() -> None:
         with pytest.raises(VoicekitError) as caught:
             runtime.ResultsServiceSettings.from_environment(invalid)
         assert caught.value.code == "VK-DEP-003"
+
+    invalid_metrics = {
+        **environment,
+        "VOICEKIT_PROMETHEUS_ENABLED": "1",
+        "VOICEKIT_PROMETHEUS_PORT": "70000",
+    }
+    with pytest.raises(VoicekitError) as metrics:
+        runtime.ResultsServiceSettings.from_environment(invalid_metrics)
+    assert metrics.value.code == "VK-OBS-006"
+
+    enabled_metrics = {
+        **environment,
+        "VOICEKIT_PROMETHEUS_ENABLED": "1",
+        "VOICEKIT_PROMETHEUS_BIND": "0.0.0.0",
+        "VOICEKIT_OTLP_ENDPOINT": "https://collector.example.test/v1/traces",
+    }
+    observed = runtime.ResultsServiceSettings.from_environment(enabled_metrics).observability
+    assert observed.prometheus_enabled
+    assert observed.prometheus_bind == "0.0.0.0"
+    assert observed.otlp_endpoint == "https://collector.example.test/v1/traces"
 
     missing = dict(environment)
     del missing["VOICEKIT_PUBLIC_BASE"]

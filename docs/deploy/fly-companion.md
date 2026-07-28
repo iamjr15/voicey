@@ -125,6 +125,12 @@ Configure these values through Fly secrets, not a checked-in environment file:
 | `VOICEKIT_STORAGE_BACKEND` | Must be `postgres` |
 | `VOICEKIT_ARTIFACT_BACKEND` | Must be `s3` |
 | `VOICEKIT_CALLBACK_PROVIDERS` | Explicit comma list of carrier callback routes to install |
+| `VOICEKIT_PROMETHEUS_ENABLED` | `1` in generated deployments |
+| `VOICEKIT_PROMETHEUS_BIND` | `0.0.0.0` for Fly's private scraper |
+| `VOICEKIT_PROMETHEUS_PORT` | Dedicated metrics port; generated value `9464` |
+| `VOICEKIT_PROMETHEUS_PATH` | Generated value `/metrics` |
+| `VOICEKIT_OTLP_ENDPOINT` | Optional HTTPS OTLP/HTTP traces endpoint |
+| `VOICEKIT_OTLP_HEADERS` | Optional secret `name=value` header list |
 | `PORT` | Public listener port; defaults to `8080` |
 
 `VOICEKIT_CALLBACK_PROVIDERS` has no default provider. Each selected carrier
@@ -135,6 +141,13 @@ Install only the providers used by the deployed agents.
 The repository and relay journal use separate pools. The default maximum is
 five connections each. `VOICEKIT_DB_CONNECTION_BUDGET` defaults to 20 and
 startup rejects a pair of pools that exceeds it.
+
+Generated `fly.toml` contains Fly's native `[metrics]` stanza for port 9464 and
+path `/metrics`; that port is not part of the public HTTP service. The
+companion reports relay-owned active calls, stable error-code counts, durable
+DLQ depth, and latency histograms. Set `VOICEKIT_OTLP_ENDPOINT` through target
+configuration to add PII-safe call/turn/tool spans; keep any collector auth in
+the Fly secret `VOICEKIT_OTLP_HEADERS`.
 
 ## Startup preflight
 

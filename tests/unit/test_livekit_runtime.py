@@ -375,6 +375,12 @@ def test_livekit_policy_uses_consolidated_turn_handling_and_complete_matrix() ->
         "behavior.end_call_phrases",
         "voice.fallback_language",
         "phone.record",
+        "observability.prometheus_enabled",
+        "observability.prometheus_bind",
+        "observability.prometheus_port",
+        "observability.prometheus_path",
+        "observability.otlp_endpoint",
+        "observability.otlp_headers_env",
     }
 
 

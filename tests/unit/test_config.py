@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Voice, Web
+from voicekit import Agent, Behavior, Limits, Models, Observability, Phone, Results, Voice, Web
 from voicekit.config import (
     DEFAULT_PROVIDER_CATALOG,
     ManifestState,
@@ -163,6 +163,26 @@ def test_agent_rejects_local_callable_tools_with_a_fix() -> None:
             "Fix: lower silence",
         ),
         (
+            lambda: Observability(prometheus_bind="metrics.internal"),
+            "Fix: use 127.0.0.1",
+        ),
+        (
+            lambda: Observability(prometheus_port=70000),
+            "Fix: choose an available",
+        ),
+        (
+            lambda: Observability(prometheus_path="/metrics/"),
+            "Fix: use a path",
+        ),
+        (
+            lambda: Observability(otlp_endpoint="http://collector.example.test/v1/traces"),
+            "Fix: use HTTPS remotely",
+        ),
+        (
+            lambda: Observability(otlp_headers_env="OTLP_HEADERS"),
+            "requires otlp_endpoint",
+        ),
+        (
             lambda: Behavior(transfer_number="1234"),
             "Fix: use '+' followed",
         ),
@@ -189,6 +209,43 @@ def test_web_origins_and_phrase_lists_are_normalized() -> None:
 
     assert web.allowed_origins == ["https://example.test"]
     assert behavior.end_call_phrases == ["goodbye", "bye now"]
+
+
+def test_observability_is_off_by_default_and_otlp_is_one_line() -> None:
+    defaults = _agent().observability
+    enabled = Observability(
+        otlp_endpoint="https://collector.example.test/v1/traces",
+    )
+
+    assert not defaults.prometheus_enabled
+    assert defaults.otlp_endpoint is None
+    assert enabled.otlp_endpoint == "https://collector.example.test/v1/traces"
+
+
+def test_otlp_header_secret_is_validated_without_serializing_its_value() -> None:
+    agent = _agent(
+        observability=Observability(
+            otlp_endpoint="https://collector.example.test/v1/traces",
+            otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+        )
+    )
+    missing = collect_config_issues(agent, environ=_valid_environment())
+    malformed = collect_config_issues(
+        agent,
+        environ=_valid_environment() | {"VOICEKIT_OTLP_HEADERS": "not-a-header"},
+    )
+    valid = collect_config_issues(
+        agent,
+        environ=_valid_environment() | {"VOICEKIT_OTLP_HEADERS": "authorization=Bearer test-only"},
+    )
+
+    assert any(
+        issue.code == "VK-CFG-105" and issue.path == "env.VOICEKIT_OTLP_HEADERS"
+        for issue in missing
+    )
+    assert any(issue.code == "VK-CFG-107" for issue in malformed)
+    assert not any(issue.path == "env.VOICEKIT_OTLP_HEADERS" for issue in valid)
+    assert "Bearer test-only" not in json.dumps(agent.model_dump(mode="json"))
 
 
 def test_catalog_exposes_runtime_language_auth_and_idempotency_facts() -> None:

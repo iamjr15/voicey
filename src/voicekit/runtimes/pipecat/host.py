@@ -34,6 +34,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
+from voicekit.obs.telemetry import InstrumentedRepository, Telemetry, TelemetryServer
 from voicekit.runtimes.pipecat.admission import AdmissionController, AdmissionLease
 from voicekit.runtimes.pipecat.flows import TransferHandler, WarmTransferHandler
 from voicekit.runtimes.pipecat.lifecycle import (
@@ -433,6 +434,7 @@ class PipecatHost:
         session_builder: PipecatSessionBuilder | None = None,
         web_sessions: WebSessionAuthorizer | None = None,
         recording_handler: RecordingHandler | None = None,
+        telemetry: Telemetry | None = None,
     ) -> None:
         if agent.runtime != "pipecat":
             raise VoicekitError("VK-RUN-001", detail="PipecatHost requires runtime='pipecat'.")
@@ -466,7 +468,10 @@ class PipecatHost:
                 detail="web signaling requires the P1.9 scoped session authorizer.",
             )
         self.agent = agent
-        self.repository = repository
+        self.telemetry = telemetry or Telemetry.from_agent(agent)
+        self.telemetry_server = TelemetryServer(self.telemetry)
+        instrumented = InstrumentedRepository(repository, self.telemetry)
+        self.repository = cast("PipecatRepository", instrumented)
         self.settings = settings
         self.twilio = twilio
         self.telnyx = telnyx
@@ -507,7 +512,7 @@ class PipecatHost:
         else:
             self.target = self.twilio_target
         self.admission = AdmissionController(agent.limits.max_concurrent)
-        self.lifecycle = PipecatLifecycleManager(repository, self.admission)
+        self.lifecycle = PipecatLifecycleManager(self.repository, self.admission)
         self.runner_host = LongLivedRunner(runner)
         self.request_handler = request_handler or SmallWebRTCRequestHandler()
         transfer_handler: TransferHandler | None = None
@@ -526,7 +531,7 @@ class PipecatHost:
                 timeout_s=settings.warm_transfer_timeout_s,
             )
         self.session_builder = session_builder or PipecatSessionBuilder(
-            repository,
+            self.repository,
             transfer_handler=transfer_handler,
             warm_transfer_handler=warm_transfer_handler,
             warm_transfer_timeout_s=settings.warm_transfer_timeout_s,
@@ -711,6 +716,7 @@ class PipecatHost:
             ):
                 await asyncio.to_thread(self.twilio.recover_warm_transfers)
             await self.runner_host.start()
+            await self.telemetry_server.start()
             try:
                 yield
             finally:
@@ -718,6 +724,7 @@ class PipecatHost:
                 await self.runner_host.stop()
                 if self._session_tasks:
                     await asyncio.gather(*self._session_tasks, return_exceptions=True)
+                await self.telemetry_server.stop()
 
         app = FastAPI(title=f"voicekit:{self.agent.name}", lifespan=lifespan)
 
@@ -726,6 +733,7 @@ class PipecatHost:
             _request: Request,
             error: VoicekitError,
         ) -> JSONResponse:
+            self.telemetry.record_error(error.code)
             status = {
                 "VK-RUN-004": 429,
                 "VK-RUN-008": 503,

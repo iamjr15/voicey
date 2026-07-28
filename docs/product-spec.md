@@ -67,7 +67,17 @@ Packaging: single distribution `voicekit` with extras — `voicekit[pipecat]`, `
 Pydantic models; typed code is canonical, serializes to JSON (the wire/storage form; what tests diff and a future UI edits). Full schema:
 
 ```python
-from voicekit import Agent, Models, Voice, Phone, Web, Results, Limits, Behavior
+from voicekit import (
+    Agent,
+    Behavior,
+    Limits,
+    Models,
+    Observability,
+    Phone,
+    Results,
+    Voice,
+    Web,
+)
 
 agent = Agent(
     name="clinic-front-desk",                       # [a-z0-9-], unique per deploy
@@ -119,6 +129,13 @@ agent = Agent(
         max_concurrent=20,                          # admission control per instance
         silence_hangup_s=30,
         daily_spend_alert_usd=None,
+    ),
+
+    observability=Observability(
+        prometheus_enabled=False,                  # true → loopback :9464/metrics
+        # One line enables PII-safe call/turn/tool OTLP spans:
+        otlp_endpoint=None,                        # e.g. https://collector/v1/traces
+        otlp_headers_env=None,                     # optional comma-separated headers
     ),
 
     behavior=Behavior(
@@ -429,8 +446,19 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 - **Structured JSON logs** (call_id-correlated) with a human-pretty dev renderer; levels documented; no PII at info level.
 - **Per-call record** (repository-backed SQLite or Postgres): config_hash, timeline, transcript, tool calls, latency series, terminal reason, webhook delivery status.
 - **Latency instrumentation** per subsystem per turn (STT partial/final, LLM TTFT, TTS TTFB, mouth-to-ear e2e) — powers playground badges, test budgets, and the smoke report.
-- **Prometheus endpoint** (opt-in): active calls, call rate, error rate by code, DLQ depth, latency histograms.
-- Optional OTLP export (spans per call/turn/tool) — off by default, one config line to enable.
+- **Prometheus endpoint** (opt-in): `voicekit_active_calls`,
+  `voicekit_calls_total` (call rate via PromQL `rate()`),
+  `voicekit_errors_total{code}`, `voicekit_results_dlq_depth`, and
+  `voicekit_turn_latency_ms` histograms. It is a separate listener, binds
+  loopback by default, carries no transcript/tool payloads, and is enabled with
+  `Observability(prometheus_enabled=True)`.
+- Optional OTLP/HTTP protobuf export (one root span per call and child spans per
+  turn/tool) is off by default. One config line,
+  `Observability(otlp_endpoint="https://collector.example/v1/traces")`, enables
+  it. Span attributes contain stable ids, runtime/provider, role/tool name,
+  status, and durations only—never transcript text, arguments, results,
+  telephone numbers, or secrets. Auth headers are loaded only from the
+  optionally named `otlp_headers_env`.
 
 ---
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 from collections.abc import Callable
@@ -31,6 +32,7 @@ LANGUAGE_PATTERN = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 ENV_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 IMPORT_REFERENCE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_.]*$")
 E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
+METRICS_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9._~/-]*$")
 
 
 class VoicekitModel(BaseModel):
@@ -314,6 +316,100 @@ class Limits(VoicekitModel):
         return self
 
 
+class Observability(VoicekitModel):
+    """Prometheus and OTLP export settings with secret headers kept in env."""
+
+    prometheus_enabled: bool = False
+    prometheus_bind: str = "127.0.0.1"
+    prometheus_port: int = 9464
+    prometheus_path: str = "/metrics"
+    otlp_endpoint: str | None = None
+    otlp_headers_env: str | None = None
+
+    @field_validator("prometheus_bind")
+    @classmethod
+    def valid_metrics_bind(cls, value: str) -> str:
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError as exc:
+            msg = (
+                "observability.prometheus_bind is not an IP address. "
+                "Fix: use 127.0.0.1 by default or an explicit interface address."
+            )
+            raise ValueError(msg) from exc
+
+    @field_validator("prometheus_port")
+    @classmethod
+    def valid_metrics_port(cls, value: int) -> int:
+        if not 1 <= value <= 65535:
+            msg = (
+                "observability.prometheus_port is outside 1-65535. "
+                "Fix: choose an available TCP port."
+            )
+            raise ValueError(msg)
+        return value
+
+    @field_validator("prometheus_path")
+    @classmethod
+    def valid_metrics_path(cls, value: str) -> str:
+        if (
+            not METRICS_PATH_PATTERN.fullmatch(value)
+            or value == "/"
+            or "//" in value
+            or value.endswith("/")
+        ):
+            msg = (
+                "observability.prometheus_path is invalid. "
+                "Fix: use a path such as '/metrics' with no trailing slash."
+            )
+            raise ValueError(msg)
+        return value
+
+    @field_validator("otlp_endpoint")
+    @classmethod
+    def valid_otlp_endpoint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or (parsed.scheme != "https" and not loopback)
+        ):
+            msg = (
+                "observability.otlp_endpoint is not a safe OTLP/HTTP traces endpoint. "
+                "Fix: use HTTPS remotely or HTTP on a loopback collector."
+            )
+            raise ValueError(msg)
+        return value
+
+    @field_validator("otlp_headers_env")
+    @classmethod
+    def valid_headers_env(cls, value: str | None) -> str | None:
+        if value is not None and not ENV_NAME_PATTERN.fullmatch(value):
+            msg = (
+                "observability.otlp_headers_env is not an environment-variable name. "
+                "Fix: use uppercase letters, digits, and underscores."
+            )
+            raise ValueError(msg)
+        return value
+
+    @model_validator(mode="after")
+    def headers_require_export(self) -> Observability:
+        if self.otlp_headers_env is not None and self.otlp_endpoint is None:
+            msg = (
+                "observability.otlp_headers_env requires otlp_endpoint. "
+                "Fix: configure the collector endpoint or remove the header env name."
+            )
+            raise ValueError(msg)
+        return self
+
+
 class Behavior(VoicekitModel):
     """Runtime-mapped conversation and telephony behavior."""
 
@@ -354,6 +450,7 @@ class Agent(VoicekitModel):
     web: Web = Field(default_factory=Web)
     results: Results
     limits: Limits = Field(default_factory=Limits)
+    observability: Observability = Field(default_factory=Observability)
     behavior: Behavior = Field(default_factory=Behavior)
 
     @field_validator("name")

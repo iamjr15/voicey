@@ -18,6 +18,7 @@ from voicekit.config.manifest import ManifestStore, ProjectManifest
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 from voicekit.obs.logging import configure_logging, get_logger
+from voicekit.obs.telemetry import InstrumentedRepository, Telemetry, TelemetryServer
 from voicekit.relay.auth import RelayCredential
 from voicekit.relay.client import RelayClient
 
@@ -116,17 +117,27 @@ async def run_pipecat_cloud_session(
     from pipecat.workers.runner import WorkerRunner
 
     from voicekit.runtimes.pipecat.admission import AdmissionController
-    from voicekit.runtimes.pipecat.lifecycle import PipecatLifecycleManager
+    from voicekit.runtimes.pipecat.lifecycle import (
+        PipecatLifecycleManager,
+        PipecatRepository,
+    )
     from voicekit.runtimes.pipecat.session import PipecatSessionBuilder
 
-    repository = RelayClient(settings.relay_url, settings.relay_credential)
+    raw_repository = RelayClient(settings.relay_url, settings.relay_credential)
+    telemetry = Telemetry.from_agent(agent, environment=values)
+    telemetry_server = TelemetryServer(telemetry)
+    repository = cast(
+        "PipecatRepository",
+        InstrumentedRepository(raw_repository, telemetry),
+    )
     lifecycle: Any | None = None
     session: Any | None = None
     wait_task: asyncio.Task[object] | None = None
     transfer: _CloudTransfer | None = None
     try:
         # This happens before the transport consumes/accepts a caller handshake.
-        await repository.open()
+        await raw_repository.open()
+        await telemetry_server.start()
         transport, call = await _pipecat_transport_and_call(
             runner_args,
             manifest=manifest,
@@ -177,7 +188,8 @@ async def run_pipecat_cloud_session(
         finally:
             if transfer is not None:
                 transfer.close()
-            await repository.close()
+            await raw_repository.close()
+            await telemetry_server.stop()
 
 
 async def run_livekit_cloud_worker(

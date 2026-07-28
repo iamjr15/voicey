@@ -152,6 +152,13 @@ voicekit numbers restore <rollback-token> --yes
 
 ## Operational checks
 
+When `agent.observability.prometheus_enabled` is true, the container also
+starts its dedicated metrics listener. Keep the default loopback bind for an
+in-container collector. For a collector on the Compose network, set
+`prometheus_bind="0.0.0.0"` and scrape `agent:9464/metrics`; do not publish that
+port through public carrier/browser ingress. OTLP export needs no additional
+listener and uses the endpoint in `agent.py`.
+
 ```bash
 docker compose -f compose.voicekit.yaml logs --tail 200 agent
 docker compose -f compose.voicekit.yaml exec agent \

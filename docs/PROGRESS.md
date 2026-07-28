@@ -5,9 +5,9 @@ Last updated: 2026-07-28
 ## Current checkpoint
 
 - **Phase:** P4 — hardening, observability, Railway, drift tooling, release, docs, security
-- **Current unit:** P4.2 Prometheus metrics and opt-in OTLP
-- **Next task:** add the runtime-neutral metric registry/export endpoint, wire lifecycle/delivery/runtime observations, and map one-line OTLP configuration to installed OpenTelemetry APIs
-- **Completed:** all P0–P3 numbered units plus P4.1 local automation. P4.1 adds a full dual-runtime terminal-invariant fault matrix, actual SIGKILL, transactional/fencing/sweeper faults, LiveKit admission-first drain, a public bounded soak API, PostgreSQL equivalence, a 30-second CI row, and a self-hosted 24-hour workflow. The exact local aggregate passed; its two-second proof completed 296/296 calls at peak active eight with zero active/FD leaks and bounded heap/RSS growth. The full 24-hour duration and live rolling replacement on every target remain pending-time/pending-live in `docs/GAPS.md`
+- **Current unit:** P4.3 Railway deployment target
+- **Next task:** verify the current Railway CLI/API surface, then implement resumable managed-Postgres provisioning, migration/persistence preflight, deployment, smoke, rolling-generation proof, rollback, docs, and exact pending-live commands
+- **Completed:** all P0–P3 numbered units plus P4.1–P4.2 local automation. P4.2 adds bounded runtime-neutral Prometheus call/error/active/DLQ/latency metrics, a separately bound loopback-default exporter, optional PII-safe OTLP/HTTP call/turn/tool tracing, fork-safe Pipecat/LiveKit lifecycle integration, transactional repository observations, results-service/Fly wiring, and complete cross-runtime config mappings. Its actual loopback gate received two OTLP protobuf requests, exposed both runtime metric sets, and found no protected payload; the full suite passed 1,019 tests with 40 honest live skips at 90.11% branch coverage
 
 ## Gate status
 
@@ -78,6 +78,7 @@ Last updated: 2026-07-28
 | P4.1 bounded soak | green | Two-second local proof: 296/296 terminalized calls, peak active 8, zero active/FD leaks, ~57 KiB retained heap and ~1.9 MiB RSS high-water growth; exact report `.voicekit/verification/p4-short-soak-report.json` |
 | P4.1 full 24-hour soak | pending-time | Self-hosted weekly workflow and exact `--duration-s 86400 --max-concurrent 8` command in `docs/GAPS.md`; a shortened run is never promoted |
 | P4.1 live rolling drain per target | pending-live | Active-call replacement checklist for Docker, Fly, Pipecat Cloud, LiveKit Cloud, and future Railway is exact in `docs/GAPS.md`; requires authenticated targets and paid calls |
+| P4.2 Prometheus and OTLP observability | green | Actual loopback exporters exposed bounded metrics for Pipecat and LiveKit and accepted two OTLP/HTTP protobuf trace requests (1,995 bytes); transcript/tool payload PII scan green; `uv run python tests/verification/run_p4_observability_gate.py`; full suite 1,019 passed/40 honest skips at 90.11% branch coverage |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

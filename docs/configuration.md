@@ -8,7 +8,17 @@ agent workflow.
 ## Complete example
 
 ```python
-from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Voice, Web
+from voicekit import (
+    Agent,
+    Behavior,
+    Limits,
+    Models,
+    Observability,
+    Phone,
+    Results,
+    Voice,
+    Web,
+)
 
 agent = Agent(
     name="clinic-front-desk",
@@ -46,6 +56,11 @@ agent = Agent(
         max_concurrent=20,
         silence_hangup_s=30,
     ),
+    observability=Observability(
+        prometheus_enabled=True,
+        otlp_endpoint="https://collector.example/v1/traces",
+        otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+    ),
     behavior=Behavior(
         allow_interruptions=True,
         voicemail="hangup",
@@ -58,6 +73,14 @@ agent = Agent(
 `tools` accepts either an importable module or an explicit list of importable,
 module-level callables. Conversation functions remain ordinary typed Python
 functions; secret values are never configuration fields.
+
+`Observability()` is off by default. Prometheus uses a separate
+`127.0.0.1:9464/metrics` listener unless its bind/port/path are explicitly
+changed. OTLP is enabled by its endpoint alone; if the collector requires
+authentication, `otlp_headers_env` names an environment variable containing
+comma-separated HTTP headers such as `authorization=Bearer …`. The value is
+never serialized into config, logs, metrics, traces, or deployment ledgers.
+Remote OTLP endpoints must use HTTPS; loopback collectors may use HTTP.
 
 ## Validation
 

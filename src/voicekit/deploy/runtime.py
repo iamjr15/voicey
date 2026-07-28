@@ -14,7 +14,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 
 import uvicorn
@@ -29,6 +29,7 @@ from voicekit.deploy.persistence import (
 )
 from voicekit.errors import VoicekitError
 from voicekit.obs.logging import configure_logging, get_logger
+from voicekit.obs.telemetry import InstrumentedRepository
 from voicekit.playground import (
     OriginPolicy,
     PlaygroundService,
@@ -44,6 +45,7 @@ from voicekit.runtimes.pipecat import (
     PipecatRecordingHandler,
 )
 from voicekit.storage.artifacts import LocalArtifactStore
+from voicekit.storage.repository import StorageRepository
 from voicekit.storage.sqlite import SQLiteRepository
 
 if TYPE_CHECKING:
@@ -330,8 +332,13 @@ async def _serve(
             web_sessions=web_security,
             recording_handler=recording_handler,
         )
+        if agent.observability.prometheus_enabled and isinstance(
+            host.repository,
+            InstrumentedRepository,
+        ):
+            await host.repository.refresh_dlq_depth()
         delivery = DeliveryWorker(
-            repository,
+            cast(StorageRepository, host.repository),
             owner_id=f"docker-{os.getpid()}",
             current_secret=secret,
             previous_secret=previous_secret,

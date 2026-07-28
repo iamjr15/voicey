@@ -258,7 +258,7 @@ jobs:
           if-no-files-found: error
 
   p4-hardening:
-    name: P4 chaos / drain / bounded soak
+    name: P4 hardening / observability
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -297,6 +297,10 @@ jobs:
             --short-soak-s 30 \
             --max-concurrent 8 \
             --report p4-hardening-report.json
+      - name: Run Prometheus and actual OTLP HTTP gate
+        run: |
+          uv run python tests/verification/run_p4_observability_gate.py \
+            --report p4-observability-report.json
       - name: Upload truthful hardening reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -305,6 +309,7 @@ jobs:
           path: |
             p4-hardening-report.json
             p4-short-soak-report.json
+            p4-observability-report.json
           if-no-files-found: error
 
   webhook-interop:
