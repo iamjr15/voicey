@@ -1,13 +1,13 @@
 # Build progress
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## Current checkpoint
 
 - **Phase:** P3 — recipes, additional carriers, live tier, cloud deploys, relay, warm transfer
-- **Current unit:** P3.4 Tier-3 live PSTN loopback
-- **Next task:** implement the fixed-pattern Pipecat live caller and native LiveKit agent-simulator loopback, require explicit paid-call acknowledgements, add nightly scheduling/reporting, and preserve carrier/path evidence without promoting skipped gates
-- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.3. Plivo now has signed, fenced Pipecat Voice API/media handling and deterministic LiveKit Zentrunk provisioning; generic SIP is a LiveKit-only, operator-managed Beta path with explicit transport/media policy. The full suite is 807 passed, 28 honest live skips, 90.03% branch coverage. Credentialed/PSTN/microphone/conversation gates remain pending with exact commands in `docs/GAPS.md`
+- **Current unit:** P3.5 cloud deploys + relay + Fly companion
+- **Next task:** implement the authenticated durable results-relay protocol and repository backends first, then build resumable Fly companion provisioning and the Pipecat Cloud/LiveKit Cloud CLI wrappers, secret sync, cutover, persistence invariants, and paid smoke runbooks
+- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.4. The paid live tier now has native Pipecat/Twilio and LiveKit/SIP caller paths, black-box evidence, fail-before-planning acknowledgement/budget checks, bounded fixtures, and a protected nightly workflow. The full suite is 838 passed, 28 honest live skips, 90.15% branch coverage. No paid call ran because carrier/LiveKit/Anthropic/judge/target credentials are unavailable; exact commands remain pending-live in `docs/GAPS.md`
 
 ## Gate status
 
@@ -61,6 +61,8 @@ Last updated: 2026-07-27
 | P3.3 Plivo account/PSTN certification | pending-live | Exact guarded Pipecat and LiveKit commands plus physical both-path checklist in `docs/GAPS.md`; requires funded Plivo/LiveKit accounts, public target, Zentrunk credentials, and physical endpoints |
 | P3.3 generic SIP local certification | green | LiveKit-only explicit address/CIDR/auth/transport/media mapping, deterministic reuse, duplicate/drift rejection, write-ahead ledger, reverse rollback, local key/config/scaffold/doctor/dev coverage, and operator-ownership boundary are green |
 | P3.3 generic SIP external loopback | pending-live | Exact guarded provision/reuse/rollback and paid-call command plus external PBX/carrier checklist in `docs/GAPS.md`; requires operator-owned route and physical endpoints |
+| P3.4 tier-3 live PSTN local verification | green | Native Pipecat/Twilio and LiveKit/SIP caller construction, exact paid acknowledgment and worst-case call budget before planning, signed callback admission, 8 kHz transport, carrier/runtime evidence, cleanup, one-case fixtures, guarded nightly workflow, JSON/JUnit/CLI integration; full suite 838 passed, 28 honest live skips, 90.15% branch coverage |
+| P3.4 paid Pipecat and LiveKit PSTN loopbacks | pending-live | Exact two-path fixture commands and nightly protected-environment setup in `docs/GAPS.md`; no carrier/LiveKit/Anthropic/judge/target variables are present, so no call was placed |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

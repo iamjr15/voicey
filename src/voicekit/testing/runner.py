@@ -61,10 +61,10 @@ async def run_project_tests(
     environment: dict[str, str] | None = None,
 ) -> SuiteResult:
     """Discover, compile, execute, and strictly report one project's scenarios."""
-    if live:
+    if live and audio:
         raise VoicekitError(
             "VK-TST-003",
-            detail="PSTN loopback is not installed until P3; no lower tier was substituted.",
+            detail="--live and --audio are distinct paid and local tiers; select exactly one.",
         )
     manifest = ManifestStore(root / "voicekit.jsonc").load()
     definitions = discover_scenarios(root)
@@ -79,62 +79,81 @@ async def run_project_tests(
 
     config = load_testing_config(root)
     env = environment if environment is not None else dict(os.environ)
-    planner = SimCaller(OpenAICompatibleClient(config.sim_caller, environment=env))
-    planned: dict[tuple[str, str], tuple[ScenarioTurn, ...]] = {}
-    for definition in definitions:
-        for profile in definition.profiles:
-            planned[(definition.name, profile.name)] = await planner.plan(definition, profile)
-
     active_executor = executor
+    live_executor: Any | None = None
     if active_executor is None:
-        active_executor = (
-            PipecatExecutor(
+        if live:
+            from voicekit.testing.live import build_live_executor
+
+            live_executor = build_live_executor(
                 root,
-                audio=audio,
+                runtime=manifest.runtime,
+                config=config.live,
                 judge=config.judge,
                 environment=env,
+                case_count=sum(len(definition.profiles) for definition in definitions),
             )
-            if manifest.runtime == "pipecat"
-            else LiveKitExecutor(
-                root,
-                audio=audio,
-                judge=config.judge,
-                environment=env,
+            active_executor = live_executor
+        else:
+            active_executor = (
+                PipecatExecutor(
+                    root,
+                    audio=audio,
+                    judge=config.judge,
+                    environment=env,
+                )
+                if manifest.runtime == "pipecat"
+                else LiveKitExecutor(
+                    root,
+                    audio=audio,
+                    judge=config.judge,
+                    environment=env,
+                )
             )
-        )
+    tier = "live" if live else ("audio" if audio else "text")
     cases: list[CaseResult] = []
-    for definition in definitions:
-        for profile in definition.profiles:
-            case_name = f"{definition.name}[{profile.name}]"
-            turns = planned[(definition.name, profile.name)]
-            narrowed = definition.model_copy(update={"profiles": (profile,)})
+    try:
+        planner = SimCaller(OpenAICompatibleClient(config.sim_caller, environment=env))
+        planned: dict[tuple[str, str], tuple[ScenarioTurn, ...]] = {}
+        for definition in definitions:
+            for profile in definition.profiles:
+                planned[(definition.name, profile.name)] = await planner.plan(definition, profile)
 
-            async def run_attempt(
-                attempt: int,
-                *,
-                _name: str = case_name,
-                _definition: ScenarioDefinition = narrowed,
-                _turns: tuple[ScenarioTurn, ...] = turns,
-            ) -> AttemptResult:
-                return await active_executor.execute(
-                    _name,
-                    _definition,
-                    _turns,
-                    attempt=attempt,
-                )
+        for definition in definitions:
+            for profile in definition.profiles:
+                case_name = f"{definition.name}[{profile.name}]"
+                turns = planned[(definition.name, profile.name)]
+                narrowed = definition.model_copy(update={"profiles": (profile,)})
 
-            attempts = await _with_flake_policy(run_attempt)
-            cases.append(
-                CaseResult(
-                    name=case_name,
-                    runtime=manifest.runtime,
-                    tier="audio" if audio else "text",
-                    attempts=attempts,
+                async def run_attempt(
+                    attempt: int,
+                    *,
+                    _name: str = case_name,
+                    _definition: ScenarioDefinition = narrowed,
+                    _turns: tuple[ScenarioTurn, ...] = turns,
+                ) -> AttemptResult:
+                    return await active_executor.execute(
+                        _name,
+                        _definition,
+                        _turns,
+                        attempt=attempt,
+                    )
+
+                attempts = await _with_flake_policy(run_attempt)
+                cases.append(
+                    CaseResult(
+                        name=case_name,
+                        runtime=manifest.runtime,
+                        tier=tier,
+                        attempts=attempts,
+                    )
                 )
-            )
+    finally:
+        if live_executor is not None:
+            await live_executor.aclose()
     return SuiteResult(
         runtime=manifest.runtime,
-        tier="audio" if audio else "text",
+        tier=tier,
         cases=tuple(cases),
     )
 

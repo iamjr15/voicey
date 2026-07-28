@@ -1,0 +1,12 @@
+{
+  schema_version: 1,
+  project_name: "live-pstn-livekit",
+  runtime: "livekit",
+  recipe: {name: "scratch", version: "0.1.0"},
+  channels: ["web"],
+  models: {
+    stt: "deepgram/nova-3",
+    llm: "anthropic/claude-sonnet-5",
+    tts: "cartesia/sonic-3.5",
+  },
+}

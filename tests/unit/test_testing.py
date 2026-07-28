@@ -544,7 +544,13 @@ def test_testing_config_defaults_local_and_validates_cloud(tmp_path: Path) -> No
 
 def test_reporting_preserves_stability_and_junit_failures(tmp_path: Path) -> None:
     failed = AttemptResult(False, ("wrong outcome",), 100, 2)
-    passed = AttemptResult(True, (), 90, 2)
+    passed = AttemptResult(
+        True,
+        (),
+        90,
+        2,
+        evidence={"provider_call_id": "CA-safe-evidence"},
+    )
     case = CaseResult("booking[alex]", "livekit", "text", (failed, passed, passed, passed))
     result = SuiteResult("livekit", "text", (case,))
     payload = json.loads(result_json(result, next_step="voicekit dev"))
@@ -555,6 +561,9 @@ def test_reporting_preserves_stability_and_junit_failures(tmp_path: Path) -> Non
     tree = ElementTree.parse(junit)
     assert tree.getroot().attrib["failures"] == "1"
     assert tree.find(".//failure") is not None
+    evidence = tree.find(".//property[@name='evidence.provider_call_id']")
+    assert evidence is not None
+    assert evidence.attrib["value"] == "CA-safe-evidence"
 
 
 class _FakeExecutor(CaseExecutor):
@@ -579,6 +588,15 @@ class _FakeExecutor(CaseExecutor):
             duration_ms=10,
             turn_count=len(turns),
         )
+
+
+class _ClosableFakeExecutor(_FakeExecutor):
+    def __init__(self, results: list[bool]) -> None:
+        super().__init__(results)
+        self.closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 def _write_project(root: Path) -> None:
@@ -624,7 +642,7 @@ async def test_runner_retries_initial_failure_three_times_and_never_hides_it(
 
 
 @pytest.mark.asyncio
-async def test_runner_passes_once_filters_and_rejects_live_downgrade(
+async def test_runner_passes_once_filters_and_keeps_live_distinct(
     tmp_path: Path,
 ) -> None:
     _write_project(tmp_path)
@@ -632,8 +650,70 @@ async def test_runner_passes_once_filters_and_rejects_live_downgrade(
     result = await run_project_tests(tmp_path, filter_text="hell", executor=executor)
     assert result.passed is True
     assert executor.attempts == [1]
-    with pytest.raises(VoicekitError, match="no lower tier was substituted"):
-        await run_project_tests(tmp_path, live=True, executor=executor)
+    live_executor = _FakeExecutor([True])
+    live_result = await run_project_tests(tmp_path, live=True, executor=live_executor)
+    assert live_result.tier == "live"
+    assert live_result.cases[0].tier == "live"
+    with pytest.raises(VoicekitError, match="distinct paid and local tiers"):
+        await run_project_tests(tmp_path, live=True, audio=True, executor=live_executor)
+
+
+@pytest.mark.asyncio
+async def test_runner_builds_and_closes_default_paid_live_executor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_project(tmp_path)
+    executor = _ClosableFakeExecutor([True])
+    captured: dict[str, object] = {}
+
+    def fake_builder(
+        root: Path,
+        *,
+        runtime: str,
+        config: object,
+        judge: object,
+        environment: Mapping[str, str],
+        case_count: int,
+    ) -> _ClosableFakeExecutor:
+        del config, judge
+        captured.update(
+            root=root,
+            runtime=runtime,
+            environment=environment,
+            case_count=case_count,
+        )
+        return executor
+
+    monkeypatch.setattr("voicekit.testing.live.build_live_executor", fake_builder)
+    result = await run_project_tests(
+        tmp_path,
+        live=True,
+        environment={"VOICEKIT_TEST_SENTINEL": "present"},
+    )
+    assert result.tier == "live"
+    assert captured == {
+        "root": tmp_path,
+        "runtime": "livekit",
+        "environment": {"VOICEKIT_TEST_SENTINEL": "present"},
+        "case_count": 1,
+    }
+    assert executor.closed
+
+
+@pytest.mark.asyncio
+async def test_runner_validates_paid_acknowledgement_before_planning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_project(tmp_path)
+
+    async def unexpected_plan(*_args: object, **_kwargs: object) -> tuple[ScenarioTurn, ...]:
+        raise AssertionError("the planner must not run before paid-call preflight")
+
+    monkeypatch.setattr(SimCaller, "plan", unexpected_plan)
+    with pytest.raises(VoicekitError, match="no paid PSTN call was placed"):
+        await run_project_tests(tmp_path, live=True, environment={})
 
 
 @pytest.mark.asyncio
@@ -1260,22 +1340,23 @@ def test_voicekit_test_cli_json_failure_has_retry_next_step(
         executor: CaseExecutor | None = None,
         environment: dict[str, str] | None = None,
     ) -> SuiteResult:
-        del root, audio, live, executor, environment
+        del root, audio, executor, environment
         assert filter_text == "hello"
+        assert live
         case = CaseResult(
             "hello[default]",
             "livekit",
-            "text",
+            "live",
             (AttemptResult(False, ("wrong outcome",), 12, 1),),
         )
-        return SuiteResult("livekit", "text", (case,))
+        return SuiteResult("livekit", "live", (case,))
 
     monkeypatch.setattr("voicekit.cli.app.run_project_tests", fake_run)
     result = cli_runner.invoke(
         app,
-        ["test", "--filter", "hello", "--report", "json"],
+        ["test", "--filter", "hello", "--live", "--report", "json"],
     )
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
     assert payload["passed"] is False
-    assert payload["next_step"] == "voicekit test --filter hello"
+    assert payload["next_step"] == "voicekit test --filter hello --live"

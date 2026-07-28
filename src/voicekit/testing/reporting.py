@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -17,6 +17,7 @@ class AttemptResult:
     duration_ms: int
     turn_count: int
     transcript: tuple[str, ...] = ()
+    evidence: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +104,12 @@ def write_junit(result: SuiteResult, path: Path) -> Path:
             "property",
             {"name": "stability_percent", "value": f"{case.stability:.1f}"},
         )
+        for key, value in sorted(case.attempts[-1].evidence.items()):
+            ElementTree.SubElement(
+                properties,
+                "property",
+                {"name": f"evidence.{key}", "value": value},
+            )
         if not case.passed:
             failures = [
                 f"attempt {index + 1}: {failure}"

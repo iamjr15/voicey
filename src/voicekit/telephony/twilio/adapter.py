@@ -112,6 +112,11 @@ class TwilioAdapter:
         """Expose durable evidence to CLI reconciliation commands."""
         return self._ledger
 
+    @property
+    def auth_token(self) -> str:
+        """Return the credential only to in-process signed transport builders."""
+        return self._auth_token
+
     def list_numbers(self) -> list[NumberInfo]:
         try:
             resources = self._client.incoming_phone_numbers.list()

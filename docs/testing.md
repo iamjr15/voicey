@@ -50,6 +50,7 @@ line citations; a model that says “pass” without a citation fails.
 voicekit test
 voicekit test --filter change_mind
 voicekit test --audio
+voicekit test --live
 voicekit test --report junit
 voicekit test --report json
 ```
@@ -64,8 +65,9 @@ voicekit test --report json
   `.voicekit/test-runs/`, which the scaffold ignores.
 - Every output ends with a next command. JSON includes `next_step`.
 
-`--live` is deliberately fail-closed until the P3 PSTN loopback harness lands.
-It never substitutes text or local audio while claiming a live result.
+`--live` is a real, paid PSTN tier. It never substitutes text or local audio.
+The command validates its exact acknowledgement, credentials, target, and
+worst-case four-attempt call budget before running even a persona planner.
 
 ## Text and audio tiers
 
@@ -83,6 +85,65 @@ and Moonshine transcribes it for assertions. Audio never falls back to
 Both tiers execute typed tools against their configured real integration or
 the recipe's explicit deterministic stub. Tool calls update the same
 `CallResultBuffer` contract used by production.
+
+## Paid PSTN tier
+
+The live tier deliberately treats the target agent as a black box. It records
+the caller/agent transcript, carrier terminal status, runtime path, carrier
+call id, and runtime call id. The judge sees caller-visible goals and spoken
+outcomes only; hidden target tools or durable target state are not asserted.
+JUnit writes the secret-free facts as `evidence.*` properties.
+
+Pipecat projects run a pinned native `PipelineWorker` caller at the carrier's
+8 kHz PCMU boundary, expose only signed Twilio callback/media routes through
+the selected tunnel, and dial with the durable Twilio intent ledger. LiveKit
+projects create an isolated room, run a pinned native caller `AgentSession`,
+and add the target number with an outbound SIP participant. Both paths use the
+reference Deepgram, Anthropic, and Cartesia models.
+
+Configure only environment-variable references in
+`tests/voicekit-test.jsonc`:
+
+```json5
+{
+  live: {
+    tunnel: "ngrok", // Pipecat only; auto|ngrok|cloudflared|url
+    port: 18765,
+    answer_timeout_s: 45,
+    public_url_env: "VOICEKIT_LIVE_PUBLIC_URL",
+    target_number_env: "VOICEKIT_LIVE_TARGET_NUMBER",
+    twilio_from_number_env: "VOICEKIT_LIVE_TWILIO_FROM",
+    livekit_outbound_trunk_env: "VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID",
+    paid_ack_env: "VOICEKIT_LIVE_PSTN_ACK",
+    max_calls_env: "VOICEKIT_LIVE_PSTN_MAX_CALLS",
+  },
+}
+```
+
+For one selected case, the guarded invocation is:
+
+```bash
+export VOICEKIT_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
+export VOICEKIT_LIVE_PSTN_MAX_CALLS=4
+export VOICEKIT_LIVE_TARGET_NUMBER='+14155550123'
+voicekit test --live --filter live_greeting_smoke --report junit
+```
+
+The call limit must be at least four times the number of selected
+profile-expanded cases because an initial failure is always retained and may
+be rerun three times. It cannot exceed 1000. Pipecat additionally requires
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+`VOICEKIT_LIVE_TWILIO_FROM`, and either a usable tunnel or an HTTPS origin in
+`VOICEKIT_LIVE_PUBLIC_URL`. LiveKit requires `LIVEKIT_URL`,
+`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and
+`VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID`. Both require the three reference-provider
+keys and the configured judge key. Target and Twilio caller numbers must be
+distinct E.164 values.
+
+The repository's nightly workflow remains skipped unless
+`VOICEKIT_LIVE_PSTN_ENABLED=true`. Its protected `paid-pstn` environment must
+also set `VOICEKIT_LIVE_PSTN_ACK` to the exact acknowledgement and provide all
+secrets. A skipped job is not green evidence.
 
 ## Local default and cloud override
 
@@ -122,8 +183,9 @@ Normal CI validates the shared schema, profile expansion, installed native
 parsers, text/audio compilation, LiveKit assertion plans, PCM bridge, exit
 contract, JSON, JUnit, and every first-party recipe suite for both runtimes.
 Credentialed reference-provider execution is a separate guarded gate because
-it spends provider capacity; its exact commands and current evidence are in
-`docs/GAPS.md`.
+it spends provider capacity. The two live callers have a separately guarded
+nightly workflow and bounded one-case fixtures. Exact commands and current
+evidence are in `docs/GAPS.md`.
 
 Next: run `voicekit test`, then fix every hard or cited failure before
 `voicekit dev`.

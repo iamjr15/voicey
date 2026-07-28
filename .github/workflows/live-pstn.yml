@@ -1,0 +1,88 @@
+name: Paid PSTN loopback
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paid-pstn-loopback
+  cancel-in-progress: false
+
+jobs:
+  pipecat-twilio:
+    if: ${{ vars.VOICEKIT_LIVE_PSTN_ENABLED == 'true' }}
+    environment: paid-pstn
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VOICEKIT_LIVE_PSTN_ACK: ${{ vars.VOICEKIT_LIVE_PSTN_ACK }}
+      VOICEKIT_LIVE_PSTN_MAX_CALLS: "4"
+      VOICEKIT_LIVE_TARGET_NUMBER: ${{ secrets.VOICEKIT_LIVE_TARGET_NUMBER }}
+      VOICEKIT_LIVE_TWILIO_FROM: ${{ secrets.VOICEKIT_LIVE_TWILIO_FROM }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+      DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install uv==0.11.7
+      - name: Sync locked live-caller dependencies
+        run: uv sync --frozen --extra pipecat --extra twilio --extra tunnel
+      - name: Run acknowledged Pipecat → Twilio → PSTN loopback
+        working-directory: tests/fixtures/live-pstn-pipecat
+        run: ../../../.venv/bin/voicekit test --live --report junit
+      - name: Upload secret-free carrier evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipecat-twilio-pstn-junit
+          path: tests/fixtures/live-pstn-pipecat/.voicekit/test-results.xml
+          if-no-files-found: warn
+
+  livekit-sip:
+    if: ${{ vars.VOICEKIT_LIVE_PSTN_ENABLED == 'true' }}
+    environment: paid-pstn
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VOICEKIT_LIVE_PSTN_ACK: ${{ vars.VOICEKIT_LIVE_PSTN_ACK }}
+      VOICEKIT_LIVE_PSTN_MAX_CALLS: "4"
+      VOICEKIT_LIVE_TARGET_NUMBER: ${{ secrets.VOICEKIT_LIVE_TARGET_NUMBER }}
+      VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID: ${{ secrets.VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID }}
+      LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+      LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+      LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+      DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install uv==0.11.7
+      - name: Sync locked live-caller dependencies
+        run: uv sync --frozen --extra livekit
+      - name: Run acknowledged LiveKit SIP → PSTN loopback
+        working-directory: tests/fixtures/live-pstn-livekit
+        run: ../../../.venv/bin/voicekit test --live --report junit
+      - name: Upload secret-free carrier evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livekit-sip-pstn-junit
+          path: tests/fixtures/live-pstn-livekit/.voicekit/test-results.xml
+          if-no-files-found: warn

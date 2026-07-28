@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from typing import Any, Literal, TypeAlias, cast
 
@@ -60,11 +61,40 @@ class JudgeConfig(VoicekitModel):
         return self
 
 
+class LiveTestingConfig(VoicekitModel):
+    """Secret-free controls for the paid, black-box PSTN tier."""
+
+    tunnel: Literal["auto", "ngrok", "cloudflared", "url"] = "auto"
+    port: int = Field(default=18765, ge=1024, le=65535)
+    answer_timeout_s: int = Field(default=45, ge=10, le=180)
+    public_url_env: str = "VOICEKIT_LIVE_PUBLIC_URL"
+    target_number_env: str = "VOICEKIT_LIVE_TARGET_NUMBER"
+    twilio_from_number_env: str = "VOICEKIT_LIVE_TWILIO_FROM"
+    livekit_outbound_trunk_env: str = "VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID"
+    paid_ack_env: str = "VOICEKIT_LIVE_PSTN_ACK"
+    max_calls_env: str = "VOICEKIT_LIVE_PSTN_MAX_CALLS"
+
+    @field_validator(
+        "public_url_env",
+        "target_number_env",
+        "twilio_from_number_env",
+        "livekit_outbound_trunk_env",
+        "paid_ack_env",
+        "max_calls_env",
+    )
+    @classmethod
+    def valid_environment_reference(cls, value: str) -> str:
+        if re.fullmatch(r"[A-Z][A-Z0-9_]*", value) is None:
+            raise ValueError("live test environment references must be uppercase names")
+        return value
+
+
 class TestingConfig(VoicekitModel):
     """Secret-free project test configuration."""
 
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
     sim_caller: JudgeConfig = Field(default_factory=JudgeConfig)
+    live: LiveTestingConfig = Field(default_factory=LiveTestingConfig)
 
 
 class ToolExpectation(VoicekitModel):

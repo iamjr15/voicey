@@ -4428,7 +4428,7 @@ requires-dist = [
     { name = "livekit-agents", extras = ["anthropic", "cartesia", "deepgram", "elevenlabs", "google", "openai", "silero"], marker = "extra == 'livekit'", specifier = "==1.6.7" },
     { name = "livekit-api", marker = "extra == 'livekit'", specifier = "==1.2.0" },
     { name = "ngrok", marker = "extra == 'tunnel'", specifier = "==1.4.0" },
-    { name = "pipecat-ai", extras = ["anthropic", "deepgram", "evals", "google", "webrtc", "websocket"], marker = "extra == 'pipecat'", specifier = "==1.6.0" },
+    { name = "pipecat-ai", extras = ["anthropic", "cartesia", "deepgram", "evals", "google", "webrtc", "websocket"], marker = "extra == 'pipecat'", specifier = "==1.6.0" },
     { name = "plivo", marker = "extra == 'plivo'", specifier = "==4.61.0" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pydantic-settings", specifier = ">=2.12,<3" },

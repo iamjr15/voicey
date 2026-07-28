@@ -5,11 +5,11 @@ This table records versions empirically installed and inspected during P0. Runti
 | Layer | Supported/tested pin | P0 evidence |
 |---|---|---|
 | Python | 3.11–3.14 | Both runtime pins resolve and install on CPython 3.14.4; CI covers the supported window |
-| Pipecat | `pipecat-ai==1.6.0` | Installed from PyPI on 2026-07-26; latest resolver candidate was unchanged |
+| Pipecat | `pipecat-ai[anthropic,cartesia,deepgram,evals,google,webrtc,websocket]==1.6.0` | Installed from PyPI; live caller symbols (`PipelineWorker`, universal `LLMContext`, `FastAPIWebsocketTransport`, `TwilioFrameSerializer`) re-inspected on 2026-07-28 |
 | Pipecat Flows | core `pipecat.flows` from `pipecat-ai==1.6.0` | `FlowManager` and `NodeConfig` import from core; `pipecat-ai-flows` is not installed |
 | Pipecat Evals | `pipecat-ai[evals]==1.6.0` | Installed `pipecat eval run/suite`, `EvalRunnerArguments`, `EvalTransportParams`, text/audio scenario parser, and 0/1 exit contract verified 2026-07-27 |
 | Rich | `>=13.9.4,<16` (`13.9.4` selected) | Pipecat 1.6.0's CLI extra requires Rich below 14; the full voicekit CLI suite is green on the resolver-selected version |
-| LiveKit Agents | `livekit-agents==1.6.7` | Installed from PyPI on 2026-07-26; latest resolver candidate was unchanged |
+| LiveKit Agents | `livekit-agents==1.6.7` | Installed from PyPI; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-07-28 |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
 | Plivo Python | `plivo==4.61.0` | Installed on 2026-07-27; Voice/number/recording calls and the six-argument V3 signature helper were introspected and exercised |

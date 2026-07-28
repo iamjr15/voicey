@@ -25,7 +25,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 Vobiz certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Vobiz/LiveKit accounts, Vobiz SIP credential, public Pipecat target, PSTN |
 | P3 Plivo Beta certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Plivo/LiveKit accounts, public Pipecat target, Zentrunk credentials, PSTN |
 | P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
-| P3 tier-3 PSTN loopback | not-ready | Added with the P3 live-test harness | Certified carrier accounts and PSTN |
+| P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
 | P3 cloud deploys | not-ready | Added with each P3 deploy target | Pipecat Cloud, LiveKit Cloud, and Fly access |
 | P4 Railway deploy | not-ready | Added with the P4 Railway target | Railway access |
 | P4 24-hour soak | not-ready | Added with the P4 soak harness | 24 hours of uninterrupted runner time |
@@ -33,6 +33,71 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+## P3 tier-3 paid PSTN loopback
+
+The local gate validates both bounded fixtures, native caller construction,
+8 kHz Twilio transport, signed callback admission, LiveKit room/SIP request
+shape, transcript/evidence reporting, cleanup, preflight ordering, and the
+nightly workflow guard. It does not prove a real call.
+
+For the Pipecat caller path, deploy the target agent behind the destination
+number, export funded Twilio credentials, a distinct owned caller number,
+ngrok, reference-provider, and judge credentials, then run the one-case
+fixture:
+
+```bash
+export VOICEKIT_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
+export VOICEKIT_LIVE_PSTN_MAX_CALLS=4
+export VOICEKIT_LIVE_TARGET_NUMBER='+14155550123'
+export VOICEKIT_LIVE_TWILIO_FROM='+14155550124'
+export TWILIO_ACCOUNT_SID='AC…'
+export TWILIO_AUTH_TOKEN='…'
+export NGROK_AUTHTOKEN='…'
+export DEEPGRAM_API_KEY='…'
+export ANTHROPIC_API_KEY='…'
+export CARTESIA_API_KEY='…'
+export OPENAI_API_KEY='…'
+(cd tests/fixtures/live-pstn-pipecat && \
+  ../../../.venv/bin/voicekit test --live --report junit)
+```
+
+For the LiveKit path, configure an outbound SIP trunk that can reach the
+target destination and run:
+
+```bash
+export VOICEKIT_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
+export VOICEKIT_LIVE_PSTN_MAX_CALLS=4
+export VOICEKIT_LIVE_TARGET_NUMBER='+14155550123'
+export VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID='ST_…'
+export LIVEKIT_URL='wss://project.livekit.cloud'
+export LIVEKIT_API_KEY='…'
+export LIVEKIT_API_SECRET='…'
+export DEEPGRAM_API_KEY='…'
+export ANTHROPIC_API_KEY='…'
+export CARTESIA_API_KEY='…'
+export OPENAI_API_KEY='…'
+(cd tests/fixtures/live-pstn-livekit && \
+  ../../../.venv/bin/voicekit test --live --report junit)
+```
+
+Each result must be a first-attempt pass, carrier status `completed`, contain
+both caller and target-agent transcript lines, and write
+`.voicekit/test-results.xml` with `evidence.provider`,
+`evidence.provider_call_id`, `evidence.runtime_call_id`,
+`evidence.path`, and `evidence.terminal_status`. Inspect the carrier account to
+confirm no more than four calls were placed by either job.
+
+Nightly automation is `.github/workflows/live-pstn.yml`. Configure the
+protected `paid-pstn` environment with the named secrets, set repository
+variable `VOICEKIT_LIVE_PSTN_ENABLED=true`, and set repository variable
+`VOICEKIT_LIVE_PSTN_ACK=I_ACKNOWLEDGE_PAID_PSTN`. The workflow uses
+non-cancelling concurrency so an overlapping schedule cannot abandon a paid
+call. The process environment has none of the required carrier, LiveKit,
+Anthropic, OpenAI judge, target, or caller variables. The ignored predecessor
+backup contains only Deepgram and Cartesia among the needed values. The
+workspace therefore has not executed either paid call, and neither path is
+represented as green.
 
 ## P2 unified scenario suite on both runtimes
 

@@ -368,10 +368,10 @@ def changes_mind():
     )
 ```
 
-- **Tiers:** `test` (default) = text-mode — sim-caller LLM ↔ agent LLM+flow with tools live or mocked; fast, cheap, CI-default. `--audio` = full pipeline — caller turns synthesized via TTS, pushed as audio through the real STT→LLM→TTS path; catches pronunciation, endpointing, barge-in issues. `--live` = real PSTN loopback — engine places an actual call to the agent's number with the sim caller on the line; nightly CI, pre-deploy smoke.
+- **Tiers:** `test` (default) = text-mode — sim-caller LLM ↔ agent LLM+flow with tools live or mocked; fast, cheap, CI-default. `--audio` = full pipeline — caller turns synthesized via TTS, pushed as audio through the real STT→LLM→TTS path; catches pronunciation, endpointing, barge-in issues. `--live` = real PSTN loopback — engine places an actual call to the agent's number with the sim caller on the line; nightly CI, pre-deploy smoke. The live tier is black-box: it judges caller-visible transcript and carrier terminal evidence, never claims access to the target agent's hidden tool state. It fails before caller planning or dialing unless the operator supplies the exact paid-PSTN acknowledgement, a bounded call budget covering the selected cases and all three allowed reruns, the target number, and complete path credentials. Pipecat uses a native caller pipeline over a signed Twilio Media Stream; LiveKit uses a native caller `AgentSession` and an outbound SIP participant.
 - **Assertions:** hard checks on `outcome`/`data`/turn-count/latency budgets + LLM-judge criteria (must cite transcript lines; judge model configurable).
 - Deterministic seeds where providers allow; flake policy: a scenario failing <100% reruns 3× and reports stability %, never silently passes.
-- Output: terminal table, `--report junit` for CI. **Recipes ship with their sim suites passing in both runtimes — enforced by release CI (§17).**
+- Output: terminal table, `--report junit` for CI. Live JUnit includes secret-free provider/path/call identifiers and terminal status; it never includes credentials. **Recipes ship with their sim suites passing in both runtimes — enforced by release CI (§17).**
 
 ---
 

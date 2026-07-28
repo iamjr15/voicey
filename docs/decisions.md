@@ -179,6 +179,26 @@ These choices apply the documented proposals authorized in the build mandate and
 - Leave `--live` fail-closed until the P3 PSTN loopback harness exists. A lower
   tier is never an implicit substitute.
 
+## 2026-07-28 — Paid PSTN test boundary
+
+- The P3 harness resolves the earlier `--live` placeholder. For Pipecat, use
+  the Fixa architectural pattern—an independent native Pipecat caller through
+  a Twilio Media Stream—but build it against installed
+  `pipecat-ai==1.6.0`, the reference Anthropic model, voicekit's signed
+  callback boundary, and its durable intent ledger. Fixa is research input,
+  not a dependency or copied runtime.
+- For LiveKit, use the agent-simulator architectural pattern: an isolated
+  native RTC room, a native caller `AgentSession`, and a target outbound SIP
+  participant. The referenced simulator's MCP surface is deliberately not
+  adopted; voicekit contains no MCP product path.
+- Live calls are black-box assertions. Preserve caller/agent transcript,
+  carrier terminal status, path, and secret-free provider/runtime ids. Do not
+  claim hidden target tool or result evidence.
+- Require `I_ACKNOWLEDGE_PAID_PSTN` exactly and a declared call cap of at least
+  four calls per selected profile-expanded case before planning or dialing.
+  Keep the nightly workflow behind an independent enable variable and a
+  protected environment; skipped or credentialless runs stay pending-live.
+
 ## 2026-07-27 — Telnyx dual-path carrier boundary
 
 - Certify both required surfaces: native Call Control/TeXML with bidirectional

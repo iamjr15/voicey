@@ -3,6 +3,7 @@
 from voicekit.testing.discovery import discover_scenarios, scenario
 from voicekit.testing.models import (
     JudgeConfig,
+    LiveTestingConfig,
     Persona,
     ResultExpectation,
     ScenarioDefinition,
@@ -17,6 +18,7 @@ from voicekit.testing.models import (
 
 __all__ = [
     "JudgeConfig",
+    "LiveTestingConfig",
     "Persona",
     "ResultExpectation",
     "ScenarioDefinition",
