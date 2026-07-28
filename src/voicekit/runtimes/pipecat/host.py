@@ -32,6 +32,7 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat.workers.runner import WorkerRunner
 
+from voicekit.compatibility import warn_runtime_compatibility
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 from voicekit.obs.telemetry import InstrumentedRepository, Telemetry, TelemetryServer
@@ -438,6 +439,7 @@ class PipecatHost:
     ) -> None:
         if agent.runtime != "pipecat":
             raise VoicekitError("VK-RUN-001", detail="PipecatHost requires runtime='pipecat'.")
+        warn_runtime_compatibility("pipecat", stacklevel=3)
         if agent.phone is not None and agent.phone.provider == "twilio" and twilio is None:
             raise VoicekitError(
                 "VK-RUN-001",

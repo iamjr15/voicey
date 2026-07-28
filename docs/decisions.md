@@ -564,3 +564,23 @@ These choices apply the documented proposals authorized in the build mandate and
   upgrade. Restore the prior lock and resync on command or verification
   failure. Never restore or overwrite an unexpected source mutation
   automatically; leave it visible for version-control review.
+
+## 2026-07-28 — Release compatibility and promotion evidence
+
+- Keep empirically supported runtime windows narrow: Pipecat
+  `>=1.6.0,<1.6.1` and LiveKit Agents `>=1.6.7,<1.6.8`. Generated project
+  extras continue to pin 1.6.0 and 1.6.7 exactly. Broaden a window only after
+  its declared lower and upper edges pass Python 3.11/3.14 and all first-party
+  recipes.
+- Treat an installed out-of-range version as uncertified, not unavailable.
+  Hosts and doctor warn with the compatibility-table link and continue. A
+  genuinely missing dependency remains a failed setup check.
+- Derive committed public-contract snapshots from serialized `Agent`, the
+  validated webhook model, and the installed Typer command tree. A snapshot
+  diff requires both changelog and explanatory docs in the pull request.
+- Validate canaries from a fresh environment containing the built wheel, both
+  runtime extras, and no source-checkout import path. Compile every first-party
+  scenario and instantiate every native Pipecat/LiveKit entrypoint.
+- A stable artifact requires green canary evidence for the same release line
+  and reruns the installed-wheel gate. Release workflows upload private CI
+  artifacts only; final naming and any public publication remain human-only.

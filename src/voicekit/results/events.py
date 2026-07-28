@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from voicekit.obs.latency import LatencySeries
 from voicekit.obs.logging import REDACTED, scrub_secrets
 from voicekit.obs.records import CallRecord
+from voicekit.results.schema import WebhookEvent
 from voicekit.storage.models import EventType, RecordingReady, ResultDeliveryConfig
 
 
@@ -88,7 +89,12 @@ def build_event_body(
             "latency_ms": (None if e2e is None else {"p50": e2e.p50_ms, "p95": e2e.p95_ms}),
         }
 
-    safe_payload = cast("dict[str, Any]", scrub_secrets(payload))
+    canonical = WebhookEvent.model_validate(payload).model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_unset=True,
+    )
+    safe_payload = cast("dict[str, Any]", scrub_secrets(canonical))
     for path in delivery.redact:
         _redact_path(safe_payload, path.split("."))
     return json.dumps(

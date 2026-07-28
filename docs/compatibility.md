@@ -5,11 +5,11 @@ This table records versions empirically installed and inspected during P0. Runti
 | Layer | Supported/tested pin | P0 evidence |
 |---|---|---|
 | Python | 3.11–3.14 | Both runtime pins resolve and install on CPython 3.14.4; CI covers the supported window |
-| Pipecat | `pipecat-ai[anthropic,cartesia,deepgram,evals,google,webrtc,websocket]==1.6.0` | Installed from PyPI; live caller symbols (`PipelineWorker`, universal `LLMContext`, `FastAPIWebsocketTransport`, `TwilioFrameSerializer`) re-inspected on 2026-07-28 |
+| Pipecat | certified `>=1.6.0,<1.6.1`; project extra pins `pipecat-ai[anthropic,cartesia,deepgram,evals,google,webrtc,websocket]==1.6.0` | Installed from PyPI; the only current edge, 1.6.0, runs on Python 3.11 and 3.14 in scheduled CI; live caller symbols (`PipelineWorker`, universal `LLMContext`, `FastAPIWebsocketTransport`, `TwilioFrameSerializer`) re-inspected on 2026-07-28 |
 | Pipecat Flows | core `pipecat.flows` from `pipecat-ai==1.6.0` | `FlowManager` and `NodeConfig` import from core; `pipecat-ai-flows` is not installed |
 | Pipecat Evals | `pipecat-ai[evals]==1.6.0` | Installed `pipecat eval run/suite`, `EvalRunnerArguments`, `EvalTransportParams`, text/audio scenario parser, and 0/1 exit contract verified 2026-07-27 |
 | Rich | `>=13.9.4,<16` (`13.9.4` selected) | Pipecat 1.6.0's CLI extra requires Rich below 14; the full voicekit CLI suite is green on the resolver-selected version |
-| LiveKit Agents | `livekit-agents==1.6.7` | Installed from PyPI; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-07-28 |
+| LiveKit Agents | certified `>=1.6.7,<1.6.8`; project extra pins `livekit-agents==1.6.7` | Installed from PyPI; the only current edge, 1.6.7, runs on Python 3.11 and 3.14 in scheduled CI; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-07-28 |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
 | Plivo Python | `plivo==4.61.0` | Installed on 2026-07-27; Voice/number/recording calls and the six-argument V3 signature helper were introspected and exercised |
@@ -84,3 +84,18 @@ Pins change only in a contract-alignment commit that:
 2. re-runs symbol introspection and both walking skeletons;
 3. updates this table and any affected plan/spec contract;
 4. runs parity, schema snapshot, and first-party recipe suites before merge.
+
+## Out-of-range behavior
+
+The certified windows are deliberately narrow because only the listed versions
+have empirical symbol and recipe evidence. `PipecatHost` and `LiveKitHost`
+inspect the installed distribution at startup. A version outside the table
+emits `RuntimeCompatibilityWarning` and continues; it does not create an
+availability outage merely because a resolver selected an untested version.
+`voicekit doctor` follows the same rule: missing runtime packages fail the
+check, while installed out-of-range or invalid versions produce loud advice and
+leave the check green.
+
+The compatibility-edge workflow is the only path to broadening a range. It
+installs each declared edge exactly on Python 3.11 and 3.14 and runs all four
+packaged recipes through that runtime's native compiler and entrypoint.

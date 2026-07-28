@@ -225,6 +225,28 @@ is 100% for drift and 95% for upgrade; exact gate:
 strict pyright, and the full suite are green: 1,081 passed, 41 honest skips,
 90.25% branch coverage. Operator contract: `docs/upgrading.md`.
 
+**P4.5 checkpoint complete locally 2026-07-28:** strict SemVer parsing,
+release-transition policy, actionable `VoicekitDeprecationWarning`, and an
+enforced two-minor removal horizon now mechanize the versioning contract.
+Pipecat `>=1.6.0,<1.6.1` and LiveKit Agents `>=1.6.7,<1.6.8` are the narrow
+empirically certified windows; missing runtimes fail doctor, while installed
+out-of-range versions warn loudly and continue at both host and doctor
+boundaries. The scheduled range-edge matrix installs each declared edge on
+Python 3.11/3.14 and executes every first-party recipe. Serialized `Agent`, the
+validated webhook envelope, and the full Typer tree generate canonical
+committed snapshots; CI rejects drift and requires changelog plus explanatory
+docs on public changes. The real release gate built a wheel, installed it into
+a fresh source-free environment, and compiled/instantiated all four recipes on
+both native runtimes. Private artifact automation supports canary and stable;
+stable requires a green same-release-line canary report and reruns the wheel
+gate, while public publishing remains human-only. Local Python 3.11 and 3.14
+runtime-edge evidence is green. Exact gate:
+`uv run python tests/verification/run_p4_release_gate.py --wheel
+dist/voicekit-0.0.0.dev0-py3-none-any.whl --channel canary`. Ruff, formatting,
+strict pyright, snapshot checks, workflow lint, and the full suite are green:
+1,118 passed, 41 honest skips, 90.38% branch coverage. Operator contract:
+`docs/releasing.md`.
+
 ## Verification approach
 
 Per-phase exit = that phase's slice of spec §17, mechanized: quickstart e2e script (fresh venv → talking agent, timed); audio-path latency harness with hard budgets (p50 + p95); webhook-invariant chaos suite (kill provider WS mid-call, tool timeouts, process crash/SIGKILL, dual sweepers, fenced late writers — always exactly one terminal event, delivery attempted until acknowledged or visibly dead-lettered); carrier certification pytest suites (nightly live, incl. §5.3 audio rig); parity + config-mapping matrix CI (P2+); wizard/flag-twin/`--json` coverage tests; tunneled-admin negative test; deploy-target scripted e2e with smoke call + persistence preflight + rolling-generation test; docs quickstarts executed in CI. Manual gates per phase: one real phone call on a physical handset, one full wizard run by a human, `doctor` run on a broken-on-purpose machine.

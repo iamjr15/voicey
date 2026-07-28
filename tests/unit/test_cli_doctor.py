@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import email.utils
-import importlib.metadata
 import socket
 import stat
 from collections.abc import Awaitable, Callable, Mapping
@@ -35,9 +34,10 @@ from voicekit.cli.doctor import (
     _vobiz_check,
 )
 from voicekit.cli.keys import KeyCheck
+from voicekit.compatibility import RuntimeCompatibilityReport
 from voicekit.config.catalog import ProviderKind
 from voicekit.config.manifest import ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
+from voicekit.config.models import ModelAxis, RuntimeName
 from voicekit.results.signing import WebhookSigner
 from voicekit.telephony.models import CarrierAccountState, NumberInfo
 
@@ -141,6 +141,29 @@ def test_safe_fixes_are_idempotent_private_and_never_print_secret(tmp_path: Path
     assert stat.S_IMODE((tmp_path / ".voicekit").stat().st_mode) == 0o700
     assert WebhookSigner(context.environment["VOICEKIT_WEBHOOK_SECRET"])
     assert "whsec_" not in " ".join(first + second)
+
+
+def test_doctor_warns_but_does_not_fail_for_uncertified_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+
+    def out_of_range(runtime: RuntimeName) -> RuntimeCompatibilityReport:
+        return RuntimeCompatibilityReport(
+            runtime=runtime,
+            distribution="pipecat-ai",
+            supported_range=">=1.6.0,<1.6.1",
+            installed_version="1.7.0",
+            status="out-of-range",
+        )
+
+    monkeypatch.setattr("voicekit.cli.doctor.inspect_runtime_compatibility", out_of_range)
+    check = _runtime_check(cast("ProjectManifest", context.manifest))
+
+    assert check.ok
+    assert check.issues == ()
+    assert "not certified" in check.advice[0]
 
 
 @pytest.mark.asyncio
@@ -829,10 +852,16 @@ def test_doctor_local_negative_branches(
     finally:
         listener.close()
 
-    def missing_package(_name: str) -> str:
-        raise importlib.metadata.PackageNotFoundError
+    def missing_runtime(runtime: RuntimeName) -> RuntimeCompatibilityReport:
+        return RuntimeCompatibilityReport(
+            runtime=runtime,
+            status="missing",
+            distribution="pipecat-ai",
+            supported_range=">=1.6.0,<1.6.1",
+            installed_version=None,
+        )
 
-    monkeypatch.setattr("voicekit.cli.doctor.importlib.metadata.version", missing_package)
+    monkeypatch.setattr("voicekit.cli.doctor.inspect_runtime_compatibility", missing_runtime)
     assert not _runtime_check(cast("ProjectManifest", context.manifest)).ok
 
     invalid_manifest = cast(

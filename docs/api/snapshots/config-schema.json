@@ -1,0 +1,421 @@
+{
+  "contract": "voicekit.Agent serialized configuration",
+  "schema": {
+    "$defs": {
+      "Behavior": {
+        "additionalProperties": false,
+        "description": "Runtime-mapped conversation and telephony behavior.",
+        "properties": {
+          "allow_interruptions": {
+            "default": true,
+            "title": "Allow Interruptions",
+            "type": "boolean"
+          },
+          "dtmf": {
+            "default": true,
+            "title": "Dtmf",
+            "type": "boolean"
+          },
+          "end_call_phrases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "End Call Phrases",
+            "type": "array"
+          },
+          "transfer_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Transfer Number"
+          },
+          "voicemail": {
+            "default": "hangup",
+            "enum": [
+              "hangup",
+              "leave_message"
+            ],
+            "title": "Voicemail",
+            "type": "string"
+          }
+        },
+        "title": "Behavior",
+        "type": "object"
+      },
+      "Limits": {
+        "additionalProperties": false,
+        "description": "Per-instance safety and resource limits.",
+        "properties": {
+          "daily_spend_alert_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Daily Spend Alert Usd"
+          },
+          "max_concurrent": {
+            "default": 20,
+            "title": "Max Concurrent",
+            "type": "integer"
+          },
+          "max_duration_s": {
+            "default": 600,
+            "title": "Max Duration S",
+            "type": "integer"
+          },
+          "silence_hangup_s": {
+            "default": 30,
+            "title": "Silence Hangup S",
+            "type": "integer"
+          }
+        },
+        "title": "Limits",
+        "type": "object"
+      },
+      "Models": {
+        "additionalProperties": false,
+        "description": "STT, LLM, and TTS model selections plus axis-specific failover.",
+        "properties": {
+          "fallbacks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "stt",
+                "llm",
+                "tts"
+              ]
+            },
+            "title": "Fallbacks",
+            "type": "object"
+          },
+          "llm": {
+            "title": "Llm",
+            "type": "string"
+          },
+          "stt": {
+            "title": "Stt",
+            "type": "string"
+          },
+          "tts": {
+            "title": "Tts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stt",
+          "llm",
+          "tts"
+        ],
+        "title": "Models",
+        "type": "object"
+      },
+      "Observability": {
+        "additionalProperties": false,
+        "description": "Prometheus and OTLP export settings with secret headers kept in env.",
+        "properties": {
+          "otlp_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Otlp Endpoint"
+          },
+          "otlp_headers_env": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Otlp Headers Env"
+          },
+          "prometheus_bind": {
+            "default": "127.0.0.1",
+            "title": "Prometheus Bind",
+            "type": "string"
+          },
+          "prometheus_enabled": {
+            "default": false,
+            "title": "Prometheus Enabled",
+            "type": "boolean"
+          },
+          "prometheus_path": {
+            "default": "/metrics",
+            "title": "Prometheus Path",
+            "type": "string"
+          },
+          "prometheus_port": {
+            "default": 9464,
+            "title": "Prometheus Port",
+            "type": "integer"
+          }
+        },
+        "title": "Observability",
+        "type": "object"
+      },
+      "Phone": {
+        "additionalProperties": false,
+        "description": "Phone-channel configuration.",
+        "properties": {
+          "inbound": {
+            "default": true,
+            "title": "Inbound",
+            "type": "boolean"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "outbound": {
+            "default": true,
+            "title": "Outbound",
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "twilio",
+              "telnyx",
+              "vobiz",
+              "plivo",
+              "sip"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "record": {
+            "default": false,
+            "title": "Record",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "number"
+        ],
+        "title": "Phone",
+        "type": "object"
+      },
+      "Results": {
+        "additionalProperties": false,
+        "description": "Result delivery, rotation, redaction, and retention configuration.",
+        "properties": {
+          "include": {
+            "items": {
+              "enum": [
+                "transcript",
+                "data",
+                "recording",
+                "metrics"
+              ],
+              "type": "string"
+            },
+            "title": "Include",
+            "type": "array"
+          },
+          "previous_secret_env": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Previous Secret Env"
+          },
+          "purge_after_days": {
+            "default": 30,
+            "title": "Purge After Days",
+            "type": "integer"
+          },
+          "redact": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Redact",
+            "type": "array"
+          },
+          "secret_env": {
+            "title": "Secret Env",
+            "type": "string"
+          },
+          "webhook": {
+            "title": "Webhook",
+            "type": "string"
+          }
+        },
+        "required": [
+          "webhook",
+          "secret_env"
+        ],
+        "title": "Results",
+        "type": "object"
+      },
+      "Voice": {
+        "additionalProperties": false,
+        "description": "Voice identity and language configuration.",
+        "properties": {
+          "fallback_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback Language"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "language": {
+            "default": "en",
+            "title": "Language",
+            "type": "string"
+          },
+          "speed": {
+            "default": 1.0,
+            "title": "Speed",
+            "type": "number"
+          }
+        },
+        "title": "Voice",
+        "type": "object"
+      },
+      "Web": {
+        "additionalProperties": false,
+        "description": "Browser-channel configuration.",
+        "properties": {
+          "allowed_origins": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Origins",
+            "type": "array"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "Web",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Canonical agent configuration shared by both runtime bootstraps.",
+    "properties": {
+      "behavior": {
+        "$ref": "#/$defs/Behavior"
+      },
+      "flow": {
+        "title": "Flow",
+        "type": "string"
+      },
+      "limits": {
+        "$ref": "#/$defs/Limits"
+      },
+      "models": {
+        "$ref": "#/$defs/Models"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "observability": {
+        "$ref": "#/$defs/Observability"
+      },
+      "persona": {
+        "title": "Persona",
+        "type": "string"
+      },
+      "phone": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Phone"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "results": {
+        "$ref": "#/$defs/Results"
+      },
+      "runtime": {
+        "enum": [
+          "pipecat",
+          "livekit"
+        ],
+        "title": "Runtime",
+        "type": "string"
+      },
+      "tools": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ],
+        "title": "Tools"
+      },
+      "voice": {
+        "$ref": "#/$defs/Voice"
+      },
+      "web": {
+        "$ref": "#/$defs/Web"
+      }
+    },
+    "required": [
+      "name",
+      "runtime",
+      "models",
+      "persona",
+      "flow",
+      "tools",
+      "results"
+    ],
+    "title": "Agent",
+    "type": "object"
+  }
+}

@@ -489,11 +489,11 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 ## 15. Versioning & release engineering
 
 - **SemVer** on the `voicekit` package; public API = `agent.py` schema, `tool`/`results`/`testing` APIs, webhook payload, CLI commands/flags, adapter Protocol.
-- **Runtime compatibility:** each release pins tested ranges of `pipecat-ai`/`livekit-agents`; a compatibility table in docs; CI runs the matrix against range edges; out-of-range installs warn loudly (not fail) with the table link.
+- **Runtime compatibility:** each release pins tested ranges of `pipecat-ai`/`livekit-agents`; the initial empirically certified windows are Pipecat `>=1.6.0,<1.6.1` and LiveKit Agents `>=1.6.7,<1.6.8`, while generated project extras remain exact at the tested versions. A compatibility table lives in docs; CI installs every declared edge on Python 3.11 and 3.14 and exercises all first-party recipes. Out-of-range installs warn loudly (not fail) with the table link; a missing runtime remains a setup failure.
 - **Project upgrade transaction:** supported projects use `uv >=0.11,<1` and declare `voicekit` directly in `project.dependencies`. The built-in upgrader executes `uv lock --upgrade-package voicekit --prerelease <mode>`, validates the selected voicekit channel, then passes the same mode to `uv sync --locked` and `uv run --locked`; it never rewrites the dependency declaration or recipe source.
 - **Deprecation policy:** nothing public removed with less than 2 minor versions of runtime warnings + changelog + migration note.
 - **Webhook payload versioning:** additive-only within a major; envelope carries no version field until v2 is ever needed (then explicit).
-- Release cadence target: minor every 4–6 weeks; canary channel (`pip install voicekit --pre`) exercised by first-party recipes before stable.
+- Release cadence target: minor every 4–6 weeks; canary channel (`pip install voicekit --pre`) exercised from an installed wheel by every first-party recipe on both native runtimes before stable. Stable artifact preparation requires a green canary report for the same release line. Automated workflows build private artifacts only; name selection and public publishing are human-only.
 
 ---
 

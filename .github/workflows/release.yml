@@ -1,0 +1,81 @@
+name: Prepare release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Artifact channel; stable requires a prior green canary run"
+        required: true
+        type: choice
+        options:
+          - canary
+          - stable
+      ref:
+        description: "Exact tag, branch, or commit to build"
+        required: true
+        type: string
+      canary_run_id:
+        description: "Required for stable: workflow run id containing canary evidence"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install uv==0.11.7
+      - name: Sync locked release environment
+        run: uv sync --frozen --extra pipecat --extra livekit
+      - name: Build wheel and source distribution
+        run: uv build --out-dir dist
+      - name: Resolve the one wheel
+        id: artifact
+        run: |
+          wheel_count="$(find dist -maxdepth 1 -name '*.whl' -type f | wc -l | tr -d ' ')"
+          test "$wheel_count" = "1"
+          echo "wheel=$(find dist -maxdepth 1 -name '*.whl' -type f)" >> "$GITHUB_OUTPUT"
+      - name: Download prior canary evidence
+        if: inputs.channel == 'stable'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: voicekit-canary-*
+          path: canary-evidence
+          merge-multiple: true
+          run-id: ${{ inputs.canary_run_id }}
+          github-token: ${{ github.token }}
+      - name: Validate canary artifact
+        if: inputs.channel == 'canary'
+        run: |
+          uv run python tests/verification/run_p4_release_gate.py \
+            --wheel "${{ steps.artifact.outputs.wheel }}" \
+            --channel canary \
+            --report p4-release-report.json
+      - name: Validate stable promotion against canary evidence
+        if: inputs.channel == 'stable'
+        run: |
+          test -n "${{ inputs.canary_run_id }}"
+          uv run python tests/verification/run_p4_release_gate.py \
+            --wheel "${{ steps.artifact.outputs.wheel }}" \
+            --channel stable \
+            --canary-report canary-evidence/p4-release-report.json \
+            --report p4-release-report.json
+      - name: Upload verified artifacts without publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: voicekit-${{ inputs.channel }}-${{ github.run_id }}
+          path: |
+            dist/*
+            p4-release-report.json
+          if-no-files-found: error

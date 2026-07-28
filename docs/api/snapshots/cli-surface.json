@@ -1,0 +1,2252 @@
+{
+  "commands": {
+    "help": "Build, run, test, and deploy native Pipecat or LiveKit voice agents.",
+    "params": [
+      {
+        "count": false,
+        "default": false,
+        "envvar": null,
+        "flags": [
+          "--version"
+        ],
+        "help": "Print the installed voicekit version.",
+        "hidden": false,
+        "is_flag": true,
+        "kind": "option",
+        "multiple": false,
+        "name": "version",
+        "nargs": 1,
+        "required": false,
+        "type": "boolean"
+      },
+      {
+        "count": false,
+        "default": false,
+        "envvar": null,
+        "flags": [
+          "--json"
+        ],
+        "help": "Emit machine-readable project status.",
+        "hidden": false,
+        "is_flag": true,
+        "kind": "option",
+        "multiple": false,
+        "name": "json_output",
+        "nargs": 1,
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "path": "voicekit",
+    "subcommands": [
+      {
+        "help": "Place one paid test call through the configured carrier intent ledger.",
+        "params": [
+          {
+            "default": null,
+            "kind": "argument",
+            "multiple": false,
+            "name": "e164",
+            "nargs": 1,
+            "required": true,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--url"
+            ],
+            "help": "Running agent's public HTTPS base.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "public_url",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--yes"
+            ],
+            "help": "Confirm the paid outbound call.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "yes",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "path": "voicekit call"
+      },
+      {
+        "help": "Inspect calls and redeliver immutable result events.",
+        "params": [],
+        "path": "voicekit calls",
+        "subcommands": [
+          {
+            "help": "List protected local call records or undelivered events.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--undelivered",
+                  "--all"
+                ],
+                "help": "Only pending/dead-letter deliveries.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "undelivered",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": 100,
+                "envvar": null,
+                "flags": [
+                  "--limit"
+                ],
+                "help": "",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "limit",
+                "nargs": 1,
+                "required": false,
+                "type": "int range"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit calls list"
+          },
+          {
+            "help": "Reset delivery state while preserving immutable bytes and event id.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "identifier",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm a new receiver delivery attempt.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit calls redeliver"
+          },
+          {
+            "help": "Show one complete protected call timeline/transcript/tool record.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "call_id",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit calls show"
+          }
+        ]
+      },
+      {
+        "help": "Generate and operate a supported deployment target.",
+        "params": [],
+        "path": "voicekit deploy",
+        "subcommands": [
+          {
+            "help": "Generate, validate, and optionally smoke the canonical Docker target.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm external mutations.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--skip-smoke"
+                ],
+                "help": "Generate without running endpoint/call smoke.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "skip_smoke",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--smoke"
+                ],
+                "help": "HTTPS deployment base to health-check and call.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "smoke_url",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--to"
+                ],
+                "help": "Paid smoke-call destination in E.164 form.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "to_number",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--engine-wheel"
+                ],
+                "help": "Local unpublished voicekit wheel.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "engine_wheel",
+                "nargs": 1,
+                "required": false,
+                "type": "path"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit machine-readable artifact and smoke facts.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit deploy docker"
+          },
+          {
+            "help": "Provision, resume, rotate, validate, or roll back the Fly companion.",
+            "params": [
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--app"
+                ],
+                "help": "Exact Fly application name for the results companion.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "app_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--org"
+                ],
+                "help": "Exact Fly organization slug.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "organization",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--region"
+                ],
+                "help": "Exact Fly/Managed Postgres region.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "region",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--postgres-name"
+                ],
+                "help": "Existing or new Managed Postgres name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "postgres_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--bucket"
+                ],
+                "help": "Existing or new private Tigris bucket name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "bucket_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--postgres-plan"
+                ],
+                "help": "Fly Managed Postgres plan.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "postgres_plan",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--postgres-volume-gb"
+                ],
+                "help": "Managed Postgres storage (10-500 GB).",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "postgres_volume_gb",
+                "nargs": 1,
+                "required": true,
+                "type": "int"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--adopt"
+                ],
+                "help": "Adopt exact pre-existing resources after verification.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "adopt",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--rotate-credentials"
+                ],
+                "help": "Rotate relay/results credentials while retaining the prior pair.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "rotate_credentials",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--rollback-created"
+                ],
+                "help": "Permanently destroy only resources ledgered as created by voicekit.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "rollback_created",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--skip-smoke"
+                ],
+                "help": "Deploy without platform and signed relay smoke.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "skip_smoke",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--engine-wheel"
+                ],
+                "help": "Local unpublished voicekit wheel.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "engine_wheel",
+                "nargs": 1,
+                "required": false,
+                "type": "path"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm paid/destructive mutations.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit machine-readable resource and smoke facts.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit deploy fly"
+          },
+          {
+            "help": "Deploy, smoke, resume, adopt, or roll back a LiveKit Cloud agent.",
+            "params": [
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--agent"
+                ],
+                "help": "Exact registered LiveKit agent name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "agent_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--project"
+                ],
+                "help": "Exact authenticated LiveKit Cloud project.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "project",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--region"
+                ],
+                "help": "Exact LiveKit Cloud region.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "region",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--relay-url"
+                ],
+                "help": "Validated user-owned results companion URL.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "relay_url",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--agent-id"
+                ],
+                "help": "Exact existing agent id for adoption.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "agent_id",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--adopt"
+                ],
+                "help": "Adopt the exact existing agent id.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "adopt",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--smoke-to"
+                ],
+                "help": "Paid LiveKit SIP smoke destination.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "smoke_to",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--skip-smoke"
+                ],
+                "help": "Skip room/PSTN and relay smoke evidence.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "skip_smoke",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--rollback"
+                ],
+                "help": "Roll back the ledgered version or created agent.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "rollback",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--engine-wheel"
+                ],
+                "help": "Local unpublished voicekit wheel.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "engine_wheel",
+                "nargs": 1,
+                "required": false,
+                "type": "path"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm paid/live/destructive mutations.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit machine-readable deployment facts.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit deploy livekit-cloud"
+          },
+          {
+            "help": "Prepare, deploy, cut over, smoke, resume, or roll back Pipecat Cloud.",
+            "params": [
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--agent"
+                ],
+                "help": "Exact deployed Pipecat Cloud agent name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "agent_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--org"
+                ],
+                "help": "Exact Pipecat Cloud organization slug.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "organization",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--region"
+                ],
+                "help": "Exact Pipecat Cloud region.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "region",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--secret-set"
+                ],
+                "help": "Exact Pipecat Cloud secret-set name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "secret_set",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--image"
+                ],
+                "help": "Pre-pushed immutable tagged worker image.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "image",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--min-agents"
+                ],
+                "help": "Minimum warm agents (0-50).",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "min_agents",
+                "nargs": 1,
+                "required": true,
+                "type": "int"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--max-agents"
+                ],
+                "help": "Maximum agents (1-50).",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "max_agents",
+                "nargs": 1,
+                "required": true,
+                "type": "int"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--profile"
+                ],
+                "help": "agent-1x, agent-2x, or agent-3x.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "profile",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--relay-url"
+                ],
+                "help": "Validated user-owned results companion URL.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "relay_url",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--image-pull-secret"
+                ],
+                "help": "Private-registry credential name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "image_pull_secret",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--prepare-only"
+                ],
+                "help": "Generate the build context without touching Pipecat Cloud.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "prepare_only",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--adopt"
+                ],
+                "help": "Adopt an exact existing cloud agent.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "adopt",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": true,
+                "envvar": null,
+                "flags": [
+                  "--cutover",
+                  "--no-cutover"
+                ],
+                "help": "Point the configured phone number after deployment.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "cutover",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--telnyx-texml-ready"
+                ],
+                "help": "Confirm the selected TeXML app uses the printed hosted-answer URL.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "telnyx_texml_ready",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--smoke-to"
+                ],
+                "help": "Paid phone-smoke destination in E.164 form.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "smoke_to",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--skip-smoke"
+                ],
+                "help": "Skip platform and phone smoke evidence.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "skip_smoke",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--rollback-created"
+                ],
+                "help": "Restore cutover and delete only a voicekit-created cloud agent.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "rollback_created",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--engine-wheel"
+                ],
+                "help": "Local unpublished voicekit wheel.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "engine_wheel",
+                "nargs": 1,
+                "required": false,
+                "type": "path"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm paid/live/destructive mutations.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit machine-readable deployment facts.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit deploy pipecat-cloud"
+          },
+          {
+            "help": "Provision, resume, rotate, validate, or roll back the Railway companion.",
+            "params": [
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--project"
+                ],
+                "help": "Exact Railway project name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "project_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--workspace"
+                ],
+                "help": "Exact Railway workspace id or name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "workspace",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--environment"
+                ],
+                "help": "Exact Railway environment name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "environment_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--service"
+                ],
+                "help": "Exact results-companion service name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "service_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--bucket"
+                ],
+                "help": "Exact private Railway bucket display name.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "bucket_name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--service-region"
+                ],
+                "help": "Railway replica region: us-west|us-east|eu-west|southeast-asia.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "service_region",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--bucket-region"
+                ],
+                "help": "Railway bucket region: sjc|iad|ams|sin.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "bucket_region",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--project-id"
+                ],
+                "help": "Exact existing project id required for adoption.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "project_id",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--adopt"
+                ],
+                "help": "Adopt exact pre-existing resources after verification.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "adopt",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--rotate-credentials"
+                ],
+                "help": "Rotate relay/results credentials while retaining the prior pair.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "rotate_credentials",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--rollback-created"
+                ],
+                "help": "Delete only Railway resources ledgered as created by voicekit.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "rollback_created",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--skip-smoke"
+                ],
+                "help": "Deploy without endpoint and signed relay smoke.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "skip_smoke",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--engine-wheel"
+                ],
+                "help": "Local unpublished voicekit wheel.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "engine_wheel",
+                "nargs": 1,
+                "required": false,
+                "type": "path"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm paid or destructive Railway mutations.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit machine-readable resource and smoke facts.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit deploy railway"
+          }
+        ]
+      },
+      {
+        "help": "Run the local agent; Ctrl-C restores any temporary phone route.",
+        "params": [
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--phone",
+              "--no-phone"
+            ],
+            "help": "Temporarily route the selected number.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "phone",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": "auto",
+            "envvar": null,
+            "flags": [
+              "--tunnel"
+            ],
+            "help": "auto, cloudflared, ngrok, or url.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "tunnel",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--url"
+            ],
+            "help": "Operator-owned HTTPS URL when --tunnel url.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "public_url",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": 7860,
+            "envvar": null,
+            "flags": [
+              "--port"
+            ],
+            "help": "Public-listener local port.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "port",
+            "nargs": 1,
+            "required": false,
+            "type": "int"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--no-open"
+            ],
+            "help": "Do not open the browser playground.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "no_open",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "path": "voicekit dev"
+      },
+      {
+        "help": "Run every local, provider, carrier, delivery, and capacity preflight.",
+        "params": [
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--fix",
+              "--no-fix"
+            ],
+            "help": "Apply the documented safe subset.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "fix",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--send-test",
+              "--no-send-test"
+            ],
+            "help": "POST a signed receiver test.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "send_test",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": 7860,
+            "envvar": null,
+            "flags": [
+              "--port"
+            ],
+            "help": "Port to test for availability.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "port",
+            "nargs": 1,
+            "required": false,
+            "type": "int"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--json"
+            ],
+            "help": "Emit one machine-readable report.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "json_output",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "path": "voicekit doctor"
+      },
+      {
+        "help": "Create a working native-workflow project with live-validated keys.",
+        "params": [
+          {
+            "default": {
+              "python_type": "pathlib.PosixPath"
+            },
+            "kind": "argument",
+            "multiple": false,
+            "name": "path",
+            "nargs": 1,
+            "required": false,
+            "type": "path"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--name"
+            ],
+            "help": "Project/package name.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "name",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--recipe"
+            ],
+            "help": "Recipe id.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "recipe",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--description"
+            ],
+            "help": "Scratch-agent purpose.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "description",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--channels"
+            ],
+            "help": "Comma-separated phone,web choices.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "channels",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--phone-provider"
+            ],
+            "help": "Carrier id.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "phone_provider",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--phone-number"
+            ],
+            "help": "Owned E.164 number.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "phone_number",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--runtime"
+            ],
+            "help": "Runtime id.",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "runtime",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--models"
+            ],
+            "help": "Model assignments: stt=id,llm=id,tts=id (repeatable).",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": true,
+            "name": "models",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--draft-prompts",
+              "--no-draft-prompts"
+            ],
+            "help": "Explicitly opt in/out of one paid LLM drafting request.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "draft_prompts",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--resume"
+            ],
+            "help": "Resume the secret-free setup checkpoint.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "resume",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--yes"
+            ],
+            "help": "Non-interactive mode; never chooses substantive answers.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "yes",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "path": "voicekit init"
+      },
+      {
+        "help": "Collect, mask, and live-validate provider credentials.",
+        "params": [],
+        "path": "voicekit keys",
+        "subcommands": [
+          {
+            "help": "Paste/rotate provider credentials, validate, then write owner-only `.env`.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "provider",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Use values already injected into the environment.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit keys add"
+          },
+          {
+            "help": "Show masked selected keys with a fresh authenticated validation.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit keys list"
+          },
+          {
+            "help": "Re-run authenticated read checks for every selected provider.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit keys validate"
+          }
+        ]
+      },
+      {
+        "help": "List, buy, release, point, or restore phone numbers.",
+        "params": [],
+        "path": "voicekit numbers",
+        "subcommands": [
+          {
+            "help": "Buy the first matching voice number after an explicit money confirmation.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "country",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--area"
+                ],
+                "help": "Optional area code.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "area",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm the purchase.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit numbers buy"
+          },
+          {
+            "help": "List voice-capable numbers owned by the configured carrier.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit numbers list"
+          },
+          {
+            "help": "Point one production number and persist its complete rollback snapshot first.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "number",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": null,
+                "envvar": null,
+                "flags": [
+                  "--url"
+                ],
+                "help": "Agent's public HTTPS base.",
+                "hidden": false,
+                "is_flag": false,
+                "kind": "option",
+                "multiple": false,
+                "name": "public_url",
+                "nargs": 1,
+                "required": false,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm live route change.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit numbers point"
+          },
+          {
+            "help": "Release a carrier number after an explicit confirmation.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "number",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm irreversible release.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit numbers release"
+          },
+          {
+            "help": "Compare-and-swap restore one previously captured carrier route.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "token",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--yes"
+                ],
+                "help": "Confirm live route restore.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "yes",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit numbers restore"
+          }
+        ]
+      },
+      {
+        "help": "List and copy versioned native-workflow recipes.",
+        "params": [],
+        "path": "voicekit recipes",
+        "subcommands": [
+          {
+            "help": "Copy the runtime-matching native recipe without overwriting project code.",
+            "params": [
+              {
+                "default": null,
+                "kind": "argument",
+                "multiple": false,
+                "name": "name",
+                "nargs": 1,
+                "required": true,
+                "type": "str"
+              }
+            ],
+            "path": "voicekit recipes add"
+          },
+          {
+            "help": "List packaged recipes and explicit availability facts.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit recipes list"
+          },
+          {
+            "help": "Report recipe source drift without overwriting local changes.",
+            "params": [
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--json"
+                ],
+                "help": "Emit JSON.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "json_output",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              }
+            ],
+            "path": "voicekit recipes update-check"
+          }
+        ]
+      },
+      {
+        "help": "Run shared scenarios through the project's native runtime evaluator.",
+        "params": [
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--filter"
+            ],
+            "help": "",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "filter_text",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--audio",
+              "--no-audio"
+            ],
+            "help": "",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "audio",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--live",
+              "--no-live"
+            ],
+            "help": "",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "live",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": null,
+            "envvar": null,
+            "flags": [
+              "--report"
+            ],
+            "help": "",
+            "hidden": false,
+            "is_flag": false,
+            "kind": "option",
+            "multiple": false,
+            "name": "report",
+            "nargs": 1,
+            "required": false,
+            "type": "str"
+          }
+        ],
+        "path": "voicekit test"
+      },
+      {
+        "help": "Upgrade only the engine lock entry, then report recipe drift.",
+        "params": [
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--pre",
+              "--stable"
+            ],
+            "help": "Resolve canary prereleases or stable releases only.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "pre",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--yes"
+            ],
+            "help": "Confirm the lockfile-only package mutation.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "yes",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "count": false,
+            "default": false,
+            "envvar": null,
+            "flags": [
+              "--json"
+            ],
+            "help": "Emit JSON.",
+            "hidden": false,
+            "is_flag": true,
+            "kind": "option",
+            "multiple": false,
+            "name": "json_output",
+            "nargs": 1,
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "path": "voicekit upgrade"
+      }
+    ]
+  },
+  "contract": "voicekit command-line interface"
+}

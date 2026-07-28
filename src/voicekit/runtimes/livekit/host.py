@@ -15,6 +15,7 @@ from livekit import rtc
 from livekit.agents import AgentServer, JobContext, JobProcess, JobRequest
 from livekit.plugins import silero
 
+from voicekit.compatibility import warn_runtime_compatibility
 from voicekit.config.models import Agent
 from voicekit.errors import VoicekitError
 from voicekit.obs.records import Channel, Direction, NewCall, TimelineEvent
@@ -205,6 +206,7 @@ class LiveKitHost:
     ) -> None:
         if agent.runtime != "livekit":
             raise VoicekitError("VK-RUN-001", detail="LiveKitHost requires runtime='livekit'.")
+        warn_runtime_compatibility("livekit", stacklevel=3)
         self.agent = agent
         self.repository_factory = repository_factory
         self.settings = settings or LiveKitHostSettings()

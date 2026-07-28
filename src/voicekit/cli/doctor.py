@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import asyncio
 import email.utils
-import importlib.metadata
 import json
 import secrets
 import shutil
@@ -30,6 +29,7 @@ from voicekit.cli.keys import (
     RuntimeKeyValidator,
     required_entries,
 )
+from voicekit.compatibility import inspect_runtime_compatibility
 from voicekit.config.manifest import ProjectManifest
 from voicekit.errors import VoicekitError
 from voicekit.results.signing import WebhookSigner, encode_secret
@@ -455,22 +455,14 @@ def _result(
 
 
 def _runtime_check(manifest: ProjectManifest) -> DoctorCheck:
-    package, expected = (
-        ("pipecat-ai", "1.6.0") if manifest.runtime == "pipecat" else ("livekit-agents", "1.6.7")
-    )
-    try:
-        installed = importlib.metadata.version(package)
-        issues = (
-            [] if installed == expected else [f"{package}=={installed}; tested pin is {expected}."]
-        )
-    except importlib.metadata.PackageNotFoundError:
-        issues = [f"{package} is not installed."]
-    extra = manifest.runtime
-    return _result(
-        "runtime",
-        "Runtime package version",
-        issues,
-        [f'Run `uv pip install "voicekit[{extra}]"`.'] if issues else [],
+    report = inspect_runtime_compatibility(manifest.runtime)
+    missing = report.status == "missing"
+    return DoctorCheck(
+        id="runtime",
+        description="Runtime package version",
+        ok=not missing,
+        issues=(f"{report.distribution} is not installed.",) if missing else (),
+        advice=(report.warning,) if report.warning is not None else (),
     )
 
 

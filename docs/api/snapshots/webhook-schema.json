@@ -1,0 +1,319 @@
+{
+  "contract": "voicekit result webhook",
+  "schema": {
+    "$defs": {
+      "JsonValue": {},
+      "WebhookAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "runtime": {
+            "enum": [
+              "pipecat",
+              "livekit"
+            ],
+            "title": "Runtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "runtime",
+          "config_hash"
+        ],
+        "title": "WebhookAgent",
+        "type": "object"
+      },
+      "WebhookCall": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "duration_s": {
+            "minimum": 0,
+            "title": "Duration S",
+            "type": "integer"
+          },
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "ended_reason": {
+            "title": "Ended Reason",
+            "type": "string"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "required": [
+          "id",
+          "direction",
+          "from",
+          "to",
+          "started_at",
+          "ended_at",
+          "duration_s",
+          "ended_reason"
+        ],
+        "title": "WebhookCall",
+        "type": "object"
+      },
+      "WebhookLatency": {
+        "additionalProperties": false,
+        "properties": {
+          "p50": {
+            "minimum": 0,
+            "title": "P50",
+            "type": "number"
+          },
+          "p95": {
+            "minimum": 0,
+            "title": "P95",
+            "type": "number"
+          }
+        },
+        "required": [
+          "p50",
+          "p95"
+        ],
+        "title": "WebhookLatency",
+        "type": "object"
+      },
+      "WebhookMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "interruptions": {
+            "minimum": 0,
+            "title": "Interruptions",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WebhookLatency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "turns": {
+            "minimum": 0,
+            "title": "Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turns",
+          "interruptions",
+          "latency_ms"
+        ],
+        "title": "WebhookMetrics",
+        "type": "object"
+      },
+      "WebhookRecording": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "url"
+        ],
+        "title": "WebhookRecording",
+        "type": "object"
+      },
+      "WebhookTranscriptTurn": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "t_ms": {
+            "minimum": 0,
+            "title": "T Ms",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "text",
+          "t_ms"
+        ],
+        "title": "WebhookTranscriptTurn",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "The stable envelope delivered and exposed by pull APIs.",
+    "properties": {
+      "agent": {
+        "$ref": "#/$defs/WebhookAgent"
+      },
+      "call": {
+        "$ref": "#/$defs/WebhookCall"
+      },
+      "data": {
+        "anyOf": [
+          {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Data"
+      },
+      "event": {
+        "enum": [
+          "call.started",
+          "call.completed",
+          "call.failed",
+          "call.recording.ready"
+        ],
+        "title": "Event",
+        "type": "string"
+      },
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "metrics": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/WebhookMetrics"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "outcome": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Outcome"
+      },
+      "recording": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/WebhookRecording"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "transcript": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/WebhookTranscriptTurn"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Transcript"
+      }
+    },
+    "required": [
+      "event",
+      "id",
+      "call",
+      "agent",
+      "outcome"
+    ],
+    "title": "WebhookEvent",
+    "type": "object"
+  }
+}
