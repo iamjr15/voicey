@@ -70,18 +70,115 @@ HMAC-SHA256(base64decode(secret after "whsec_"),
             "<event-id>.<timestamp>.<raw-body>")
 ```
 
-Use the raw request body and reject timestamps outside five minutes:
+## Receiver examples
+
+All receivers must read the raw body before JSON parsing and reject timestamps
+outside five minutes. The examples use the current
+[Standard Webhooks libraries](https://github.com/standard-webhooks/standard-webhooks).
+
+### Python
+
+Voicekit's helper accepts a framework header mapping and supports the current
+plus previous secret during rotation:
 
 ```python
+import json
+import os
+
+from fastapi import FastAPI, Request, Response
 from voicekit import verify_webhook
 
-verify_webhook(
-    request.headers,
-    raw_body,
-    current_secret=os.environ["VOICEKIT_WEBHOOK_SECRET"],
-    previous_secret=os.environ.get("VOICEKIT_WEBHOOK_PREVIOUS_SECRET"),
-)
+app = FastAPI()
+
+
+@app.post("/voice-results")
+async def voice_results(request: Request) -> Response:
+    raw_body = await request.body()
+    verify_webhook(
+        request.headers,
+        raw_body,
+        current_secret=os.environ["VOICEKIT_WEBHOOK_SECRET"],
+        previous_secret=os.environ.get("VOICEKIT_WEBHOOK_PREVIOUS_SECRET"),
+    )
+    event = json.loads(raw_body)
+    persist_once(event["id"], event)
+    return Response(status_code=204)
 ```
+
+### JavaScript
+
+Install `standardwebhooks@1.0.0`. `express.raw` is intentional; a JSON parser
+must not run before signature verification.
+
+```javascript
+import express from "express";
+import { Webhook } from "standardwebhooks";
+
+const app = express();
+
+app.post(
+  "/voice-results",
+  express.raw({ type: "application/json" }),
+  async (request, response) => {
+    const headers = {
+      "webhook-id": request.get("webhook-id"),
+      "webhook-timestamp": request.get("webhook-timestamp"),
+      "webhook-signature": request.get("webhook-signature"),
+    };
+    const rawBody = request.body.toString("utf8");
+    const event = new Webhook(process.env.VOICEKIT_WEBHOOK_SECRET).verify(
+      rawBody,
+      headers,
+    );
+    await persistOnce(event.id, event);
+    response.sendStatus(204);
+  },
+);
+```
+
+### Go
+
+The pinned Go library accepts the raw bytes and the request's `http.Header`
+directly:
+
+```go
+package receiver
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+
+	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
+)
+
+func VoiceResults(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	webhook, err := standardwebhooks.NewWebhook(os.Getenv("VOICEKIT_WEBHOOK_SECRET"))
+	if err != nil || webhook.Verify(body, r.Header) != nil {
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
+	}
+	var event struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(body, &event) != nil || event.ID == "" {
+		http.Error(w, "invalid event", http.StatusBadRequest)
+		return
+	}
+	persistOnce(event.ID, body)
+	w.WriteHeader(http.StatusNoContent)
+}
+```
+
+Return a 2xx response only after the receiver has durably claimed the stable
+event id. The receiver should enforce its own bounded body size before
+verification and never log the secret or full protected payload.
 
 The checked-in interoperability vector is verified in CI by the official
 Standard Webhooks Python 1.1.0, JavaScript 1.0.0, and pinned Go implementations.

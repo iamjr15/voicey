@@ -1,0 +1,63 @@
+# LiveKit quickstart
+
+This path creates a browser voice agent whose conversation logic is a native
+`livekit.agents.Agent`. Budget five minutes after Python, `uv`, and `ffmpeg`
+are installed. A LiveKit project is required for the real browser call.
+
+## 1. Install the CLI
+
+Until the package has its final public name, install the reviewed wheel from a
+private release artifact:
+
+```bash
+uv tool install --from "./voicekit-0.0.0.dev0-py3-none-any.whl[livekit]" voicekit
+```
+
+After the human publishes the renamed package, replace the local wheel path
+with its pinned package version.
+
+## 2. Create the project
+
+The command supplies product choices but no credentials. In an interactive
+terminal, voicekit asks for each missing provider key and the LiveKit project
+values, validates them with read-only requests, and writes `.env` itself.
+
+<!-- voicekit-doc-test:start -->
+```bash
+voicekit init ./hello-livekit \
+  --name hello-livekit \
+  --recipe scratch \
+  --description "Answer concise product questions and confirm uncertainty." \
+  --channels web \
+  --runtime livekit \
+  --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
+  --no-draft-prompts \
+  --yes
+```
+<!-- voicekit-doc-test:end -->
+
+The generated `flow.py` returns a native LiveKit `Agent`; there is no voicekit
+workflow DSL. `tools.py` contains a typed placeholder function and `agent.py`
+contains only the shared engine configuration.
+
+## 3. Verify and talk
+
+```bash
+cd hello-livekit
+voicekit doctor
+voicekit dev
+```
+
+Open the printed admin playground URL, allow microphone access, and speak. The
+admin listener exchanges a one-use voicekit credential for a short-lived,
+least-privilege room token on the public listener; provider secrets never enter
+the browser. Stop with Ctrl-C to drain the native worker.
+
+CI runs the exact marked `voicekit init` command from a freshly installed
+wheel, imports and instantiates the generated native `Agent` and typed tool,
+constructs the pinned `AgentServer`/`AgentSession` provider-mocked path, and
+verifies the terminal signed result under the five-minute budget. A real
+LiveKit room and microphone conversation remain credentialed evidence.
+
+Next: read [LiveKit runtime ownership](runtimes/livekit.md), then provision a
+phone path from the appropriate [carrier guide](index.md#carriers).

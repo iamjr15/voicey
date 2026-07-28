@@ -24,6 +24,18 @@ entry or native LiveKit `Agent` classes; `tools.py` contains plain typed Python
 functions; and `prompts/` contains the authored conversation policy. There is
 no recipe runtime, hidden DSL, or network registry.
 
+## Demo audio
+
+<audio controls src="../assets/recipes/appointment-booking-demo.mp3">
+  <a href="../assets/recipes/appointment-booking-demo.mp3">Download the appointment-booking demo</a>.
+</audio>
+
+This short illustrative exchange follows the checked-in
+[demo transcript](../assets/recipes/demo-transcripts.json). It demonstrates
+contact confirmation and final booking confirmation; it is generated system
+speech, not evidence for provider quality or the latency gate. Regenerate the
+four recipe assets with `uv run python scripts/generate_recipe_demo_audio.py`.
+
 ## Native LiveKit workflow
 
 The intake Agent hands off by returning a booking, rescheduling, or cancellation

@@ -31,6 +31,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 cloud-worker deploys | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Pipecat Cloud and LiveKit Cloud projects, deployed companion, registry, provider credentials, and paid PSTN |
 | P4 Railway deploy | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated billed Railway workspace, managed Postgres, private bucket, and paired cloud worker for paid media evidence |
 | P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
+| P4 live rolling drain on every target | ready-to-run, pending credentials/paid calls | P4.1 procedure below, using each target's exact deploy command above | Public Docker ingress plus authenticated Fly, Pipecat Cloud, LiveKit Cloud, and Railway targets with active paid calls |
 | P4 public canary/stable publication | human-only, pending final name/review | Run private `Prepare release artifacts`, then execute `RENAME.md`; no public-upload command is automated | Final name, package-index ownership, human artifact review and explicit publish approval |
 
 Statuses change to `ready-to-run, pending …` only after the harness,

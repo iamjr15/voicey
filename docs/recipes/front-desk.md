@@ -10,6 +10,19 @@ LiveKit uses its native warm-transfer task. Replace `TodoFrontDeskGateway`,
 configure the transfer destination, approved corpus, emergency language, and
 Results receiver.
 
+## Demo audio
+
+<audio controls src="../assets/recipes/front-desk-demo.mp3">
+  <a href="../assets/recipes/front-desk-demo.mp3">Download the front-desk demo</a>.
+</audio>
+
+The checked-in illustrative exchange demonstrates reason capture and explicit
+briefing consent. Its source is
+[demo-transcripts.json](../assets/recipes/demo-transcripts.json); generated
+system speech is not provider or latency evidence.
+
+## Create the project
+
 ```bash
 voicekit init ./front-desk \
   --name front-desk \
@@ -21,6 +34,23 @@ voicekit init ./front-desk \
   --no-draft-prompts \
   --yes
 ```
+
+## Production customization map
+
+| File / setting | Owner action |
+|---|---|
+| `tools.py:TodoFrontDeskGateway` | Replace approved lookup and message storage with authenticated, idempotent business APIs. |
+| `prompts/system.md` | Supply the approved knowledge boundary, departments, hours, and non-diagnostic language. |
+| `prompts/failure.md` | Define callback and outage language without fabricating availability. |
+| `prompts/voicemail.md` | Keep the message under 20 seconds and free of sensitive detail. |
+| `VOICEKIT_TRANSFER_NUMBER` | Inject the reviewed E.164 transfer destination at runtime. |
+| `agent.py:Results` | Configure the verified receiver and redaction policy. |
+
+## Verification
+
+`voicekit test` covers approved-knowledge refusal, confirmed message capture,
+emergency language, transfer consent, decline, and native handoff compilation
+on both runtimes.
 
 Next: run `voicekit test`, then certify the conference-bridge checklist in
 `docs/GAPS.md` on a funded Twilio account.

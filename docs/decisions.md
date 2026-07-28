@@ -2,6 +2,25 @@
 
 Decisions are append-only. A superseding decision links the earlier entry and explains the migration impact.
 
+## 2026-07-28 — Launch documentation and security evidence
+
+- Generate the config, public Python, webhook, and error reference from
+  importable models, declared `__all__` exports, validated Pydantic schemas, and
+  the executable error catalog. Commit the Markdown and fail CI on drift so the
+  readable reference and machine snapshots have the same source of truth.
+- Execute only the marked runtime quickstart command blocks from a fresh wheel.
+  Provider-mocked native runtime/media evidence is valid for deterministic
+  first-run and documentation checks, but never substitutes for a credentialed
+  microphone conversation.
+- Check in one locally synthesized MP3 per first-party recipe as an illustrative
+  conversation preview. The transcripts and deterministic generation command
+  are committed; these files make no provider, naturalness, or latency claim.
+- Treat “image secret scan” as an actual canonical production-container test:
+  build the generated Python 3.14 image, verify the runtime-only fixture secret
+  is absent from image metadata, start it read-only/non-root, prove health and
+  SIGTERM drain, then run Trivy vulnerability and secret scanners. Dockerfile
+  inspection alone is not release evidence.
+
 ## 2026-07-26 — P0 defaults accepted
 
 - **Product name:** keep `voicekit` in package, CLI, entry-point groups, docs, and examples through the build. Do not publish or register public resources. Prepare `RENAME.md` for the human-selected final name.

@@ -247,6 +247,28 @@ strict pyright, snapshot checks, workflow lint, and the full suite are green:
 1,118 passed, 41 honest skips, 90.38% branch coverage. Operator contract:
 `docs/releasing.md`.
 
+**P4.6 checkpoint complete locally 2026-07-28; external release gates
+pending:** the complete spec §16 inventory is now navigable from `docs/index.md`
+and enforced by link/inventory contracts. Both marked runtime quickstarts run
+verbatim from a fresh wheel and exercise native workflow objects, typed tools,
+provider-mocked browser/media, terminal persistence, and Standard Webhooks
+inside the five-minute budget. Configuration/Python/webhook/error reference
+pages are generated from executable sources; all four recipes ship checked-in
+illustrative MP3s plus production customization maps; the stored-data map and
+three-language receiver guide make security ownership explicit. The security
+gate exercises carrier/result signature negatives, protected logs/records,
+repository and release-artifact secret scans, Python/npm audits, then builds,
+starts read-only/non-root, health-checks, SIGTERM-drains, and Trivy-scans the
+canonical Python 3.14 image with no fixed high/critical or secret finding.
+`RENAME.md`, the weekly aggregate workflow, and
+`docs/COMPLETION-REPORT.md` are complete. The real P4 aggregate passed all
+eight local groups against disposable PostgreSQL 17; its five-second soak
+terminalized 864/864 calls at peak 16 with zero active/FD leak. Final full
+suite: 1,127 passed, 41 honest skips, 90.42% branch coverage. The report remains
+truthfully `pending-live`: exact provider/carrier/cloud/object-store, live
+rolling-drain, microphone/wizard/doctor/handset, 24-hour, naming, and public
+publication items stay in `docs/GAPS.md`.
+
 ## Verification approach
 
 Per-phase exit = that phase's slice of spec §17, mechanized: quickstart e2e script (fresh venv → talking agent, timed); audio-path latency harness with hard budgets (p50 + p95); webhook-invariant chaos suite (kill provider WS mid-call, tool timeouts, process crash/SIGKILL, dual sweepers, fenced late writers — always exactly one terminal event, delivery attempted until acknowledged or visibly dead-lettered); carrier certification pytest suites (nightly live, incl. §5.3 audio rig); parity + config-mapping matrix CI (P2+); wizard/flag-twin/`--json` coverage tests; tunneled-admin negative test; deploy-target scripted e2e with smoke call + persistence preflight + rolling-generation test; docs quickstarts executed in CI. Manual gates per phase: one real phone call on a physical handset, one full wizard run by a human, `doctor` run on a broken-on-purpose machine.

@@ -75,7 +75,9 @@ jobs:
       - name: Sync locked environment
         run: uv sync --frozen --extra pipecat --extra livekit
       - name: Reject uncommitted public API drift
-        run: uv run python scripts/update_public_snapshots.py --check
+        run: |
+          uv run python scripts/update_public_snapshots.py --check
+          uv run python scripts/update_api_reference.py --check
       - name: Require release notes and docs for public changes
         if: github.event_name == 'pull_request'
         run: |
@@ -341,6 +343,11 @@ jobs:
             --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
             --channel canary \
             --report p4-release-report.json
+      - name: Run source-derived docs and fresh-wheel quickstarts
+        run: |
+          uv run python tests/verification/run_p4_docs_gate.py \
+            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --report p4-docs-report.json
       - name: Upload truthful hardening reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -353,6 +360,8 @@ jobs:
             p4-railway-report.json
             p4-upgrade-report.json
             p4-release-report.json
+            p4-docs-report.json
+            p4-docs-quickstarts.json
           if-no-files-found: error
 
   webhook-interop:

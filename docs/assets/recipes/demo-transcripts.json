@@ -1,0 +1,90 @@
+{
+  "appointment-booking": [
+    {
+      "speaker": "caller",
+      "text": "I need a cleaning next Tuesday afternoon."
+    },
+    {
+      "speaker": "agent",
+      "text": "I can check that. May I have your name and email for the appointment?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Jordan Lee, jordan at example dot com."
+    },
+    {
+      "speaker": "agent",
+      "text": "I found three thirty PM. Should I book it after I read back the details?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Yes, please."
+    }
+  ],
+  "front-desk": [
+    {
+      "speaker": "caller",
+      "text": "Could I speak with someone about my invoice?"
+    },
+    {
+      "speaker": "agent",
+      "text": "I can route that. May I tell billing your name and a short reason for the call?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Sam Rivera, and the total looks incorrect."
+    },
+    {
+      "speaker": "agent",
+      "text": "Thank you. Do I have your consent to brief billing before I transfer you?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Yes."
+    }
+  ],
+  "lead-intake": [
+    {
+      "speaker": "caller",
+      "text": "We need help answering support calls after hours."
+    },
+    {
+      "speaker": "agent",
+      "text": "I can capture the business need. May I store your work contact for follow up?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Yes. Use sam at example dot com."
+    },
+    {
+      "speaker": "agent",
+      "text": "I heard sam at example dot com. Is that correct?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Correct."
+    }
+  ],
+  "restaurant-reservations": [
+    {
+      "speaker": "caller",
+      "text": "A table for four this Friday around seven."
+    },
+    {
+      "speaker": "agent",
+      "text": "Which timezone, and do you have any seating needs I should include?"
+    },
+    {
+      "speaker": "caller",
+      "text": "Eastern time, and one high chair."
+    },
+    {
+      "speaker": "agent",
+      "text": "Seven is full. I can offer six thirty, seven thirty, or a non-guaranteed waitlist."
+    },
+    {
+      "speaker": "caller",
+      "text": "Please reserve seven thirty."
+    }
+  ]
+}
