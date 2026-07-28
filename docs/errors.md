@@ -525,6 +525,14 @@ prerequisites.
 **Fix:** Review the transcript, cited judge reason, and stability attempts before
 retrying.
 
+## VK-TST-005
+
+**Cause:** A soak run is invalid or exceeded a call, file-descriptor, or memory
+bound.
+
+**Fix:** Inspect the soak report, fix the leaked resource or terminal call, then
+rerun the same duration and concurrency.
+
 ## VK-CLI-001
 
 **Cause:** A non-interactive command lacks an explicit required choice.

@@ -223,6 +223,7 @@ async def test_livekit_reload_drain_prewarm_and_optional_repository_close(
         )
 
     await host.drain()
+    assert not host.gate.accepting
     assert server.drains == [3600]
     assert server.closed
 
@@ -484,4 +485,20 @@ async def test_livekit_reservation_expires() -> None:
     gate = LiveKitAdmissionGate(1, reservation_ttl_s=0.01)
     await gate.reserve("expires")
     await asyncio.sleep(0.03)
+    assert gate.occupied == 0
+
+
+@pytest.mark.asyncio
+async def test_livekit_drain_rejects_new_work_but_honors_visible_reservation() -> None:
+    gate = LiveKitAdmissionGate(2)
+    await gate.reserve("visible-before-drain")
+    await gate.begin_drain()
+
+    assert not gate.accepting
+    with pytest.raises(VoicekitError) as caught:
+        await gate.reserve("new-browser-call")
+    assert caught.value.code == "VK-RUN-008"
+    assert await gate.admit("existing-job", "visible-before-drain")
+    assert not await gate.admit("new-sip-job", "unreserved-after-drain")
+    await gate.release("existing-job")
     assert gate.occupied == 0

@@ -257,6 +257,56 @@ jobs:
             p2-from-p3-report.json
           if-no-files-found: error
 
+  p4-hardening:
+    name: P4 chaos / drain / bounded soak
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: voicekit
+          POSTGRES_PASSWORD: voicekit-test # pragma: allowlist secret
+          POSTGRES_DB: voicekit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voicekit -d voicekit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      VOICEKIT_TEST_POSTGRES_DSN: postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit # pragma: allowlist secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install uv==0.11.7
+      - name: Sync complete hardening environment
+        run: |
+          uv sync --frozen \
+            --extra pipecat \
+            --extra livekit \
+            --extra twilio \
+            --extra cloud \
+            --extra companion
+      - name: Run chaos, drain, and bounded soak gates
+        run: |
+          uv run python tests/verification/run_p4_hardening_gate.py \
+            --short-soak-s 30 \
+            --max-concurrent 8 \
+            --report p4-hardening-report.json
+      - name: Upload truthful hardening reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p4-hardening-reports
+          path: |
+            p4-hardening-report.json
+            p4-short-soak-report.json
+          if-no-files-found: error
+
   webhook-interop:
     name: Standard Webhooks interop
     runs-on: ubuntu-latest

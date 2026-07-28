@@ -380,6 +380,13 @@ def changes_mind():
 - **Assertions:** hard checks on `outcome`/`data`/turn-count/latency budgets + LLM-judge criteria (must cite transcript lines; judge model configurable).
 - Deterministic seeds where providers allow; flake policy: a scenario failing <100% reruns 3× and reports stability %, never silently passes.
 - Output: terminal table, `--report junit` for CI. Live JUnit includes secret-free provider/path/call identifiers and terminal status; it never includes credentials. **Recipes ship with their sim suites passing in both runtimes — enforced by release CI (§17).**
+- **Reliability soak API:** `voicekit.testing.SoakConfig`,
+  `run_engine_soak()`, and `SoakReport` drive deterministic simulated
+  caller/agent turns through the shared fenced lifecycle at the selected
+  runtimes' `max_concurrent`. Reports fail closed on incomplete/duplicate
+  terminal work, active/admission leaks, or configured FD/heap/RSS bounds.
+  Short runs are CI regressions only; the release gate requires a truthful
+  `duration_s >= 86400` report.
 
 ---
 

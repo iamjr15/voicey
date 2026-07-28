@@ -155,6 +155,20 @@ Build order (each numbered item = mergeable unit with its own tests):
 
 Full chaos suite; 24h soak at max_concurrent; drain/zero-downtime redeploy per target (against the rolling-generation invariant test); Prometheus endpoint + opt-in OTLP; **railway target** (platform-managed PG provisioning + migrations + persistence preflight + rolling-generation invariant tests — fly moved to P3 as the companion foundation); `upgrade` + `recipes update-check` drift tooling (AI-merge guidance, never overwrite); **release engineering as concrete tasks (Codex R3, spec §15)**: SemVer policy implementation + deprecation-warning machinery (2-minor minimum), runtime version-range checks with out-of-range warnings + compatibility table, canary channel (`--pre`) validated by first-party recipes before stable, **API/schema snapshot diff in CI** (config schema, webhook payload, CLI surface — docs PR required on change); **docs completion per spec §16 as an enumerated checklist** (per-runtime quickstarts CI-executed verbatim, concepts, per-carrier + per-deploy-target guides, webhook receiving in 3 languages, testing, upgrading, recipe pages, generated API reference, error-catalog pages, troubleshooting index); security pass (signature negative tests, secret-leak scans of logs/records/images, dependency + container audit — baseline scanning already running since P0/P1); **rename step** (RENAME.md executed once the real name is chosen: package dir, pyproject, console script, entry-point groups, imports, docs) → publish to PyPI + launch.
 
+**P4.1 checkpoint complete locally 2026-07-28; 24-hour and external-target
+evidence pending:** the full terminal-invariant chaos matrix now covers both
+runtimes, actual SIGKILL, provider/carrier disconnects, bounded tool timeout,
+terminal/outbox transaction rollback, dual sweepers, and fenced late writers.
+LiveKit admission closes before native drain while preserving an already-issued
+reservation. A public dual-runtime soak API and exact 24-hour runner enforce
+call, terminal, FD, heap, and RSS bounds. The aggregate passed every local row
+against SQLite and disposable PostgreSQL 17; its two-second proof completed 296
+calls at peak active eight with zero active/FD leaks. The shortened CI row is
+not the wall-clock gate: `.github/workflows/soak.yml` targets a dedicated
+self-hosted runner and `docs/GAPS.md` retains the exact 24-hour and live
+rolling-deploy commands. The credential-free full suite passed 991 tests with
+40 honest live skips at 90.05% branch coverage.
+
 ## Verification approach
 
 Per-phase exit = that phase's slice of spec §17, mechanized: quickstart e2e script (fresh venv → talking agent, timed); audio-path latency harness with hard budgets (p50 + p95); webhook-invariant chaos suite (kill provider WS mid-call, tool timeouts, process crash/SIGKILL, dual sweepers, fenced late writers — always exactly one terminal event, delivery attempted until acknowledged or visibly dead-lettered); carrier certification pytest suites (nightly live, incl. §5.3 audio rig); parity + config-mapping matrix CI (P2+); wizard/flag-twin/`--json` coverage tests; tunneled-admin negative test; deploy-target scripted e2e with smoke call + persistence preflight + rolling-generation test; docs quickstarts executed in CI. Manual gates per phase: one real phone call on a physical handset, one full wizard run by a human, `doctor` run on a broken-on-purpose machine.

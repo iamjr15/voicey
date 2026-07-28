@@ -5,9 +5,9 @@ Last updated: 2026-07-28
 ## Current checkpoint
 
 - **Phase:** P4 — hardening, observability, Railway, drift tooling, release, docs, security
-- **Current unit:** P4.1 chaos/soak/drain hardening
-- **Next task:** inventory the existing crash/drain guarantees against P4's full chaos matrix, implement missing adversarial cases, and add the bounded 24-hour soak harness
-- **Completed:** all P0–P3 numbered units. P3.6 closes the last runtime-parity exclusion with a consent-gated Pipecat/Twilio conference bridge: private human briefing, press-1 acceptance before caller movement, schema-v3 durable CAS state, privacy-minimized digest storage, signed callbacks, no speculative retries, precise timeout/decline cleanup, and restart orphan recovery. Full suite: 979 passed, 40 honest live skips, 90.04% branch coverage. The release-shaped P3 aggregate reran P2 plus recipes, Vobiz, Plivo/generic SIP, tier-3 PSTN harness, relay/cloud, warm transfer, and disposable PostgreSQL 17 managed storage; all eight local rows are green. Six real provider/cloud/handset rows remain pending-live with exact commands in `docs/GAPS.md`
+- **Current unit:** P4.2 Prometheus metrics and opt-in OTLP
+- **Next task:** add the runtime-neutral metric registry/export endpoint, wire lifecycle/delivery/runtime observations, and map one-line OTLP configuration to installed OpenTelemetry APIs
+- **Completed:** all P0–P3 numbered units plus P4.1 local automation. P4.1 adds a full dual-runtime terminal-invariant fault matrix, actual SIGKILL, transactional/fencing/sweeper faults, LiveKit admission-first drain, a public bounded soak API, PostgreSQL equivalence, a 30-second CI row, and a self-hosted 24-hour workflow. The exact local aggregate passed; its two-second proof completed 296/296 calls at peak active eight with zero active/FD leaks and bounded heap/RSS growth. The full 24-hour duration and live rolling replacement on every target remain pending-time/pending-live in `docs/GAPS.md`
 
 ## Gate status
 
@@ -74,6 +74,10 @@ Last updated: 2026-07-28
 | P3.6 paid two-handset warm transfer | pending-live | Exact `voicekit dev --phone` command and nine-step consent/private-briefing/decline/success/replay/crash/privacy checklist in `docs/GAPS.md`; requires funded Twilio, public ingress, and two physical endpoints |
 | P3 local phase aggregate | green | Release-shaped wheel; nested P2 gate plus recipes, Vobiz, Plivo/generic SIP, tier-3 harness, relay/cloud, warm transfer, and disposable PostgreSQL 17 managed storage all green; `.voicekit/verification/p3-gate-report.json` |
 | P3 phase overall | pending-live | All local automation is green; six recipe/provider/PSTN/cloud/object-store/handset rows remain unpromoted in the truthful P3 report; see `docs/verification/p3-gates.md` and `docs/GAPS.md` |
+| P4.1 chaos and drain local certification | green | Provider/carrier/tool/transaction/SIGKILL/sweeper/fenced-late-writer matrix, both runtime failure maps, admission-first Pipecat/LiveKit drain, Docker/results-service shutdown, SQLite/Postgres 17 equivalence all green; full suite 991 passed/40 honest skips at 90.05% branch coverage |
+| P4.1 bounded soak | green | Two-second local proof: 296/296 terminalized calls, peak active 8, zero active/FD leaks, ~57 KiB retained heap and ~1.9 MiB RSS high-water growth; exact report `.voicekit/verification/p4-short-soak-report.json` |
+| P4.1 full 24-hour soak | pending-time | Self-hosted weekly workflow and exact `--duration-s 86400 --max-concurrent 8` command in `docs/GAPS.md`; a shortened run is never promoted |
+| P4.1 live rolling drain per target | pending-live | Active-call replacement checklist for Docker, Fly, Pipecat Cloud, LiveKit Cloud, and future Railway is exact in `docs/GAPS.md`; requires authenticated targets and paid calls |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

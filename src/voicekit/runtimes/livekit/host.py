@@ -94,14 +94,25 @@ class LiveKitAdmissionGate:
         self._pending: dict[str, asyncio.TimerHandle] = {}
         self._active: set[str] = set()
         self._lock = asyncio.Lock()
+        self._accepting = True
 
     @property
     def occupied(self) -> int:
         return len(self._pending) + len(self._active)
 
+    @property
+    def accepting(self) -> bool:
+        """Whether a new reservation or unreserved SIP job may be admitted."""
+        return self._accepting
+
     async def reserve(self, call_id: str) -> None:
         """Reserve browser capacity before a dispatch token is exposed."""
         async with self._lock:
+            if not self._accepting:
+                raise VoicekitError(
+                    "VK-RUN-008",
+                    detail="the LiveKit host is draining and cannot reserve a browser call.",
+                )
             if call_id in self._pending or call_id in self._active:
                 raise VoicekitError("VK-RUN-005", detail=f"duplicate call id {call_id!r}.")
             if self.occupied >= self.capacity:
@@ -118,10 +129,15 @@ class LiveKitAdmissionGate:
             pending = self._pending.pop(call_id, None)
             if pending is not None:
                 pending.cancel()
-            elif self.occupied >= self.capacity:
+            elif not self._accepting or self.occupied >= self.capacity:
                 return False
             self._active.add(job_id)
             return True
+
+    async def begin_drain(self) -> None:
+        """Close new admission while preserving already-issued reservations."""
+        async with self._lock:
+            self._accepting = False
 
     async def release(self, identifier: str) -> None:
         async with self._lock:
@@ -382,6 +398,7 @@ class LiveKitHost:
 
     async def drain(self) -> None:
         """Stop dispatch, wait for active jobs, and close the native worker."""
+        await self.gate.begin_drain()
         await self.server.drain(timeout=self.settings.drain_timeout_s)
         await self.server.aclose()
 

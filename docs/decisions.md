@@ -467,3 +467,24 @@ These choices apply the documented proposals authorized in the build mandate and
   record; LiveKit must prove named room dispatch and terminal persistence.
   Phone projects additionally require an explicit paid destination and a
   terminal durable result unless the operator visibly selects `--skip-smoke`.
+
+## 2026-07-28 — P4 soak and drain bounds
+
+- Use the actual shared fenced lifecycle as the credential-free soak surface,
+  with deterministic simulated user/agent turns and both runtime labels. This
+  measures engine ownership, storage, terminal, and resource behavior without
+  presenting mocked speech providers as live audio evidence.
+- Run `limits.max_concurrent` independently for Pipecat and LiveKit. The
+  reference release gate uses eight slots per runtime, so the combined
+  dual-runtime harness must reach peak active 16.
+- After one warm-up call, require zero active/admission leaks, at most 32 MiB
+  retained Python-heap growth, 64 MiB RSS high-water growth, and four additional
+  file descriptors. Record peak heap separately for diagnosis; gate retained
+  growth because bounded transient allocations are expected.
+- Keep the short CI soak as regression evidence only. The release row requires
+  `duration_s >= 86400` and is scheduled on a self-hosted Linux runner labeled
+  `voicekit-soak`; GitHub's documented six-hour hosted-job limit cannot satisfy
+  the contract.
+- During drain, preserve only reservations already exposed to callers. Reject
+  every new browser reservation and unreserved SIP job with `VK-RUN-008` before
+  invoking the native runtime drain.

@@ -1233,3 +1233,48 @@ Then execute this physical checklist without stopping the host:
 This gate is not green until all nine observations are recorded from real
 Twilio callbacks and physical endpoints. The current environment does not
 contain the required funded Twilio/public-host evidence.
+
+## P4.1 full soak and live rolling drain
+
+The credential-free chaos, drain, two-backend fencing, and bounded soak gate is
+green. The required 24-hour wall-clock duration has not elapsed and is not
+represented as green.
+
+Run it on a stable Linux host:
+
+```bash
+uv sync --frozen --extra pipecat --extra livekit
+uv run python tests/verification/p4_soak.py \
+  --duration-s 86400 \
+  --max-concurrent 8 \
+  --call-hold-s 1 \
+  --runtime both \
+  --report .voicekit/verification/p4-soak-report.json
+```
+
+The scheduled workflow `.github/workflows/soak.yml` targets a self-hosted Linux
+runner labeled `voicekit-soak`. GitHub-hosted jobs have a six-hour execution
+limit, while self-hosted jobs may run for five days, so a hosted `ubuntu-latest`
+job cannot honestly implement this gate. See the official
+[GitHub Actions limits](https://docs.github.com/en/actions/reference/limits).
+
+After the soak, confirm the report says `wall_clock_complete=true`,
+`active_at_end=0`, has no failures, reaches peak active 16 (eight calls for each
+runtime), and stays within the committed heap/RSS/FD bounds.
+
+Live zero-downtime drain remains pending for every external target. For Docker,
+run the P1 Docker smoke procedure above while keeping one call active across
+replacement. For Fly, Pipecat Cloud, and LiveKit Cloud, run their P3 deployment
+commands above, start a paid smoke call, deploy a new immutable version, and
+confirm:
+
+1. the old generation closes readiness before the new route is sent to it;
+2. the admitted call finishes on the old generation without media loss;
+3. a new call lands on the replacement generation;
+4. the stale generation cannot append results or create a second terminal
+   event; and
+5. both terminal deliveries are acknowledged or visibly dead-lettered.
+
+Repeat the same target invariant for Railway after P4.3 lands. No target row is
+green until the authenticated deployment and active-call replacement actually
+run.

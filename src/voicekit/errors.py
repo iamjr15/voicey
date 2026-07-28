@@ -438,6 +438,14 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="One or more voice-agent scenarios failed a hard or judged assertion.",
         fix="Review the transcript, cited judge reason, and stability attempts before retrying.",
     ),
+    "VK-TST-005": ErrorDefinition(
+        code="VK-TST-005",
+        cause="A soak run is invalid or exceeded a call, file-descriptor, or memory bound.",
+        fix=(
+            "Inspect the soak report, fix the leaked resource or terminal call, "
+            "then rerun the same duration and concurrency."
+        ),
+    ),
     "VK-CLI-001": ErrorDefinition(
         code="VK-CLI-001",
         cause="A non-interactive command is missing an explicit required choice.",
