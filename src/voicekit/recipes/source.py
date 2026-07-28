@@ -3,15 +3,126 @@
 from __future__ import annotations
 
 import importlib.resources
+import json
 import os
 import tempfile
+from dataclasses import asdict, dataclass
 from importlib.resources.abc import Traversable
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 from voicekit.config.models import RuntimeName
 from voicekit.errors import VoicekitError
 
 _RUNTIME_DIRECTORIES = frozenset({"pipecat", "livekit"})
+RECIPE_LOCK_NAME = "voicekit.recipe-lock.json"
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeBaseline:
+    """Committed copy of the exact upstream recipe source originally installed."""
+
+    schema_version: int
+    name: str
+    version: str
+    runtime: RuntimeName
+    files: dict[str, str]
+
+    @classmethod
+    def from_payload(cls, payload: object) -> RecipeBaseline:
+        if not isinstance(payload, dict):
+            raise VoicekitError("VK-UPG-003", detail="recipe baseline is not an object.")
+        mapping = cast("dict[str, object]", payload)
+        if set(mapping) != {"schema_version", "name", "version", "runtime", "files"}:
+            raise VoicekitError("VK-UPG-003", detail="recipe baseline fields are invalid.")
+        files = mapping["files"]
+        runtime = mapping["runtime"]
+        if (
+            mapping["schema_version"] != 1
+            or not isinstance(mapping["name"], str)
+            or not mapping["name"]
+            or not isinstance(mapping["version"], str)
+            or not mapping["version"]
+            or runtime not in {"pipecat", "livekit"}
+            or not isinstance(files, dict)
+            or not files
+        ):
+            raise VoicekitError("VK-UPG-003", detail="recipe baseline values are invalid.")
+        normalized: dict[str, str] = {}
+        for path, contents in cast("dict[object, object]", files).items():
+            if not isinstance(path, str) or not isinstance(contents, str):
+                raise VoicekitError(
+                    "VK-UPG-003",
+                    detail="recipe baseline source entries are invalid.",
+                )
+            _validate_relative_path(path)
+            normalized[path] = contents
+        return cls(
+            schema_version=1,
+            name=mapping["name"],
+            version=mapping["version"],
+            runtime=cast("RuntimeName", runtime),
+            files=normalized,
+        )
+
+
+class RecipeBaselineStore:
+    """Atomic public project metadata; it contains authored source, never secrets."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def load(self) -> RecipeBaseline | None:
+        if self.path.is_symlink():
+            raise VoicekitError("VK-SEC-002", detail=str(self.path))
+        if not self.path.exists():
+            return None
+        try:
+            return RecipeBaseline.from_payload(json.loads(self.path.read_text(encoding="utf-8")))
+        except VoicekitError:
+            raise
+        except (OSError, json.JSONDecodeError) as exc:
+            raise VoicekitError(
+                "VK-UPG-003",
+                detail=f"could not read recipe baseline {self.path}.",
+            ) from exc
+
+    def save(self, baseline: RecipeBaseline) -> None:
+        if self.path.is_symlink():
+            raise VoicekitError("VK-SEC-002", detail=str(self.path))
+        payload = json.dumps(asdict(baseline), indent=2, sort_keys=True) + "\n"
+        _write_atomic(self.path, payload)
+
+
+def build_recipe_baseline(
+    name: str,
+    version: str,
+    runtime: RuntimeName,
+) -> RecipeBaseline:
+    """Capture the installed upstream source before project customization."""
+    return RecipeBaseline(
+        schema_version=1,
+        name=name,
+        version=version,
+        runtime=runtime,
+        files=recipe_files(name, runtime),
+    )
+
+
+def render_recipe_baseline(
+    name: str,
+    version: str,
+    runtime: RuntimeName,
+) -> str:
+    """Render deterministic tracked project metadata for scaffold transactions."""
+    return (
+        json.dumps(
+            asdict(build_recipe_baseline(name, version, runtime)),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
 
 
 def recipe_files(name: str, runtime: RuntimeName) -> dict[str, str]:
@@ -42,10 +153,12 @@ def install_recipe(
     project_dir: Path,
     *,
     name: str,
+    version: str,
     runtime: RuntimeName,
 ) -> tuple[Path, ...]:
     """Copy a recipe atomically, accepting identical files but never overwriting."""
     rendered = recipe_files(name, runtime)
+    rendered[RECIPE_LOCK_NAME] = render_recipe_baseline(name, version, runtime)
     try:
         conflicts = [
             relative
@@ -121,8 +234,16 @@ def _collect_files(
 
 
 def _write_new(path: Path, payload: str) -> None:
+    if path.exists():
+        raise VoicekitError("VK-CLI-003", detail=f"refusing to overwrite {path}.")
+    _write_atomic(path, payload)
+
+
+def _write_atomic(path: Path, payload: str) -> None:
     temporary_path: Path | None = None
     try:
+        if path.is_symlink():
+            raise VoicekitError("VK-SEC-002", detail=str(path))
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(
             dir=path.parent,
@@ -135,8 +256,36 @@ def _write_new(path: Path, payload: str) -> None:
             temporary.write(payload)
             temporary.flush()
             os.fsync(temporary.fileno())
+        temporary_path.chmod(0o644)
         os.replace(temporary_path, path)
+    except VoicekitError:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        raise
     except OSError as exc:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
         raise VoicekitError("VK-CLI-003", detail=f"could not create {path}.") from exc
+
+
+def _validate_relative_path(value: str) -> None:
+    relative = PurePosixPath(value)
+    if (
+        not value
+        or "\\" in value
+        or relative.is_absolute()
+        or ".." in relative.parts
+        or value.startswith("./")
+    ):
+        raise VoicekitError("VK-UPG-003", detail=f"unsafe recipe baseline path {value!r}.")
+
+
+__all__ = [
+    "RECIPE_LOCK_NAME",
+    "RecipeBaseline",
+    "RecipeBaselineStore",
+    "build_recipe_baseline",
+    "install_recipe",
+    "recipe_files",
+    "render_recipe_baseline",
+]

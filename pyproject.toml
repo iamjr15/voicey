@@ -31,6 +31,7 @@ dependencies = [
   "opentelemetry-api>=1.39,<2",
   "opentelemetry-exporter-otlp-proto-http>=1.39,<2",
   "opentelemetry-sdk>=1.39,<2",
+  "packaging>=25,<27",
   "prometheus-client>=0.26,<1",
   "pydantic>=2.12,<3",
   "pydantic-settings>=2.12,<3",

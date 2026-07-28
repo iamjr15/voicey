@@ -488,8 +488,10 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
     ),
     "VK-CLI-008": ErrorDefinition(
         code="VK-CLI-008",
-        cause="A money-spending or live-routing mutation lacks explicit confirmation.",
-        fix="Review the exact mutation, then rerun interactively or pass `--yes`.",
+        cause=(
+            "A consequential package, money-spending, or live-routing mutation lacks confirmation."
+        ),
+        fix="Review the exact mutation, then confirm interactively or pass `--yes`.",
     ),
     "VK-CLI-009": ErrorDefinition(
         code="VK-CLI-009",
@@ -500,6 +502,21 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         code="VK-CLI-010",
         cause="A command output request or filter is malformed.",
         fix="Correct the reported flag, identifier, or JSON/output option and retry.",
+    ),
+    "VK-UPG-001": ErrorDefinition(
+        code="VK-UPG-001",
+        cause="The project or installed uv version cannot support a safe voicekit upgrade.",
+        fix="Use a regular uv-managed project with a direct voicekit dependency and uv >=0.11,<1.",
+    ),
+    "VK-UPG-002": ErrorDefinition(
+        code="VK-UPG-002",
+        cause="The lockfile-only voicekit upgrade or fresh-process verification failed.",
+        fix="Review the safe error detail; the prior lockfile was restored when available.",
+    ),
+    "VK-UPG-003": ErrorDefinition(
+        code="VK-UPG-003",
+        cause="Recipe baseline metadata or source drift is invalid or unsafe to compare.",
+        fix="Restore the tracked recipe baseline and regular recipe-owned files, then retry.",
     ),
 }
 

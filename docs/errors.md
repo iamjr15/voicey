@@ -585,9 +585,10 @@ unavailable.
 
 ## VK-CLI-008
 
-**Cause:** A money-spending or live-routing mutation lacks confirmation.
+**Cause:** A consequential package, money-spending, or live-routing mutation
+lacks confirmation.
 
-**Fix:** Review it, then rerun interactively or pass `--yes`.
+**Fix:** Review the exact mutation, then confirm interactively or pass `--yes`.
 
 ## VK-CLI-009
 
@@ -600,3 +601,27 @@ unavailable.
 **Cause:** A command output request or filter is malformed.
 
 **Fix:** Correct the reported flag, identifier, or output option and retry.
+
+## VK-UPG-001
+
+**Cause:** The project or installed `uv` version cannot support a safe voicekit
+upgrade.
+
+**Fix:** Use a regular `uv`-managed project with a direct voicekit dependency
+and `uv >=0.11,<1`.
+
+## VK-UPG-002
+
+**Cause:** The lockfile-only voicekit upgrade or fresh-process verification
+failed.
+
+**Fix:** Review the safe error detail; the prior lockfile was restored when
+available.
+
+## VK-UPG-003
+
+**Cause:** Recipe baseline metadata or source drift is invalid or unsafe to
+compare.
+
+**Fix:** Restore the tracked recipe baseline and regular recipe-owned files,
+then retry.

@@ -37,10 +37,12 @@ from voicekit.deploy.railway import (
 )
 from voicekit.errors import VoicekitError
 from voicekit.obs.records import NewCall
+from voicekit.recipes.drift import RecipeDriftReport, RecipeFileDrift
 from voicekit.relay.auth import RelayCredential
 from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.telephony.models import NumberInfo, PipecatTarget, RollbackToken
+from voicekit.upgrade import UpgradeReport
 
 runner = CliRunner()
 
@@ -473,6 +475,7 @@ def test_read_commands_have_json_paths(
     commands = (
         ["--json"],
         ["recipes", "list", "--json"],
+        ["recipes", "update-check", "--json"],
         ["keys", "list", "--json"],
         ["keys", "validate", "--json"],
         ["numbers", "list", "--json"],
@@ -488,10 +491,6 @@ def test_read_commands_have_json_paths(
     assert missing_call.exit_code == 1
     assert json.loads(missing_call.stdout)["error"]["code"] == "VK-OBS-003"
 
-    future = runner.invoke(app, ["recipes", "update-check", "--json"])
-    assert future.exit_code == 1
-    assert json.loads(future.stdout)["error"]["code"] == "VK-CLI-005"
-
 
 def test_money_and_live_mutations_require_confirmation(
     monkeypatch: pytest.MonkeyPatch,
@@ -506,12 +505,139 @@ def test_money_and_live_mutations_require_confirmation(
     assert "VK-CLI-008" in result.stderr
 
 
-def test_future_capability_commands_fail_with_cataloged_error() -> None:
-    for command in (["upgrade"],):
-        result = runner.invoke(app, command)
-        assert result.exit_code == 1
-        assert "VK-CLI-005" in result.stderr
-        assert "Next:" in result.stderr
+def test_upgrade_requires_confirmation_and_emits_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest = _project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls: list[tuple[ProjectManifest, bool]] = []
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+
+        def upgrade(
+            self,
+            selected: ProjectManifest,
+            *,
+            prerelease: bool,
+        ) -> UpgradeReport:
+            calls.append((selected, prerelease))
+            return UpgradeReport(
+                from_version="0.1.0",
+                to_version="0.2.0rc1",
+                channel="canary",
+                changed=True,
+                lockfile=str(tmp_path / "uv.lock"),
+                pyproject_unchanged=True,
+                recipe_sources_unchanged=True,
+                recipe_drift={
+                    "status": "current",
+                    "conflicts": 0,
+                    "next_step": "voicekit doctor",
+                },
+                next_step="voicekit doctor",
+            )
+
+    monkeypatch.setattr("voicekit.cli.app.UpgradeManager", Manager)
+
+    denied = runner.invoke(app, ["upgrade"])
+    assert denied.exit_code == 1
+    assert "VK-CLI-008" in denied.stderr
+    assert calls == []
+
+    result = runner.invoke(app, ["upgrade", "--pre", "--yes", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["to_version"] == "0.2.0rc1"
+    assert payload["recipe_drift"]["status"] == "current"
+    assert payload["next_step"] == "voicekit doctor"
+    assert calls == [(manifest, True)]
+
+
+def test_recipe_update_check_prints_conflicts_and_merge_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    class Analyzer:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+
+        def analyze(self, _manifest: ProjectManifest) -> RecipeDriftReport:
+            return RecipeDriftReport(
+                recipe="appointment-booking",
+                runtime="pipecat",
+                installed_version="1.0.0",
+                upstream_version="1.1.0",
+                status="update-available",
+                baseline_source="tracked",
+                files=(
+                    RecipeFileDrift(
+                        path="flow.py",
+                        status="conflict",
+                        base_sha256="base",
+                        local_sha256="local",
+                        upstream_sha256="upstream",
+                    ),
+                ),
+                local_changes=1,
+                upstream_changes=1,
+                conflicts=1,
+                ai_merge_prompt="Merge each hunk; never overwrite project code.",
+                next_step="voicekit test",
+            )
+
+    monkeypatch.setattr("voicekit.cli.app.RecipeDriftAnalyzer", Analyzer)
+    result = runner.invoke(app, ["recipes", "update-check"])
+
+    assert result.exit_code == 0
+    assert "flow.py" in result.stdout
+    assert "conflict" in result.stdout
+    assert "AI merge guidance" in result.stdout
+    assert "Next: voicekit test" in result.stdout
+
+
+def test_upgrade_human_output_prints_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    class Manager:
+        def __init__(self, root: Path) -> None:
+            assert root == tmp_path
+
+        def upgrade(
+            self,
+            _manifest: ProjectManifest,
+            *,
+            prerelease: bool,
+        ) -> UpgradeReport:
+            assert prerelease is False
+            return UpgradeReport(
+                from_version="0.1.0",
+                to_version="0.1.0",
+                channel="stable",
+                changed=False,
+                lockfile=str(tmp_path / "uv.lock"),
+                pyproject_unchanged=True,
+                recipe_sources_unchanged=True,
+                recipe_drift={"status": "current"},
+                next_step="voicekit doctor",
+            )
+
+    monkeypatch.setattr("voicekit.cli.app.UpgradeManager", Manager)
+    result = runner.invoke(app, ["upgrade", "--stable", "--yes"])
+
+    assert result.exit_code == 0
+    assert "already current" in result.stdout
+    assert "Project source preserved" in result.stdout
+    assert "Next: voicekit doctor" in result.stdout
 
 
 def test_docker_deploy_generates_validates_updates_manifest_and_prints_next_step(

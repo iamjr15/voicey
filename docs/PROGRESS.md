@@ -5,8 +5,8 @@ Last updated: 2026-07-28
 ## Current checkpoint
 
 - **Phase:** P4 — hardening, observability, Railway, drift tooling, release, docs, security
-- **Current unit:** P4.4 upgrade and recipe drift tooling
-- **Next task:** implement non-overwriting `voicekit upgrade` and `voicekit recipes update-check`, including runtime/package range checks, three-way drift analysis, explicit AI-merge guidance, docs, snapshots, and verification
+- **Current unit:** P4.5 release engineering and compatibility contracts
+- **Next task:** implement SemVer/deprecation machinery, tested runtime range warnings and edge matrices, first-party canary validation, public API/schema snapshots, changelog/release automation, and docs-change enforcement
 - **Completed:** all P0–P3 numbered units plus P4.1–P4.3 local automation. P4.3 adds the Railway CLI `>=5.30.1,<6` target with explicit project/workspace/environment/service/bucket/region choices, exact adoption, owner-only resumable resource evidence, managed Postgres and private bucket references, stdin-only credentials, pre-deploy migrations/object/fencing, two-replica rolling release, platform/liveness/signed readiness, rotation, and reverse created-only rollback. The local gate executed Railway 5.30.1 and disposable PostgreSQL 17; the full suite passed 1,036 tests with 41 truthful skips at 90.15% branch coverage, and the Railway driver reached 92.21%
 
 ## Gate status
@@ -80,6 +80,7 @@ Last updated: 2026-07-28
 | P4.1 live rolling drain per target | pending-live | Active-call replacement checklist for Docker, Fly, Pipecat Cloud, LiveKit Cloud, and future Railway is exact in `docs/GAPS.md`; requires authenticated targets and paid calls |
 | P4.2 Prometheus and OTLP observability | green | Actual loopback exporters exposed bounded metrics for Pipecat and LiveKit and accepted two OTLP/HTTP protobuf trace requests (1,995 bytes); transcript/tool payload PII scan green; `uv run python tests/verification/run_p4_observability_gate.py`; full suite 1,019 passed/40 honest skips at 90.11% branch coverage |
 | P4.3 Railway local deployment automation | green | Railway CLI 5.30.1 contract executed; explicit plans, managed Postgres/private bucket references, stdin-only secrets, two replicas, resumable identity/adoption, rotation, created-only reverse rollback, CLI snapshot, and strict 92.21% driver branch coverage green; real PostgreSQL 17 migration/object/fencing preflight passed; `uv run python tests/verification/run_p4_railway_gate.py` |
+| P4.4 upgrade and recipe drift tooling | green | uv 0.11.7 real disposable-project lock/sync/fresh-process gate green; tracked exact recipe baseline, five-state read-only three-way drift, source-free JSON, AI merge guidance, stable/canary validation, source byte checks, and lock rollback; drift 100%/upgrade 95% branch coverage; `uv run python tests/verification/run_p4_upgrade_gate.py`; full suite 1,081 passed/41 honest skips at 90.25% |
 | P4.3 authenticated Railway deployment | pending-live | Exact provision/rerun/rotate/paired paid-call/active-call redeploy/rollback commands are in `docs/GAPS.md`; `railway whoami` is unauthenticated in this environment, so no paid resource or cloud smoke is promoted |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 

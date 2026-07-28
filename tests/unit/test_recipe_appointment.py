@@ -20,7 +20,12 @@ from voicekit import Agent, Behavior, Models, Phone, Results, Web, results
 from voicekit.cli.scaffold import ScaffoldWriter, ScratchScaffold
 from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
 from voicekit.errors import VoicekitError
-from voicekit.recipes.source import install_recipe, recipe_files
+from voicekit.recipes.source import (
+    RECIPE_LOCK_NAME,
+    RecipeBaselineStore,
+    install_recipe,
+    recipe_files,
+)
 from voicekit.runtimes.pipecat.evals import run_eval_agent
 from voicekit.storage.sqlite import SQLiteRepository
 from voicekit.testing import JudgeConfig, discover_scenarios
@@ -98,13 +103,38 @@ def test_recipe_source_selects_native_variant_and_never_overwrites(tmp_path: Pat
     assert "start_booking" in livekit_files["flow.py"]
     assert all(not path.startswith("livekit/") for path in livekit_files)
 
-    written = install_recipe(tmp_path, name="appointment-booking", runtime="pipecat")
+    written = install_recipe(
+        tmp_path,
+        name="appointment-booking",
+        version="1.0.0",
+        runtime="pipecat",
+    )
     assert written
-    assert install_recipe(tmp_path, name="appointment-booking", runtime="pipecat") == ()
+    assert tmp_path / RECIPE_LOCK_NAME in written
+    baseline = RecipeBaselineStore(tmp_path / RECIPE_LOCK_NAME).load()
+    assert baseline is not None
+    assert baseline.name == "appointment-booking"
+    assert baseline.version == "1.0.0"
+    assert baseline.runtime == "pipecat"
+    assert baseline.files == files
+    assert (
+        install_recipe(
+            tmp_path,
+            name="appointment-booking",
+            version="1.0.0",
+            runtime="pipecat",
+        )
+        == ()
+    )
 
     (tmp_path / "flow.py").write_text("# user-owned\n", encoding="utf-8")
     with pytest.raises(VoicekitError) as conflict:
-        install_recipe(tmp_path, name="appointment-booking", runtime="pipecat")
+        install_recipe(
+            tmp_path,
+            name="appointment-booking",
+            version="1.0.0",
+            runtime="pipecat",
+        )
     assert conflict.value.code == "VK-CLI-003"
     assert (tmp_path / "flow.py").read_text(encoding="utf-8") == "# user-owned\n"
 
@@ -172,6 +202,7 @@ def test_recipe_scaffold_is_complete_native_and_manifested(tmp_path: Path) -> No
     written = ScaffoldWriter().write(tmp_path, scaffold, manifest)
 
     assert len(written) >= 29
+    assert (tmp_path / RECIPE_LOCK_NAME).is_file()
     for relative in ("agent.py", "flow.py", "tools.py", "eval_bot.py"):
         compile((tmp_path / relative).read_text(encoding="utf-8"), relative, "exec")
     assert "Behavior(" in (tmp_path / "agent.py").read_text(encoding="utf-8")

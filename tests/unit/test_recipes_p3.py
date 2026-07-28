@@ -15,7 +15,7 @@ from pipecat.evals.suite import EvalManifest
 
 from voicekit import results
 from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
-from voicekit.recipes.source import install_recipe, recipe_files
+from voicekit.recipes.source import RECIPE_LOCK_NAME, install_recipe, recipe_files
 from voicekit.testing import JudgeConfig, discover_scenarios
 from voicekit.testing.livekit import compile_livekit
 from voicekit.testing.pipecat import compile_pipecat
@@ -86,9 +86,23 @@ def test_p3_recipe_source_selects_only_the_native_runtime(name: str, tmp_path: P
     assert all(not path.startswith(("pipecat/", "livekit/")) for path in pipecat_files)
     assert all(not path.startswith(("pipecat/", "livekit/")) for path in livekit_files)
 
-    written = install_recipe(tmp_path, name=name, runtime="livekit")
+    written = install_recipe(
+        tmp_path,
+        name=name,
+        version="1.0.0",
+        runtime="livekit",
+    )
     assert written
-    assert install_recipe(tmp_path, name=name, runtime="livekit") == ()
+    assert tmp_path / RECIPE_LOCK_NAME in written
+    assert (
+        install_recipe(
+            tmp_path,
+            name=name,
+            version="1.0.0",
+            runtime="livekit",
+        )
+        == ()
+    )
 
 
 @pytest.mark.parametrize(("name", "facts"), RECIPES.items())

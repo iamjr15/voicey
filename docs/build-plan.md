@@ -207,6 +207,24 @@ gate: `uv run python tests/verification/run_p4_railway_gate.py`. Ruff,
 formatting, strict pyright, and the full suite are green: 1,036 passed, 41
 honest skips, 90.15% branch coverage; the Railway driver is 92.21%.
 
+**P4.4 checkpoint complete locally 2026-07-28:** generated and added recipes
+now commit an exact, deterministic `voicekit.recipe-lock.json` upstream source
+baseline. `voicekit recipes update-check` performs a read-only
+base/local/installed-upstream comparison with five file states, source-free
+SHA-256 JSON, and explicit AI merge guidance that preserves local policy,
+native runtime workflows, and the no-MCP boundary. `voicekit upgrade` requires
+`uv >=0.11,<1`, confirms the mutation, resolves only voicekit's lock entry,
+validates stable versus canary selection before sync, carries uv's prerelease
+mode consistently through lock/sync/fresh-process inspection, byte-checks
+`pyproject.toml` and recipe-owned source, and restores the prior lock on
+failure. The real disposable-project gate executed uv 0.11.7, built and synced
+the local prerelease package, ran the newly installed CLI, returned current
+drift, and proved every authored file byte-identical. Focused branch coverage
+is 100% for drift and 95% for upgrade; exact gate:
+`uv run python tests/verification/run_p4_upgrade_gate.py`. Ruff, formatting,
+strict pyright, and the full suite are green: 1,081 passed, 41 honest skips,
+90.25% branch coverage. Operator contract: `docs/upgrading.md`.
+
 ## Verification approach
 
 Per-phase exit = that phase's slice of spec §17, mechanized: quickstart e2e script (fresh venv → talking agent, timed); audio-path latency harness with hard budgets (p50 + p95); webhook-invariant chaos suite (kill provider WS mid-call, tool timeouts, process crash/SIGKILL, dual sweepers, fenced late writers — always exactly one terminal event, delivery attempted until acknowledged or visibly dead-lettered); carrier certification pytest suites (nightly live, incl. §5.3 audio rig); parity + config-mapping matrix CI (P2+); wizard/flag-twin/`--json` coverage tests; tunneled-admin negative test; deploy-target scripted e2e with smoke call + persistence preflight + rolling-generation test; docs quickstarts executed in CI. Manual gates per phase: one real phone call on a physical handset, one full wizard run by a human, `doctor` run on a broken-on-purpose machine.

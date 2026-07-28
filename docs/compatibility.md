@@ -16,6 +16,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |
 | cloudflared CLI | `2026.3.0` observed locally | Quick-tunnel URL emission and bounded process cleanup ran; public hostname DNS remained unavailable, so external WS evidence is pending |
 | Railway CLI | `>=5.30.1,<6` (`5.30.1` executed locally) | Current project/service/Postgres/bucket/domain/variable/deploy/scale/delete JSON surfaces inspected and the version contract executed on 2026-07-28; authenticated mutations remain pending-live |
+| uv CLI | `>=0.11,<1` (`0.11.7` executed locally) | `uv lock --upgrade-package voicekit --prerelease allow\|if-necessary-or-explicit`, `uv sync --locked`, and `uv run --locked` help surfaces inspected and exercised on 2026-07-28 |
 | websockets Python | `>=13.1,<17` (`15.0.1` selected with both runtime extras) | Pipecat uses APIs present across the range; LiveKit 1.6.7's OpenAI plugin requires `<16` |
 | Pipecat client JS | `@pipecat-ai/client-js==1.13.0` | npm registry checked 2026-07-26 |
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
@@ -65,6 +66,15 @@ This table records versions empirically installed and inspected during P0. Runti
   domain/bucket/service/project deletion. Service variables reference managed
   dependencies as `${{Namespace.VARIABLE}}`; voicekit never invokes Railway's
   optional MCP surface.
+- uv 0.11.7 changes only lock resolution with
+  `lock --upgrade-package voicekit`; prerelease policy is `allow` for canary
+  and `if-necessary-or-explicit` for stable. Stable mode separately rejects a
+  prerelease voicekit version before sync, while allowing required
+  prerelease-tagged transitive contracts. `sync --locked` installs the
+  validated resolution without rewriting `pyproject.toml`, and `run --locked`
+  executes drift inspection from the synchronized environment. Both commands
+  receive the same prerelease mode used by `lock`; uv otherwise rejects the
+  lock as stale.
 
 ## Upgrade rule
 

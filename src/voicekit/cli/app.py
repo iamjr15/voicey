@@ -53,6 +53,7 @@ from voicekit.deploy import (
 )
 from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
 from voicekit.obs.logging import scrub_secrets
+from voicekit.recipes.drift import RecipeDriftAnalyzer
 from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
 from voicekit.recipes.source import install_recipe
 from voicekit.relay.auth import RelayCredential
@@ -67,6 +68,7 @@ from voicekit.telephony.models import PipecatTarget, RollbackToken
 from voicekit.testing.reporting import result_json, write_junit
 from voicekit.testing.runner import run_project_tests
 from voicekit.tunnel import TunnelPreference
+from voicekit.upgrade import UpgradeManager
 
 if TYPE_CHECKING:
     from voicekit.telephony.plivo import PlivoAdapter
@@ -522,7 +524,12 @@ def recipes_add(
         context = _context()
         manifest = require_manifest(context)
         recipe = DEFAULT_RECIPE_REGISTRY.require(name, manifest.runtime)
-        written = install_recipe(context.root, name=name, runtime=manifest.runtime)
+        written = install_recipe(
+            context.root,
+            name=name,
+            version=recipe.version,
+            runtime=manifest.runtime,
+        )
         updated = manifest.model_copy(
             update={"recipe": RecipeSelection(name=name, version=recipe.version)}
         )
@@ -543,10 +550,32 @@ def recipes_update_check(
     json_output: Annotated[bool, typer.Option("--json", help="Emit JSON.")] = False,
 ) -> None:
     """Report recipe source drift without overwriting local changes."""
-    _fail(
-        VoicekitError("VK-CLI-005", detail="recipe drift tooling lands in P4."),
-        json_output=json_output,
-    )
+
+    def operation() -> None:
+        context = _context()
+        report = RecipeDriftAnalyzer(context.root).analyze(require_manifest(context))
+        payload = asdict(report)
+        if json_output:
+            _json(payload)
+            return
+        console.print(
+            f"Recipe {report.recipe}@{report.installed_version}: {report.status} "
+            f"(baseline: {report.baseline_source})"
+        )
+        changed = tuple(row for row in report.files if row.status != "unchanged")
+        if changed:
+            table = Table(show_header=True)
+            table.add_column("Path")
+            table.add_column("Drift")
+            for row in changed:
+                table.add_row(row.path, row.status)
+            console.print(table)
+        if report.ai_merge_prompt is not None:
+            console.print("\nAI merge guidance:")
+            console.print(report.ai_merge_prompt)
+        console.print(f"Next: {report.next_step}")
+
+    _guard(operation, json_output=json_output)
 
 
 @numbers_app.command("list")
@@ -1838,12 +1867,48 @@ def deploy_livekit_cloud_command(
 
 @app.command("upgrade")
 def upgrade_command(
-    pre: Annotated[bool, typer.Option("--pre/--stable")] = False,
-    yes: Annotated[bool, typer.Option("--yes")] = False,
+    pre: Annotated[
+        bool,
+        typer.Option(
+            "--pre/--stable",
+            help="Resolve canary prereleases or stable releases only.",
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Confirm the lockfile-only package mutation."),
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit JSON.")] = False,
 ) -> None:
-    """Upgrade engine pins and report recipe drift (lands in P4)."""
-    del pre, yes
-    _fail(VoicekitError("VK-CLI-005", detail="upgrade tooling lands in P4."))
+    """Upgrade only the engine lock entry, then report recipe drift."""
+
+    def operation() -> None:
+        context = _context()
+        manifest = require_manifest(context)
+        channel = "canary prereleases" if pre else "stable releases"
+        _confirm(
+            (
+                f"Resolve voicekit from {channel}, replace uv.lock, and sync "
+                "the project environment? Project source will not be overwritten."
+            ),
+            yes=yes,
+        )
+        report = UpgradeManager(context.root).upgrade(manifest, prerelease=pre)
+        payload = asdict(report)
+        if json_output:
+            _json(payload)
+            return
+        console.print(
+            f"voicekit {report.from_version} -> {report.to_version} "
+            f"({report.channel}; {'changed' if report.changed else 'already current'})"
+        )
+        console.print(
+            "Project source preserved; recipe drift: "
+            f"{report.recipe_drift.get('status', 'unknown')}."
+        )
+        console.print(f"Next: {report.next_step}")
+
+    _guard(operation, json_output=json_output)
 
 
 def _context() -> ProjectContext:

@@ -96,7 +96,7 @@
     },
     {
       "path": "recipes update-check",
-      "phase": "p4-reserved",
+      "phase": "p4",
       "interaction": "read",
       "json": "required",
       "arguments": [],
@@ -231,11 +231,11 @@
     },
     {
       "path": "upgrade",
-      "phase": "p4-reserved",
+      "phase": "p4",
       "interaction": "confirmed-package-mutation",
-      "json": "not-applicable",
+      "json": "required",
       "arguments": [],
-      "options": ["--pre", "--stable", "--yes"],
+      "options": ["--json", "--pre", "--stable", "--yes"],
       "paired_options": [["--pre", "--stable"]]
     }
   ]

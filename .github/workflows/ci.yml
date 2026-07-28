@@ -308,6 +308,10 @@ jobs:
         run: |
           uv run python tests/verification/run_p4_railway_gate.py \
             --report p4-railway-report.json
+      - name: Run safe upgrade and recipe-drift gate
+        run: |
+          uv run python tests/verification/run_p4_upgrade_gate.py \
+            --report p4-upgrade-report.json
       - name: Upload truthful hardening reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -318,6 +322,7 @@ jobs:
             p4-short-soak-report.json
             p4-observability-report.json
             p4-railway-report.json
+            p4-upgrade-report.json
           if-no-files-found: error
 
   webhook-interop:

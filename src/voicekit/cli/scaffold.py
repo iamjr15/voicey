@@ -102,7 +102,11 @@ class ScaffoldWriter:
 
 
 def _render(scaffold: ScratchScaffold) -> dict[str, str]:
-    from voicekit.recipes.source import recipe_files
+    from voicekit.recipes.source import (
+        RECIPE_LOCK_NAME,
+        recipe_files,
+        render_recipe_baseline,
+    )
 
     is_recipe = scaffold.recipe_name != "scratch"
     phone = "None"
@@ -350,6 +354,11 @@ Generated as a native {runtime_label}. Start with `voicekit doctor`, then run
         ):
             rendered.pop(generated_only)
         rendered.update(recipe_files(scaffold.recipe_name, scaffold.runtime))
+        rendered[RECIPE_LOCK_NAME] = render_recipe_baseline(
+            scaffold.recipe_name,
+            scaffold.recipe_version,
+            scaffold.runtime,
+        )
     return rendered
 
 

@@ -178,8 +178,8 @@ readiness is not promoted.
 Run the credential-free gate with disposable PostgreSQL 17:
 
 ```bash
-VOICEKIT_TEST_POSTGRES_DSN=postgresql://voicekit:voicekit-test@127.0.0.1:55434/voicekit \
-  uv run python tests/verification/run_p4_railway_gate.py
+export VOICEKIT_TEST_POSTGRES_DSN=postgresql://voicekit:voicekit-test@127.0.0.1:55434/voicekit  # pragma: allowlist secret
+uv run python tests/verification/run_p4_railway_gate.py
 ```
 
 That gate executes the supported CLI version and local invariants; it does not

@@ -539,3 +539,28 @@ These choices apply the documented proposals authorized in the build mandate and
   rollback removes only voicekit-created domain, bucket, Postgres service,
   application service, and project in reverse order. Adopted resources are
   never deleted.
+
+## 2026-07-28 — Upgrade transaction and recipe baseline
+
+- Use the current `uv >=0.11,<1` lockfile-only contract. Stable upgrades run
+  `uv lock --upgrade-package voicekit --prerelease
+  if-necessary-or-explicit`; canaries use `--prerelease allow`. Global
+  `disallow` cannot resolve required prerelease-tagged transitive contracts, so
+  stable mode instead rejects a prerelease voicekit version before sync. Both
+  sync and inspect drift with that same explicit prerelease mode; uv treats a
+  different or omitted mode as a lock-freshness change. `pyproject.toml`
+  remains user-owned.
+- Commit `voicekit.recipe-lock.json` as the exact upstream source baseline
+  copied by `init` or `recipes add`. This is deterministic public metadata, not
+  protected state. It enables a true base/local/upstream comparison without a
+  remote registry or hidden cache.
+- Keep `recipes update-check` read-only. It reports per-path SHA-256 digests and
+  five drift states, emits source-free JSON and explicit AI-merge guidance, and
+  never changes the manifest, baseline, or recipe-owned source.
+- Before mutating package state, migrate a missing baseline only when the
+  manifest recipe version exactly matches the installed registry version.
+  Otherwise fail closed because the original base cannot be proven.
+- Byte-check `pyproject.toml` and all baseline-owned source before and after the
+  upgrade. Restore the prior lock and resync on command or verification
+  failure. Never restore or overwrite an unexpected source mutation
+  automatically; leave it visible for version-control review.

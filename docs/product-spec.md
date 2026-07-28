@@ -41,9 +41,9 @@ user project (owned, git)                 engine (pip: voicekit, semver)
 ├── prompts/*.md                    │ provider catalog + key validation       │
 ├── tools.py      plain functions   │ telephony adapter layer                 │
 ├── tests/*.py    sim scenarios     │ results contract (sign/deliver/DLQ)     │
-└── voicekit.jsonc  manifest        │ playground dev server                   │
-                                    │ sim-test runner                         │
-                                    │ CLI (init/dev/test/deploy/doctor/…)     │
+├── voicekit.jsonc  manifest        │ playground dev server                   │
+└── voicekit.recipe-lock.json       │ sim-test runner                         │
+     exact recipe baseline          │ CLI (init/dev/test/deploy/doctor/…)     │
                                     │ observability (structured logs/metrics) │
                                     └─────────────────────────────────────────┘
                                     ┌── runtime bootstraps (thin) ────────────┐
@@ -56,7 +56,8 @@ Rules that keep this honest:
 
 1. **Bootstraps stay thin.** A bootstrap may assemble, register, and observe; it may never reinterpret conversation semantics. If a feature requires wrapping a runtime's conversation API, the feature is redesigned or dropped.
 2. **Everything in shared core is runtime-blind.** Shared core communicates with bootstraps only through defined interfaces (§5 telephony targets, §6 results events, §8 client session tokens).
-3. **The manifest (`voicekit.jsonc`)** records init choices (runtime, recipe + version, channels, carriers + selected E.164 phone number, deploy target) so every command is resumable and `recipes update-check` / `upgrade` can reason about drift.
+3. **The manifest (`voicekit.jsonc`)** records init choices (runtime, recipe + version, channels, carriers + selected E.164 phone number, deploy target) so every command is resumable.
+4. **The recipe baseline (`voicekit.recipe-lock.json`)** is committed, deterministic project metadata containing the exact upstream recipe source copied at the recorded version. It contains no secrets. `recipes update-check` compares this base with local project files and the installed upstream package, so upgrades never need to overwrite authored source.
 
 Packaging: single distribution `voicekit` with extras — `voicekit[pipecat]`, `voicekit[livekit]` (each pinning a tested version range of its runtime), `voicekit[twilio,telnyx,vobiz,plivo]`. `init` installs exactly what the wizard's answers require.
 
@@ -314,7 +315,7 @@ The engine's promise: **every call has exactly one terminal event persisted once
 2. Plain language, and **no option is ever pre-selected or badged "recommended" — every choice is the user's.** Guidance means each option carries a neutral, factual one-line description (what it is, cost class, language coverage), never a default we chose for them.
 3. Validate at entry: every key live-tested at paste time; nothing completes setup broken.
 4. Every completed wizard yields a working, talking agent — including the scratch path; wizard ≤ 5 questions, each an explicit selection; advanced options are flags only.
-5. Confirm money & live changes (`--yes` for automation); everything interrupted is resumable (state in manifest); Ctrl-C restores what was changed.
+5. Confirm consequential package, money, and live changes (`--yes` for automation); everything interrupted is resumable (state in manifest or the platform resource ledger); Ctrl-C restores what was changed.
 6. Every interactive question has a flag twin — the same CLI is deterministic for CI and coding agents. `--json` on all read commands.
 
 ### 7.2 Command tree
@@ -331,7 +332,7 @@ voicekit keys                list | validate (re-runs live checks)
 voicekit calls               list | show <id> | redeliver <id> (--undelivered)
 voicekit recipes             list | add <name> | update-check
 voicekit doctor              full preflight (--fix applies safe fixes)
-voicekit upgrade             engine upgrade + recipe drift report (AI-merge guidance, never auto-overwrite)
+voicekit upgrade             lockfile-only engine upgrade + recipe drift report (--pre|--stable --yes --json)
 ```
 
 ### 7.3 Init wizard (fixed question set — every answer an explicit user selection)
@@ -410,7 +411,8 @@ def changes_mind():
 ## 10. Recipe registry
 
 - **A recipe =** `recipe.jsonc` (metadata, version, min-engine) + per-runtime `pipecat/flow.py` + `livekit/flow.py` + shared `prompts/`, `tools.py` stubs (TODO-marked integration points), `tests/` sim suite, and a README (what it does, what to customize, integration points).
-- **Distribution:** shadcn-model — `voicekit recipes add <name>` copies source into the project (runtime-matching variant); recorded with version in the manifest; `recipes update-check` diffs against upstream and offers guidance (including an AI-merge prompt); **never auto-overwrites**.
+- **Distribution:** shadcn-model — `voicekit recipes add <name>` copies source into the project (runtime-matching variant), records its version in the manifest, and writes the deterministic `voicekit.recipe-lock.json` base. `recipes update-check` performs a read-only three-way comparison of base/local/installed-upstream content, reports SHA-256 digests and `unchanged` / `local-only` / `upstream-only` / `converged` / `conflict`, and emits explicit hunk-level AI-merge guidance. It never emits source contents in JSON and **never auto-overwrites**.
+- **Engine upgrades:** `voicekit upgrade` requires `uv >=0.11,<1`, changes only the `voicekit` resolution in `uv.lock`, runs `uv sync --locked`, and invokes `recipes update-check --json` through the newly locked environment. Stable mode permits prerelease-tagged transitive packages only when resolution requires or explicitly names them, then rejects a prerelease `voicekit` version before sync; `--pre` allows the canary channel. `pyproject.toml` and recipe-owned project source are byte-checked before/after; failures restore the prior lockfile and resync when possible.
 - **Launch set (each: both runtimes, sim-tested, production conversation design — voicemail, barge-in, "actually, change that", human-transfer, graceful failure):**
   1. `appointment-booking` (book/reschedule/cancel; calendar-API stub)
   2. `restaurant-reservations` (party size/time/special requests; waitlist fallback)
@@ -488,6 +490,7 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 
 - **SemVer** on the `voicekit` package; public API = `agent.py` schema, `tool`/`results`/`testing` APIs, webhook payload, CLI commands/flags, adapter Protocol.
 - **Runtime compatibility:** each release pins tested ranges of `pipecat-ai`/`livekit-agents`; a compatibility table in docs; CI runs the matrix against range edges; out-of-range installs warn loudly (not fail) with the table link.
+- **Project upgrade transaction:** supported projects use `uv >=0.11,<1` and declare `voicekit` directly in `project.dependencies`. The built-in upgrader executes `uv lock --upgrade-package voicekit --prerelease <mode>`, validates the selected voicekit channel, then passes the same mode to `uv sync --locked` and `uv run --locked`; it never rewrites the dependency declaration or recipe source.
 - **Deprecation policy:** nothing public removed with less than 2 minor versions of runtime warnings + changelog + migration note.
 - **Webhook payload versioning:** additive-only within a major; envelope carries no version field until v2 is ever needed (then explicit).
 - Release cadence target: minor every 4–6 weeks; canary channel (`pip install voicekit --pre`) exercised by first-party recipes before stable.

@@ -267,16 +267,33 @@ owner-only local data directory, and generates a valid `whsec_` value when
 absent. It does not buy numbers, alter routes, install software, or change
 cloud resources.
 
+## Recipe drift and engine upgrades
+
+`voicekit recipes update-check` is read-only and supports `--json`. It compares
+the committed recipe baseline, current project source, and recipe source in the
+installed engine. Human output shows changed paths, conflict status, explicit
+AI-merge guidance, and the next command. JSON exposes paths and content digests
+without source text.
+
+`voicekit upgrade --stable --yes` updates only voicekit's `uv.lock` resolution;
+`--pre` selects the canary channel. The command syncs the locked environment,
+runs drift analysis through that new process, verifies that `pyproject.toml`
+and recipe-owned source are unchanged, and restores the prior lock on failure.
+Both modes accept `--json`.
+
+The exact compatibility, merge, and recovery procedure is in the
+[upgrading guide](upgrading.md).
+
 ## Structured output and automation
 
 All read surfaces accept `--json`, including bare status, recipes, keys,
-numbers, calls, and doctor. JSON failures include `code`, `cause`, `detail`,
-`fix`, `docs`, and `next_step`. Mutating commands use deterministic flags and
-`--yes`.
+numbers, calls, and doctor. Confirmed upgrade also accepts `--json` for its
+post-mutation report. JSON failures include `code`, `cause`, `detail`, `fix`,
+`docs`, and `next_step`. Mutating commands use deterministic flags and `--yes`.
 
 Use `voicekit <command> --help` for the complete flag surface. Commands reserved
-for later phases remain visible but return `VK-CLI-005` with the exact
-capability status.
+for later phases remain visible only while their capability is unavailable and
+return `VK-CLI-005` with the exact capability status.
 
 ## Manual P1.8 verification
 
