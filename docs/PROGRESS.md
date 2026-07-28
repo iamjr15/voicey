@@ -6,8 +6,8 @@ Last updated: 2026-07-28
 
 - **Phase:** P3 — recipes, additional carriers, live tier, cloud deploys, relay, warm transfer
 - **Current unit:** P3.5 cloud deploys + relay + Fly companion
-- **Next task:** implement the authenticated durable results-relay protocol and repository backends first, then build resumable Fly companion provisioning and the Pipecat Cloud/LiveKit Cloud CLI wrappers, secret sync, cutover, persistence invariants, and paid smoke runbooks
-- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.4. The paid live tier now has native Pipecat/Twilio and LiveKit/SIP caller paths, black-box evidence, fail-before-planning acknowledgement/budget checks, bounded fixtures, and a protected nightly workflow. The full suite is 838 passed, 28 honest live skips, 90.15% branch coverage. No paid call ran because carrier/LiveKit/Anthropic/judge/target credentials are unavailable; exact commands remain pending-live in `docs/GAPS.md`
+- **Next task:** implement the Postgres repository/journal and object-store backend with migrations and backend-equivalence/chaos tests, then build resumable Fly companion provisioning and the Pipecat Cloud/LiveKit Cloud CLI wrappers, secret sync, cutover, persistence invariants, and paid smoke runbooks
+- **Completed:** all P0 and P1/P2 numbered units plus P3.1–P3.4. P3.5 now has the signed v1 relay wire, durable nonce replay defense, current/previous credential rotation, opaque generation fencing, gap-free idempotent call streams, lost-ack recovery, terminal/recording acknowledgements, cross-worker handoff, and fail-closed startup over the local SQLite protocol backend. The full suite is 856 passed, 28 honest live skips, 90.01% branch coverage. P3.5 remains in progress: Postgres/object storage, Fly, both cloud wrappers, and real cloud smokes are not yet green
 
 ## Gate status
 
@@ -63,6 +63,9 @@ Last updated: 2026-07-28
 | P3.3 generic SIP external loopback | pending-live | Exact guarded provision/reuse/rollback and paid-call command plus external PBX/carrier checklist in `docs/GAPS.md`; requires operator-owned route and physical endpoints |
 | P3.4 tier-3 live PSTN local verification | green | Native Pipecat/Twilio and LiveKit/SIP caller construction, exact paid acknowledgment and worst-case call budget before planning, signed callback admission, 8 kHz transport, carrier/runtime evidence, cleanup, one-case fixtures, guarded nightly workflow, JSON/JUnit/CLI integration; full suite 838 passed, 28 honest live skips, 90.15% branch coverage |
 | P3.4 paid Pipecat and LiveKit PSTN loopbacks | pending-live | Exact two-path fixture commands and nightly protected-environment setup in `docs/GAPS.md`; no carrier/LiveKit/Anthropic/judge/target variables are present, so no call was placed |
+| P3.5 results-relay protocol/local backend | green | Signed current/previous credentials, durable nonce replay claims, begin/claim acknowledgements, server-issued generation fences, gap-free idempotent full runtime stream, lost-ack recovery, terminal/recording acks, stale-owner rejection, strict wire validation, and fail-closed readiness; `tests/unit/test_relay.py` 18 passed; full suite 856 passed, 28 honest live skips, 90.01% branch coverage |
+| P3.5 Postgres/object storage + Fly companion | in-progress | Next: managed-backend migrations, equivalence/chaos suite, results-service mode, resumable resource ledger, credential rotation, recording ingestion, persistence preflight/invariants/smoke |
+| P3.5 Pipecat Cloud + LiveKit Cloud deployment | pending | Wrappers, secret sync, cutover/rollback and platform smokes follow the durable companion; no cloud gate has been claimed |
 | Physical handset/manual gates | pending-live | Outbound and inbound appointment commands are ready; exact runbook in `docs/GAPS.md` |
 
 No credential-, paid-account-, cloud-, handset-, or wall-clock gate is marked green unless it actually ran.

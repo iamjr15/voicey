@@ -128,6 +128,48 @@ unchanged.
 
 **Fix:** Retry after terminal persistence with the stable engine recording id.
 
+## VK-REL-001
+
+**Cause:** The results-relay URL, credential, or protocol setting is invalid.
+
+**Fix:** Correct the relay configuration and rotate any exposed credential.
+
+## VK-REL-002
+
+**Cause:** The results relay is unavailable or failed its startup readiness
+check.
+
+**Fix:** Restore the relay before allowing the cloud worker to accept calls.
+
+## VK-REL-003
+
+**Cause:** A results-relay request is unsigned, expired, replayed, or invalid.
+
+**Fix:** Synchronize clocks and use a current relay credential to sign a fresh
+request.
+
+## VK-REL-004
+
+**Cause:** A results-relay fencing token is invalid, expired, or stale.
+
+**Fix:** Stop the stale worker and resume with the server-issued current
+generation.
+
+## VK-REL-005
+
+**Cause:** A results-relay operation is out of order or reuses an idempotency
+key.
+
+**Fix:** Retry the same operation bytes or resume at the server-reported
+sequence.
+
+## VK-REL-006
+
+**Cause:** The durable results-relay journal or backing repository failed.
+
+**Fix:** Stop worker admission, restore durable relay storage, and retry
+recovery.
+
 ## VK-ART-001
 
 **Cause:** An artifact key escapes protected storage or targets a symbolic link.

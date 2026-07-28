@@ -117,6 +117,36 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="A recording update is missing, premature, or not engine-owned.",
         fix="Retry after terminal persistence with the stable engine recording id.",
     ),
+    "VK-REL-001": ErrorDefinition(
+        code="VK-REL-001",
+        cause="The results-relay URL, credential, or protocol setting is invalid.",
+        fix="Correct the relay configuration and rotate any exposed credential.",
+    ),
+    "VK-REL-002": ErrorDefinition(
+        code="VK-REL-002",
+        cause="The results relay is unavailable or failed its startup readiness check.",
+        fix="Restore the relay before allowing the cloud worker to accept calls.",
+    ),
+    "VK-REL-003": ErrorDefinition(
+        code="VK-REL-003",
+        cause="A results-relay request is unsigned, expired, replayed, or invalid.",
+        fix="Synchronize clocks and use a current relay credential to sign a fresh request.",
+    ),
+    "VK-REL-004": ErrorDefinition(
+        code="VK-REL-004",
+        cause="A results-relay fencing token is invalid, expired, or stale.",
+        fix="Stop the stale worker and resume with the server-issued current generation.",
+    ),
+    "VK-REL-005": ErrorDefinition(
+        code="VK-REL-005",
+        cause="A results-relay operation is out of order or reuses an idempotency key.",
+        fix="Retry the same operation bytes or resume at the server-reported sequence.",
+    ),
+    "VK-REL-006": ErrorDefinition(
+        code="VK-REL-006",
+        cause="The durable results-relay journal or backing repository failed.",
+        fix="Stop worker admission, restore durable relay storage, and retry recovery.",
+    ),
     "VK-ART-001": ErrorDefinition(
         code="VK-ART-001",
         cause="An artifact key escapes protected storage or targets a symbolic link.",

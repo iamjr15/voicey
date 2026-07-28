@@ -905,6 +905,26 @@ async def test_schema_one_database_migrates_to_current(tmp_path: Path) -> None:
         )
         """
     )
+    connection.executescript(
+        """
+        CREATE TABLE call_timeline (
+            sequence INTEGER PRIMARY KEY,
+            call_id TEXT NOT NULL
+        );
+        CREATE TABLE call_transcript (
+            sequence INTEGER PRIMARY KEY,
+            call_id TEXT NOT NULL
+        );
+        CREATE TABLE call_tools (
+            sequence INTEGER PRIMARY KEY,
+            call_id TEXT NOT NULL
+        );
+        CREATE TABLE call_latency (
+            sequence INTEGER PRIMARY KEY,
+            call_id TEXT NOT NULL
+        );
+        """
+    )
     connection.execute("PRAGMA user_version = 1")
     connection.commit()
     connection.close()
@@ -916,4 +936,4 @@ async def test_schema_one_database_migrates_to_current(tmp_path: Path) -> None:
     row = migrated.execute("PRAGMA user_version").fetchone()
     migrated.close()
     assert row is not None
-    assert row[0] == 2
+    assert row[0] == 3

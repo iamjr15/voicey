@@ -403,7 +403,12 @@ class SQLiteRepository(SQLiteCallRecordStore):
             created_at=request.ended_at,
         )
 
-    async def mark_recording_ready(self, update: RecordingReady) -> PersistedEvent:
+    async def mark_recording_ready(
+        self,
+        update: RecordingReady,
+        *,
+        relay_lease: CallLease | None = None,
+    ) -> PersistedEvent:
         """Persist an engine artifact and emit one non-terminal update event."""
         database = self._connection()
         async with self._write_lock:
@@ -420,6 +425,15 @@ class SQLiteRepository(SQLiteCallRecordStore):
                 )
                 if row is None:
                     raise VoicekitError("VK-RES-010", detail=update.recording_id)
+                if relay_lease is not None and (
+                    str(row["call_id"]) != relay_lease.call_id
+                    or row["owner_id"] != relay_lease.owner_id
+                    or int(row["generation"]) != relay_lease.generation
+                ):
+                    raise VoicekitError(
+                        "VK-REL-004",
+                        detail=f"{relay_lease.call_id} generation is stale.",
+                    )
                 if row["status"] == "active":
                     raise VoicekitError(
                         "VK-RES-010",
@@ -528,6 +542,47 @@ class SQLiteRepository(SQLiteCallRecordStore):
                 if row is None:
                     await database.rollback()
                     raise VoicekitError("VK-RES-010", detail=call_id)
+            await database.commit()
+
+    async def mark_recording_failed_fenced(self, lease: CallLease) -> None:
+        """Persist a relayed recording failure only for the current generation."""
+        database = self._connection()
+        async with self._write_lock:
+            cursor = await database.execute(
+                """
+                UPDATE recordings
+                SET status = 'failed'
+                WHERE call_id = ? AND status = 'pending'
+                  AND EXISTS (
+                      SELECT 1 FROM calls
+                      WHERE calls.call_id = recordings.call_id
+                        AND calls.owner_id = ? AND calls.generation = ?
+                  )
+                """,
+                (lease.call_id, lease.owner_id, lease.generation),
+            )
+            changed = cursor.rowcount
+            await cursor.close()
+            if changed == 0:
+                row = await _fetch_one(
+                    database,
+                    """
+                    SELECT recordings.status, calls.owner_id, calls.generation
+                    FROM recordings JOIN calls USING(call_id)
+                    WHERE recordings.call_id = ?
+                    """,
+                    (lease.call_id,),
+                )
+                if (
+                    row is None
+                    or row["owner_id"] != lease.owner_id
+                    or int(row["generation"]) != lease.generation
+                ):
+                    await database.rollback()
+                    raise VoicekitError(
+                        "VK-REL-004",
+                        detail=f"{lease.call_id} generation is stale.",
+                    )
             await database.commit()
 
     async def get_event(self, event_id: str) -> PersistedEvent:
@@ -824,6 +879,35 @@ class SQLiteRepository(SQLiteCallRecordStore):
         rows = list(await cursor.fetchall())
         await cursor.close()
         return tuple(str(row["call_id"]) for row in rows)
+
+    async def current_relay_lease(self, call_id: str) -> CallLease:
+        """Return current ownership for relay retry recovery and fencing checks."""
+        row = await _fetch_one(
+            self._connection(),
+            """
+            SELECT call_id, owner_id, generation, lease_expires_at, updated_at
+            FROM calls WHERE call_id = ?
+            """,
+            (call_id,),
+        )
+        if row is None:
+            raise VoicekitError("VK-OBS-003", detail=call_id)
+        owner_id = row["owner_id"]
+        if owner_id is None or int(row["generation"]) < 1:
+            raise VoicekitError("VK-REL-004", detail=f"{call_id} has no current owner.")
+        expires_value = row["lease_expires_at"] or row["updated_at"]
+        return CallLease(
+            call_id=call_id,
+            owner_id=str(owner_id),
+            generation=int(row["generation"]),
+            expires_at=_parse(str(expires_value)),
+        )
+
+    async def assert_relay_fence(self, lease: CallLease) -> None:
+        """Reject a cryptographically valid token after ownership advances."""
+        current = await self.current_relay_lease(lease.call_id)
+        if current.owner_id != lease.owner_id or current.generation != lease.generation:
+            raise VoicekitError("VK-REL-004", detail=f"{lease.call_id} generation is stale.")
 
     async def register_backup(
         self,

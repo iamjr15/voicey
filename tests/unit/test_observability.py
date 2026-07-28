@@ -414,7 +414,7 @@ async def test_sqlite_store_rejects_unknown_schema(tmp_path: Path) -> None:
         await SQLiteCallRecordStore(database_path).open()
 
     assert caught.value.code == "VK-OBS-004"
-    assert "supported schema is 2" in str(caught.value)
+    assert "supported schema is 3" in str(caught.value)
 
 
 @pytest.mark.parametrize(

@@ -31,7 +31,7 @@ WebhookStatus: TypeAlias = Literal[
 TranscriptRole: TypeAlias = Literal["user", "assistant", "system", "tool"]
 ToolStatus: TypeAlias = Literal["succeeded", "failed", "timed_out"]
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS calls (
@@ -195,6 +195,31 @@ CREATE TABLE purge_queue (
     queued_at TEXT NOT NULL,
     CHECK (artifact_kind IN ('recording', 'backup'))
 );
+"""
+
+_MIGRATION_V3 = """
+BEGIN IMMEDIATE;
+
+ALTER TABLE call_timeline ADD COLUMN relay_operation_id TEXT;
+ALTER TABLE call_transcript ADD COLUMN relay_operation_id TEXT;
+ALTER TABLE call_tools ADD COLUMN relay_operation_id TEXT;
+ALTER TABLE call_latency ADD COLUMN relay_operation_id TEXT;
+
+CREATE UNIQUE INDEX call_timeline_relay_operation_idx
+    ON call_timeline(relay_operation_id)
+    WHERE relay_operation_id IS NOT NULL;
+CREATE UNIQUE INDEX call_transcript_relay_operation_idx
+    ON call_transcript(relay_operation_id)
+    WHERE relay_operation_id IS NOT NULL;
+CREATE UNIQUE INDEX call_tools_relay_operation_idx
+    ON call_tools(relay_operation_id)
+    WHERE relay_operation_id IS NOT NULL;
+CREATE UNIQUE INDEX call_latency_relay_operation_idx
+    ON call_latency(relay_operation_id)
+    WHERE relay_operation_id IS NOT NULL;
+
+PRAGMA user_version = 3;
+COMMIT;
 """
 
 
@@ -393,7 +418,7 @@ class SQLiteCallRecordStore:
             row = await cursor.fetchone()
             await cursor.close()
             version = int(row[0]) if row is not None else 0
-            if version not in {0, 1, SCHEMA_VERSION}:
+            if version not in {0, 1, 2, SCHEMA_VERSION}:
                 await database.close()
                 raise VoicekitError(
                     "VK-OBS-004",
@@ -404,7 +429,9 @@ class SQLiteCallRecordStore:
                 version = 1
             if version == 1:
                 await database.executescript(_MIGRATION_V2)
-                await database.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                version = 2
+            if version == 2:
+                await database.executescript(_MIGRATION_V3)
                 await database.commit()
             self._db = database
             return self
@@ -479,6 +506,36 @@ class SQLiteCallRecordStore:
             touch_call_id=call_id,
         )
 
+    async def append_timeline_once(
+        self,
+        call_id: str,
+        event: TimelineEvent,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> None:
+        """Append a relayed timeline marker at most once."""
+        await self._write_relay_observation(
+            """
+            INSERT OR IGNORE INTO call_timeline(
+                call_id, event_type, occurred_at, details_json, relay_operation_id
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                call_id,
+                event.event_type,
+                _to_iso(event.occurred_at),
+                _json(event.details),
+                operation_id,
+            ),
+            table="call_timeline",
+            call_id=call_id,
+            operation_id=operation_id,
+            owner_id=owner_id,
+            generation=generation,
+        )
+
     async def append_transcript(self, call_id: str, turn: TranscriptTurn) -> None:
         """Incrementally persist one transcript turn."""
         await self._write(
@@ -494,6 +551,37 @@ class SQLiteCallRecordStore:
                 turn.t_ms,
             ),
             touch_call_id=call_id,
+        )
+
+    async def append_transcript_once(
+        self,
+        call_id: str,
+        turn: TranscriptTurn,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> None:
+        """Append a relayed transcript turn at most once."""
+        await self._write_relay_observation(
+            """
+            INSERT OR IGNORE INTO call_transcript(
+                call_id, turn_id, role, text, t_ms, relay_operation_id
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                call_id,
+                turn.turn_id,
+                turn.role,
+                str(scrub_secrets(turn.text)),
+                turn.t_ms,
+                operation_id,
+            ),
+            table="call_transcript",
+            call_id=call_id,
+            operation_id=operation_id,
+            owner_id=owner_id,
+            generation=generation,
         )
 
     async def record_tool_call(
@@ -522,6 +610,41 @@ class SQLiteCallRecordStore:
             touch_call_id=call_id,
         )
 
+    async def record_tool_call_once(
+        self,
+        call_id: str,
+        observation: ToolCallObservation,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> None:
+        """Persist a relayed final tool observation at most once."""
+        await self._write_relay_observation(
+            """
+            INSERT OR IGNORE INTO call_tools(
+                call_id, invocation_id, tool_name, arguments_json, result_json,
+                duration_ms, status, occurred_at, relay_operation_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                call_id,
+                observation.invocation_id,
+                observation.tool_name,
+                _json(observation.arguments),
+                None if observation.result is None else _json(observation.result),
+                observation.duration_ms,
+                observation.status,
+                _to_iso(observation.occurred_at),
+                operation_id,
+            ),
+            table="call_tools",
+            call_id=call_id,
+            operation_id=operation_id,
+            owner_id=owner_id,
+            generation=generation,
+        )
+
     async def record_latency(self, call_id: str, sample: LatencySample) -> None:
         """Persist one validated latency sample."""
         await self._write(
@@ -539,6 +662,39 @@ class SQLiteCallRecordStore:
                 _to_iso(sample.observed_at),
             ),
             touch_call_id=call_id,
+        )
+
+    async def record_latency_once(
+        self,
+        call_id: str,
+        sample: LatencySample,
+        *,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> None:
+        """Persist a relayed latency sample at most once."""
+        await self._write_relay_observation(
+            """
+            INSERT OR IGNORE INTO call_latency(
+                call_id, turn_id, turn_index, metric, duration_ms, observed_at,
+                relay_operation_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                call_id,
+                sample.turn_id,
+                sample.turn_index,
+                sample.metric,
+                sample.duration_ms,
+                _to_iso(sample.observed_at),
+                operation_id,
+            ),
+            table="call_latency",
+            call_id=call_id,
+            operation_id=operation_id,
+            owner_id=owner_id,
+            generation=generation,
         )
 
     async def get_call(self, call_id: str) -> CallRecord:
@@ -596,6 +752,56 @@ class SQLiteCallRecordStore:
             except sqlite3.Error as exc:
                 await database.rollback()
                 raise VoicekitError("VK-OBS-002", detail=str(exc)) from exc
+
+    async def _write_relay_observation(
+        self,
+        statement: str,
+        parameters: tuple[object, ...],
+        *,
+        table: str,
+        call_id: str,
+        operation_id: str,
+        owner_id: str,
+        generation: int,
+    ) -> None:
+        database = self._connection()
+        async with self._write_lock:
+            try:
+                await database.execute("BEGIN IMMEDIATE")
+                cursor = await database.execute(
+                    """
+                    SELECT 1 FROM calls
+                    WHERE call_id = ? AND owner_id = ? AND generation = ?
+                    """,
+                    (call_id, owner_id, generation),
+                )
+                fenced = await cursor.fetchone()
+                await cursor.close()
+                if fenced is None:
+                    raise VoicekitError("VK-REL-004", detail=f"{call_id} generation is stale.")
+                await database.execute(statement, parameters)
+                cursor = await database.execute(
+                    f"SELECT call_id FROM {table} WHERE relay_operation_id = ?",
+                    (operation_id,),
+                )
+                row = await cursor.fetchone()
+                await cursor.close()
+                if row is None or str(row["call_id"]) != call_id:
+                    raise VoicekitError(
+                        "VK-REL-005",
+                        detail="relay operation id collides with another observation.",
+                    )
+                await database.execute(
+                    "UPDATE calls SET updated_at = ? WHERE call_id = ?",
+                    (_to_iso(datetime.now(UTC)), call_id),
+                )
+                await database.commit()
+            except VoicekitError:
+                await database.rollback()
+                raise
+            except sqlite3.Error as exc:
+                await database.rollback()
+                raise VoicekitError("VK-REL-006", detail=str(exc)) from exc
 
     async def _materialize(self, row: aiosqlite.Row) -> CallRecord:
         database = self._connection()

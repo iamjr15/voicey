@@ -318,3 +318,27 @@ These choices apply the documented proposals authorized in the build mandate and
 - Require explicit `udp|tcp|tls` and `disable|allow|require` values and optional
   exact gateway CIDRs. Reject TLS with disabled media encryption. A blank CIDR
   list is allowed only as a visible operator risk, not as a security claim.
+
+## 2026-07-28 — Cloud results-relay wire and trust boundary
+
+- Use HMAC request authentication over the exact method, path, timestamp,
+  nonce, and body digest. A credential is `vkr_<key-id>_<base64url-secret>`;
+  the server accepts current plus previous during rotation, while a durable
+  nonce claim prevents replay across both.
+- Keep the generation fence opaque and server-signed. Validate both the token
+  and the repository's current owner/generation before reserving an update so
+  a stale worker cannot poison the next sequence.
+- Use one gap-free per-call stream for lifecycle, result, timeline,
+  transcript, tool, latency, and recording mutations. Reserve journal state
+  before applying, acknowledge afterward, and make every mutation semantically
+  idempotent so an acknowledgement-loss retry cannot duplicate observations or
+  terminal events.
+- Keep delivery, retention, artifact access, and stale-call recovery on the
+  durable companion. Cloud workers receive only the repository surface needed
+  to persist their own call.
+- Require an authenticated, explicit protocol/storage readiness response
+  before worker admission. Do not treat network reachability, an unsigned
+  health route, or default-filled response fields as readiness.
+- Retain SQLite only as the local protocol/crash-injection backend. The
+  certified Fly companion remains Postgres plus object storage and must pass
+  the same invariants before either cloud target is promoted.
