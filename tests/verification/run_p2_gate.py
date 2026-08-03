@@ -30,7 +30,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p2-gate-report.json"),
+        default=Path(".voicey/verification/p2-gate-report.json"),
     )
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()
@@ -149,10 +149,13 @@ def _pending_external_results() -> list[GateResult]:
             name="unified_reference_conversations",
             status="pending-live",
             command=(
-                "run the two runtime-specific `voicekit test`, `voicekit test --audio`, "
-                "and `voicekit test --report junit` commands in docs/GAPS.md"
+                "run the two runtime-specific `voicey test --audio` and "
+                "`voicey test --report junit` commands in docs/GAPS.md"
             ),
-            detail="requires reference-provider keys, Ollama, and both disposable projects",
+            detail=(
+                "provider text is green through the Anthropic API override; remaining "
+                "audio/JUnit evidence requires reference-provider keys and both projects"
+            ),
         ),
         GateResult(
             name="livekit_browser_and_recipe_conversations",
@@ -167,7 +170,10 @@ def _pending_external_results() -> list[GateResult]:
             name="twilio_livekit_sip",
             status="pending-live",
             command=("uv run pytest -m live --no-cov tests/live/test_twilio_livekit_live.py"),
-            detail="requires funded Twilio/LiveKit accounts, route mutation, and PSTN",
+            detail=(
+                "no-call provision/reuse/rollback is green; paid outbound, recording, "
+                "and handset evidence still require funded PSTN and a deployed agent"
+            ),
         ),
         GateResult(
             name="telnyx_both_paths",

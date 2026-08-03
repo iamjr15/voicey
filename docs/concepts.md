@@ -1,6 +1,6 @@
 # Concepts and ownership boundaries
 
-Voicekit is an engine around native voice-agent runtimes, not a conversation
+Voicey is an engine around native voice-agent runtimes, not a conversation
 framework. A project chooses Pipecat or LiveKit once; shared configuration,
 tools, results, testing, telephony, and operations remain portable.
 
@@ -9,24 +9,24 @@ tools, results, testing, telephony, and operations remain portable.
 | Owner | Owns | Does not own |
 |---|---|---|
 | Your project | persona, prompts, native flow/workflow, typed business tools, policy, result fields | carrier retries, lifecycle fencing, webhook delivery, deployment orchestration |
-| Voicekit engine | config validation, runtime bootstrap, browser rail, carrier adapters, durable call record, exactly-once terminal event, testing, deploy/drain, observability | business truth or a custom conversation DSL |
+| Voicey engine | config validation, runtime bootstrap, browser rail, carrier adapters, durable call record, exactly-once terminal event, testing, deploy/drain, observability | business truth or a custom conversation DSL |
 | Pipecat / LiveKit | media session, STT/LLM/TTS integration, native turn handling, native workflow/tool calls | project storage and cross-runtime result delivery |
 | Carrier / SIP provider | PSTN number, call control, authenticated callbacks, media edge | agent business logic or durable terminal ownership |
 | Your receiver | business-side event deduplication and downstream action | retrying or rewriting the immutable engine event |
 
-There is no voicekit flow DSL and no MCP product surface. Pipecat projects use
+There is no voicey flow DSL and no MCP product surface. Pipecat projects use
 `pipecat.flows` directly. LiveKit projects subclass or return
 `livekit.agents.Agent` directly. Tools are typed Python functions or explicit
 HTTP endpoints.
 
 ## One call through the system
 
-1. Voicekit durably reserves capacity, creates the call row, and issues an
+1. Voicey durably reserves capacity, creates the call row, and issues an
    owner/generation fence before returning answer XML, accepting media, or
    issuing a browser token.
 2. The selected native runtime owns media, turns, provider calls, and authored
    workflow transitions.
-3. Voicekit records bounded observations and incrementally flushes transcript
+3. Voicey records bounded observations and incrementally flushes transcript
    and structured result state behind the runtime-neutral repository protocol.
 4. The current fenced owner terminalizes once. Call state, immutable terminal
    bytes, and the delivery outbox row commit in one transaction.
@@ -38,7 +38,7 @@ inputs to that lifecycle; none may create a second terminal event.
 
 ## Shared config, native mapping
 
-`voicekit.Agent` is intentionally thin. Runtime parity tests map each shared
+`voicey.Agent` is intentionally thin. Runtime parity tests map each shared
 field to a pinned native mechanism. Examples:
 
 - `models` selects native provider services and explicit axis failover;

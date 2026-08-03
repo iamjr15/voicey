@@ -2,12 +2,12 @@ import asyncio
 
 import pytest
 
-from voicekit import results
-from voicekit.errors import VoicekitError
+from voicey import results
+from voicey.errors import VoiceyError
 
 
 def test_results_fail_closed_outside_call() -> None:
-    with pytest.raises(VoicekitError, match="VK-RES-005"):
+    with pytest.raises(VoiceyError, match="VY-RES-005"):
         results.set("slot", "10:00")
 
 

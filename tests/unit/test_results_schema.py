@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from voicekit.results.schema import WebhookEvent
+from voicey.results.schema import WebhookEvent
 
 
 def _payload() -> dict[str, object]:

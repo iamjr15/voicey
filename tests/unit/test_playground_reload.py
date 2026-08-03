@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from voicekit import Agent, Models, Results, Web, tool
-from voicekit.playground.reload import (
+from voicey import Agent, Models, Results, Web, tool
+from voicey.playground.reload import (
     ReloadController,
     _relevant,
     _requires_worker_restart,
@@ -117,7 +117,7 @@ async def test_reload_error_is_cataloged_and_later_revision_can_recover(
     )
     await controller.apply({tmp_path / "agent.py"})
     assert controller.snapshot()["state"] == "error"
-    assert "VK-WEB-005" in str(controller.snapshot()["message"])
+    assert "VY-WEB-005" in str(controller.snapshot()["message"])
 
     await controller.apply({tmp_path / "agent.py"})
     assert controller.snapshot()["state"] == "ready"
@@ -144,7 +144,7 @@ async def test_reload_stops_waiting_when_supervisor_stops(tmp_path: Path) -> Non
 
 def test_reload_classifies_only_runtime_relevant_files(tmp_path: Path) -> None:
     assert _relevant({tmp_path / "prompts" / "system.md"}, tmp_path)
-    assert _relevant({tmp_path / "voicekit.jsonc"}, tmp_path)
+    assert _relevant({tmp_path / "voicey.jsonc"}, tmp_path)
     assert not _relevant({tmp_path / "README.md"}, tmp_path)
     assert not _requires_worker_restart({tmp_path / "agent.py"}, tmp_path)
     assert not _requires_worker_restart({tmp_path / "prompts" / "system.md"}, tmp_path)

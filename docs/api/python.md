@@ -3,7 +3,7 @@
 
 Only names exported through each module's `__all__` are listed.
 
-## `voicekit`
+## `voicey`
 
 ### `Agent`
 
@@ -55,9 +55,9 @@ Only names exported through each module's `__all__` are listed.
 
 ### `verify_webhook(headers: 'Mapping[str, str]', body: 'bytes', *, current_secret: 'str', previous_secret: 'str | None' = None, now: 'int | None' = None, tolerance_seconds: 'int' = 300) -> 'None'` <!-- pragma: allowlist secret -->
 
-**Kind:** function. Verify a received voicekit webhook against current/previous secrets.
+**Kind:** function. Verify a received voicey webhook against current/previous secrets.
 
-## `voicekit.results`
+## `voicey.results`
 
 ### `CallResultBuffer`
 
@@ -117,13 +117,13 @@ Only names exported through each module's `__all__` are listed.
 
 ### `verify_webhook(headers: 'Mapping[str, str]', body: 'bytes', *, current_secret: 'str', previous_secret: 'str | None' = None, now: 'int | None' = None, tolerance_seconds: 'int' = 300) -> 'None'` <!-- pragma: allowlist secret -->
 
-**Kind:** function. Verify a received voicekit webhook against current/previous secrets.
+**Kind:** function. Verify a received voicey webhook against current/previous secrets.
 
-## `voicekit.testing`
+## `voicey.testing`
 
 ### `JudgeConfig`
 
-**Kind:** class. OpenAI-compatible judge endpoint; local Ollama is the explicit default.
+**Kind:** class. Local or cloud test-model endpoint; local Ollama is the explicit default.
 
 ### `LiveTestingConfig`
 
@@ -187,9 +187,9 @@ Only names exported through each module's `__all__` are listed.
 
 ### `scenario(function: 'F') -> 'F'`
 
-**Kind:** function. Mark a zero-argument owned function as a voicekit scenario.
+**Kind:** function. Mark a zero-argument owned function as a voicey scenario.
 
-## `voicekit.tools`
+## `voicey.tools`
 
 ### `HttpTool`
 

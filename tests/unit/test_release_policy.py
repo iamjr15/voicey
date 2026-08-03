@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.release.policy import inspect_wheel, validate_canary_promotion
+from voicey.release.policy import inspect_wheel, validate_canary_promotion
 
 
-def _wheel(tmp_path: Path, version: str, *, name: str = "voicekit") -> Path:
+def _wheel(tmp_path: Path, version: str, *, name: str = "voicey") -> Path:
     path = tmp_path / f"{name}-{version}-py3-none-any.whl"
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
@@ -50,7 +50,7 @@ def test_inspect_wheel_rejects_invalid_artifacts(tmp_path: Path) -> None:
         inspect_wheel(tmp_path / "missing.whl", "canary")
     with pytest.raises(ValueError, match="exactly one"):
         inspect_wheel(_empty_wheel(tmp_path), "canary")
-    with pytest.raises(ValueError, match="voicekit package metadata"):
+    with pytest.raises(ValueError, match="voicey package metadata"):
         inspect_wheel(_wheel(tmp_path, "1.2.0rc1", name="other"), "canary")
 
 

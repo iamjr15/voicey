@@ -11,17 +11,17 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request
 
-from voicekit import Agent, Behavior, Limits, Models, Results, Web, tool
-from voicekit.errors import VoicekitError
-from voicekit.obs import NewCall
-from voicekit.playground.security import (
+from voicey import Agent, Behavior, Limits, Models, Results, Web, tool
+from voicey.errors import VoiceyError
+from voicey.obs import NewCall
+from voicey.playground.security import (
     OriginPolicy,
     SessionTokenManager,
     WebSessionSecurity,
 )
-from voicekit.playground.service import PlaygroundService, PlaygroundSettings
-from voicekit.results.signing import encode_secret
-from voicekit.storage import (
+from voicey.playground.service import PlaygroundService, PlaygroundSettings
+from voicey.results.signing import encode_secret
+from voicey.storage import (
     ResultDeliveryConfig,
     ResultSnapshot,
     SQLiteRepository,
@@ -85,7 +85,7 @@ class FakeRoomTokenIssuer:
 def _frontend(tmp_path: Path) -> Path:
     frontend = tmp_path / "frontend"
     frontend.mkdir(parents=True)
-    (frontend / "index.html").write_text("<!doctype html><title>voicekit</title>")
+    (frontend / "index.html").write_text("<!doctype html><title>voicey</title>")
     return frontend
 
 
@@ -189,18 +189,18 @@ async def test_playground_serves_assets_bootstrap_and_one_use_session(
             service.admin_app,
             "POST",
             "/api/playground/sessions",
-            headers={"user-agent": "voicekit-test"},
+            headers={"user-agent": "voicey-test"},
         )
         issued = cast("dict[str, Any]", session.json())
         identity = await tokens.authorize(str(issued["token"]), pc_id=None)
         assert identity.call_id is not None
         reserved_call = await repository.get_call(identity.call_id)
         await tokens.bind(identity, pc_id="pc_browser", call_id=identity.call_id)
-        with pytest.raises(VoicekitError, match="replayed"):
+        with pytest.raises(VoiceyError, match="replayed"):
             await tokens.authorize(str(issued["token"]), pc_id=None)
 
     assert page.status_code == 200
-    assert "voicekit" in page.text
+    assert "voicey" in page.text
     assert deep_link.status_code == 200
     assert deep_link.text == page.text
     assert page.headers["cache-control"] == "no-store"
@@ -305,7 +305,7 @@ async def test_livekit_token_exchange_stays_on_public_listener_and_is_one_use(
     assert body["room_name"].startswith("web-")
     assert issuer.calls[0]["call_id"] == "call_web_reserved_1"
     assert replay.status_code == 404
-    assert replay.json()["error"]["code"] == "VK-WEB-001"
+    assert replay.json()["error"]["code"] == "VY-WEB-001"
     assert admin_token_route.status_code == 404
     assert "wss://project.livekit.cloud" in page.headers["content-security-policy"]
     assert canceled == []
@@ -443,7 +443,7 @@ async def test_admin_host_origin_and_deployed_authorizer_are_enforced(
             headers={"origin": "https://attacker.example"},
         )
 
-        with pytest.raises(VoicekitError, match="auth hook"):
+        with pytest.raises(VoiceyError, match="auth hook"):
             PlaygroundService(
                 agent=_agent(),
                 public_app=FastAPI(),
@@ -480,9 +480,9 @@ async def test_admin_host_origin_and_deployed_authorizer_are_enforced(
         )
 
     assert hostile_host.status_code == 403
-    assert hostile_host.json()["error"]["code"] == "VK-WEB-004"
+    assert hostile_host.json()["error"]["code"] == "VY-WEB-004"
     assert hostile_origin.status_code == 403
-    assert hostile_origin.json()["error"]["code"] == "VK-WEB-002"
+    assert hostile_origin.json()["error"]["code"] == "VY-WEB-002"
     assert denied.status_code == 403
     assert allowed.status_code == 200
 
@@ -555,19 +555,19 @@ async def test_public_listener_only_exposes_cors_protected_signaling(
 
 
 def test_playground_settings_and_assets_reject_unsafe_shapes(tmp_path: Path) -> None:
-    with pytest.raises(VoicekitError, match="normalized origin"):
+    with pytest.raises(VoiceyError, match="normalized origin"):
         PlaygroundSettings(
             admin_origin="http://127.0.0.1:7860/",
             public_origin="http://127.0.0.1:7861",
             frontend_dir=tmp_path,
         )
-    with pytest.raises(VoicekitError, match="loopback"):
+    with pytest.raises(VoiceyError, match="loopback"):
         PlaygroundSettings(
             admin_origin="https://admin.example",
             public_origin="https://voice.example",
             frontend_dir=tmp_path,
         )
-    with pytest.raises(VoicekitError, match="not an origin"):
+    with pytest.raises(VoiceyError, match="not an origin"):
         PlaygroundSettings(
             admin_origin="ftp://127.0.0.1",
             public_origin="https://voice.example",
@@ -579,7 +579,7 @@ def test_playground_settings_and_assets_reject_unsafe_shapes(tmp_path: Path) -> 
         public_origin="http://127.0.0.1:7861",
         frontend_dir=tmp_path / "missing",
     )
-    with pytest.raises(VoicekitError, match="entrypoint"):
+    with pytest.raises(VoiceyError, match="entrypoint"):
         PlaygroundService(
             agent=_agent(),
             public_app=FastAPI(),
@@ -621,8 +621,8 @@ async def test_missing_sessions_recordings_and_events_use_catalog_errors(
         )
 
     assert session.status_code == 404
-    assert session.json()["error"]["code"] == "VK-WEB-001"
+    assert session.json()["error"]["code"] == "VY-WEB-001"
     assert recording.status_code == 404
-    assert recording.json()["error"]["code"] == "VK-OBS-003"
+    assert recording.json()["error"]["code"] == "VY-OBS-003"
     assert result.status_code == 404
-    assert result.json()["error"]["code"] == "VK-RES-009"
+    assert result.json()["error"]["code"] == "VY-RES-009"

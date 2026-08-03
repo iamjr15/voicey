@@ -15,4 +15,5 @@ htmlcov/
 .pytest_cache/
 .pyright/
 data/
+.voicey/
 .voicekit/

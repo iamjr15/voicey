@@ -9,13 +9,13 @@ from typing import Any, cast
 import pytest
 from livekit.protocol import sip as lk_sip
 
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.generic_sip import (
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.generic_sip import (
     GenericSipConfig,
     GenericSipProvisioner,
 )
-from voicekit.runtimes.livekit.sip import LiveKitSipAPI
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.runtimes.livekit.sip import LiveKitSipAPI
+from voicey.telephony.ledger import TelephonyLedger
 
 NUMBER = "+14155550100"
 
@@ -99,7 +99,7 @@ class FakeLiveKit:
         self.dispatch.remove(item)
         return item
 
-    async def delete_sip_trunk(
+    async def delete_trunk(
         self,
         request: lk_sip.DeleteSIPTrunkRequest,
     ) -> lk_sip.SIPTrunkInfo:
@@ -120,7 +120,7 @@ def _config(**values: object) -> GenericSipConfig:
         "number": NUMBER,
         "agent_name": "booking",
         "outbound_address": "pbx.example.com:5061",
-        "auth_username": "voicekituser",
+        "auth_username": "voiceyuser",
         "auth_password": "credential-secret",  # pragma: allowlist secret
         "allowed_addresses": ("203.0.113.0/24",),
         "transport": "tls",
@@ -145,7 +145,7 @@ async def test_provisions_explicit_secure_generic_sip_beta(tmp_path: Path) -> No
         dispatch = livekit.dispatch[0]
         assert inbound.numbers == [NUMBER]
         assert inbound.allowed_addresses == ["203.0.113.0/24"]
-        assert inbound.auth_username == "voicekituser"
+        assert inbound.auth_username == "voiceyuser"
         assert inbound.media_encryption == lk_sip.SIP_MEDIA_ENCRYPT_REQUIRE
         assert outbound.address == "pbx.example.com:5061"
         assert outbound.transport == lk_sip.SIP_TRANSPORT_TLS
@@ -191,7 +191,7 @@ async def test_drift_and_unknown_control_plane_outcome_stop(tmp_path: Path) -> N
     try:
         await provisioner.provision(_config())
         livekit.inbound[0].allowed_addresses[:] = ["198.51.100.1/32"]
-        with pytest.raises(VoicekitError, match="differs"):
+        with pytest.raises(VoiceyError, match="differs"):
             await provisioner.provision(_config())
 
         other = FakeLiveKit()
@@ -200,9 +200,9 @@ async def test_drift_and_unknown_control_plane_outcome_stop(tmp_path: Path) -> N
             livekit=cast("LiveKitSipAPI", other),
             ledger=ledger,
         )
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await ambiguous.provision(_config(number="+14155550101"))
-        assert caught.value.code == "VK-TEL-006"
+        assert caught.value.code == "VY-TEL-006"
         open_operations = ledger.open_provisioning(provider="sip-livekit")
         assert any(operation.state == "ambiguous" for operation in open_operations)
     finally:
@@ -219,7 +219,7 @@ async def test_rollback_conflict_is_durable(tmp_path: Path) -> None:
     try:
         result = await provisioner.provision(_config())
         livekit.fail_delete = True
-        with pytest.raises(VoicekitError, match="VK-TEL-006"):
+        with pytest.raises(VoiceyError, match="VY-TEL-006"):
             await provisioner.rollback(result.operation_id)
         assert ledger.get_provisioning(result.operation_id).state == "conflict"
     finally:
@@ -242,7 +242,7 @@ async def test_rollback_conflict_is_durable(tmp_path: Path) -> None:
     ],
 )
 def test_config_rejects_unsafe_or_ambiguous_values(values: dict[str, object]) -> None:
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         _config(**values)
 
 

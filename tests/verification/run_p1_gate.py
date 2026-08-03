@@ -33,7 +33,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p1-gate-report.json"),
+        default=Path(".voicey/verification/p1-gate-report.json"),
     )
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()
@@ -194,15 +194,15 @@ def required_live_prerequisites(environment: Mapping[str, str]) -> list[str]:
         "TWILIO_TEST_AUTH_TOKEN",
         "TWILIO_ACCOUNT_SID",
         "TWILIO_AUTH_TOKEN",
-        "VOICEKIT_TWILIO_LIVE_FROM",
-        "VOICEKIT_TWILIO_LIVE_TO",
-        "VOICEKIT_TWILIO_TRANSFER_TO",
-        "VOICEKIT_LIVE_PUBLIC_BASE",
+        "VOICEY_TWILIO_LIVE_FROM",
+        "VOICEY_TWILIO_LIVE_TO",
+        "VOICEY_TWILIO_TRANSFER_TO",
+        "VOICEY_LIVE_PUBLIC_BASE",
     )
     missing = [name for name in required if not environment.get(name)]
     acknowledgements = {
-        "VOICEKIT_LIVE_ROUTE_CONFIRM": "I_ACKNOWLEDGE_ROUTE_MUTATION",
-        "VOICEKIT_LIVE_CONFIRM": "I_ACKNOWLEDGE_PSTN_CHARGES",
+        "VOICEY_LIVE_ROUTE_CONFIRM": "I_ACKNOWLEDGE_ROUTE_MUTATION",
+        "VOICEY_LIVE_CONFIRM": "I_ACKNOWLEDGE_PSTN_CHARGES",
     }
     missing.extend(
         name for name, value in acknowledgements.items() if environment.get(name) != value
@@ -250,7 +250,7 @@ def _pending_external_results() -> list[GateResult]:
             status="pending-live",
             command=(
                 "uv run python tests/verification/p1_latency_gate.py "
-                '--project "$VOICEKIT_EVAL_PROJECT"'
+                '--project "$VOICEY_EVAL_PROJECT"'
             ),
             detail="requires the three locked reference-provider credentials",
         ),
@@ -266,7 +266,7 @@ def _pending_external_results() -> list[GateResult]:
             name="cloudflared_public_edge",
             status="pending-live",
             command=(
-                "VOICEKIT_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL "
+                "VOICEY_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL "
                 "uv run pytest -m live --no-cov tests/live/test_tunnel_live.py"
             ),
             detail="latest generated quick-tunnel hostname did not resolve",

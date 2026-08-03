@@ -14,8 +14,8 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
 
-from voicekit.config.models import Observability, RuntimeName
-from voicekit.obs import (
+from voicey.config.models import Observability, RuntimeName
+from voicey.obs import (
     LatencySample,
     NewCall,
     Telemetry,
@@ -23,7 +23,7 @@ from voicekit.obs import (
     ToolCallObservation,
     TranscriptTurn,
 )
-from voicekit.storage.models import TerminalRequest
+from voicey.storage.models import TerminalRequest
 
 _PRIVATE_TRANSCRIPT = "private-patient-utterance"
 _PRIVATE_ARGUMENT = "private-tool-argument"
@@ -58,7 +58,7 @@ async def run_gate(report_path: Path) -> dict[str, Any]:
     )
     collector_task = asyncio.create_task(
         collector_server.serve(),
-        name="voicekit-observability-gate-collector",
+        name="voicey-observability-gate-collector",
     )
     await _wait_started(collector_server, collector_task)
 
@@ -159,7 +159,7 @@ async def _runtime_row(
             active_response = await client.get(f"http://127.0.0.1:{metrics_port}/metrics")
         active_response.raise_for_status()
         active_metrics = active_response.text
-        active_sample = f'voicekit_active_calls{{agent="gate-{runtime}",runtime="{runtime}"}} 1.0'
+        active_sample = f'voicey_active_calls{{agent="gate-{runtime}",runtime="{runtime}"}} 1.0'
         if active_sample not in active_metrics:
             raise AssertionError("active call gauge was not exposed before terminalization")
 
@@ -174,13 +174,13 @@ async def _runtime_row(
             terminal_response = await client.get(f"http://127.0.0.1:{metrics_port}/metrics")
         terminal_response.raise_for_status()
         terminal_metrics = terminal_response.text
-        terminal_sample = f'voicekit_active_calls{{agent="gate-{runtime}",runtime="{runtime}"}} 0.0'
+        terminal_sample = f'voicey_active_calls{{agent="gate-{runtime}",runtime="{runtime}"}} 0.0'
         if terminal_sample not in terminal_metrics:
             raise AssertionError("terminal call did not release the active gauge")
-        dlq_sample = f'voicekit_results_dlq_depth{{agent="gate-{runtime}",runtime="{runtime}"}} 2.0'
+        dlq_sample = f'voicey_results_dlq_depth{{agent="gate-{runtime}",runtime="{runtime}"}} 2.0'
         if dlq_sample not in terminal_metrics:
             raise AssertionError("DLQ depth is absent")
-        error_green = runtime == "pipecat" and 'code="VK-RUN-002"' in terminal_metrics
+        error_green = runtime == "pipecat" and 'code="VY-RUN-002"' in terminal_metrics
         if runtime == "pipecat" and not error_green:
             raise AssertionError("stable error-code counter is absent")
         for private in (_PRIVATE_TRANSCRIPT, _PRIVATE_ARGUMENT):
@@ -228,7 +228,7 @@ def main() -> None:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-observability-report.json"),
+        default=Path(".voicey/verification/p4-observability-report.json"),
     )
     arguments = parser.parse_args()
     report = asyncio.run(run_gate(arguments.report))

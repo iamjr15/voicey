@@ -9,15 +9,15 @@ from typing import Protocol, cast
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.obs import (
+from voicey.errors import VoiceyError
+from voicey.obs import (
     LatencySample,
     NewCall,
     TimelineEvent,
     ToolCallObservation,
     TranscriptTurn,
 )
-from voicekit.storage import (
+from voicey.storage import (
     RecordingReady,
     ResultDeliveryConfig,
     ResultSnapshot,
@@ -71,10 +71,10 @@ async def _open_repository(backend: str, tmp_path: Path) -> _ContractRepository:
     if backend == "sqlite":
         repository = cast("_ContractRepository", SQLiteRepository(tmp_path / "contract.sqlite3"))
     else:
-        dsn = os.environ.get("VOICEKIT_TEST_POSTGRES_DSN")
+        dsn = os.environ.get("VOICEY_TEST_POSTGRES_DSN")
         if not dsn:
-            pytest.skip("VOICEKIT_TEST_POSTGRES_DSN is not configured")
-        from voicekit.storage.postgres import PostgresRepository
+            pytest.skip("VOICEY_TEST_POSTGRES_DSN is not configured")
+        from voicey.storage.postgres import PostgresRepository
 
         repository = cast("_ContractRepository", PostgresRepository(dsn, max_size=4))
     await repository.open()
@@ -204,7 +204,7 @@ async def test_repository_backend_chaos_invariants(backend: str, tmp_path: Path)
             lease_ttl=timedelta(seconds=30),
             now=datetime.now(UTC),
         )
-        with pytest.raises(VoicekitError) as fenced:
+        with pytest.raises(VoiceyError) as fenced:
             await repository.flush_results(stale, ResultSnapshot(outcome="late-write"))
         request = TerminalRequest(
             event_type="call.failed",
@@ -231,7 +231,7 @@ async def test_repository_backend_chaos_invariants(backend: str, tmp_path: Path)
         await repository.close()
 
     assert current.generation == 2
-    assert fenced.value.code == "VK-RES-006"
+    assert fenced.value.code == "VY-RES-006"
     assert first == duplicate == stored
     own_claims = [claim for claim in (*claims_a, *claims_b) if claim.call_id == call.call_id]
     assert len(own_claims) == 1

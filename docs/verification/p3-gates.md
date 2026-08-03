@@ -11,13 +11,13 @@ Start a disposable PostgreSQL 17 database, build the exact wheel under test,
 and run:
 
 ```bash
-export VOICEKIT_TEST_POSTGRES_DSN='postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit' # pragma: allowlist secret
+export VOICEY_TEST_POSTGRES_DSN='postgresql://voicey:voicey-test@127.0.0.1:5432/voicey' # pragma: allowlist secret
 uv build --wheel --out-dir dist
 uv run python tests/verification/run_p3_gate.py \
-  --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl
+  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl
 ```
 
-The runner writes `.voicekit/verification/p3-gate-report.json` atomically and
+The runner writes `.voicey/verification/p3-gate-report.json` atomically and
 also retains the nested P2 report. It fails when PostgreSQL is absent rather
 than treating skipped managed-backend tests as evidence. Its local groups are:
 
@@ -34,8 +34,10 @@ than treating skipped managed-backend tests as evidence. Its local groups are:
 The report remains `pending-live` after every local row is green. Exact
 commands and prerequisites in [`docs/GAPS.md`](../GAPS.md) cover:
 
-- six provider-backed recipe/runtime conversations;
-- Vobiz, Plivo, and generic-SIP account mutations and paid PSTN;
+- six provider-backed recipe/runtime audio/JUnit runs (all 34 text cases are
+  green first attempt through the Anthropic API override);
+- remaining Vobiz paid/media checks (account and LiveKit no-call control-plane
+  are green), plus Plivo and generic-SIP account mutations and paid PSTN;
 - both independent tier-3 paid loopbacks;
 - S3-compatible storage;
 - Fly, Pipecat Cloud, and LiveKit Cloud deployments and smoke calls;

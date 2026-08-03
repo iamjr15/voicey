@@ -7,7 +7,7 @@ import argparse
 import subprocess
 from pathlib import Path
 
-from voicekit.release.snapshots import public_surface_docs_errors
+from voicey.release.snapshots import public_surface_docs_errors
 
 
 def main() -> int:

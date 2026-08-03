@@ -12,8 +12,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from voicekit.cli.environment import EnvFileStore
-from voicekit.deploy.fly import (
+from voicey.cli.environment import EnvFileStore
+from voicey.deploy.fly import (
     FlyArtifactGenerator,
     FlyCommandResult,
     FlyctlRunner,
@@ -26,8 +26,8 @@ from voicekit.deploy.fly import (
     _json_items,
     _table_contains_name,
 )
-from voicekit.errors import VoicekitError
-from voicekit.relay.auth import RelayCredential
+from voicey.errors import VoiceyError
+from voicey.relay.auth import RelayCredential
 
 
 class FakeFlyRunner:
@@ -42,10 +42,8 @@ class FakeFlyRunner:
     ) -> None:
         self.app_exists = app_exists
         self.deployed = False
-        self.clusters = (
-            [{"id": "mpg_123", "name": "voicekit-results-pg"}] if postgres_exists else []
-        )
-        self.buckets: set[str] = {"voicekit-results-objects"} if bucket_exists else set()
+        self.clusters = [{"id": "mpg_123", "name": "voicey-results-pg"}] if postgres_exists else []
+        self.buckets: set[str] = {"voicey-results-objects"} if bucket_exists else set()
         self.secrets: set[str] = (
             {
                 "DATABASE_URL",
@@ -84,18 +82,18 @@ class FakeFlyRunner:
             return _result(
                 stdout=json.dumps(
                     {
-                        "Name": "voicekit-results",
+                        "Name": "voicey-results",
                         "Status": "running" if self.deployed else "pending",
                     }
                 )
             )
         if command[:2] == ("apps", "create"):
             self.app_exists = True
-            return _result(stdout='{"name":"voicekit-results"}')
+            return _result(stdout='{"name":"voicey-results"}')
         if command[:2] == ("mpg", "list"):
             return _result(stdout=json.dumps({"clusters": self.clusters}))
         if command[:2] == ("mpg", "create"):
-            self.clusters.append({"id": "mpg_123", "name": "voicekit-results-pg"})
+            self.clusters.append({"id": "mpg_123", "name": "voicey-results-pg"})
             return _result(stdout="Managed Postgres created")
         if command[:2] == ("mpg", "attach"):
             self.secrets.add("DATABASE_URL")
@@ -104,7 +102,7 @@ class FakeFlyRunner:
             rows = "\n".join(f"{name} private" for name in sorted(self.buckets))
             return _result(stdout=f"NAME ACCESS\n{rows}\n")
         if command[:2] == ("storage", "create"):
-            self.buckets.add("voicekit-results-objects")
+            self.buckets.add("voicey-results-objects")
             self.secrets.update(
                 {
                     "AWS_ACCESS_KEY_ID",
@@ -155,11 +153,11 @@ def _result(
 
 def _plan(*, callbacks: tuple[str, ...] = ("twilio",)) -> FlyPlan:
     return FlyPlan(
-        app_name="voicekit-results",
-        organization="voicekit-test",
+        app_name="voicey-results",
+        organization="voicey-test",
         region="iad",
-        postgres_name="voicekit-results-pg",
-        bucket_name="voicekit-results-objects",
+        postgres_name="voicey-results-pg",
+        bucket_name="voicey-results-objects",
         callback_providers=callbacks,
     )
 
@@ -172,7 +170,7 @@ def _environment() -> dict[str, str]:
 
 
 def _wheel(path: Path) -> Path:
-    wheel = path / "voicekit-0.0.0.dev0-py3-none-any.whl"
+    wheel = path / "voicey-0.0.0.dev0-py3-none-any.whl"
     wheel.write_bytes(b"wheel fixture")
     return wheel
 
@@ -182,18 +180,18 @@ def _http_client(*, ready: bool = True) -> httpx.AsyncClient:
         if request.url.path == "/healthz":
             return httpx.Response(200, json={"status": "ok"})
         if request.url.path == "/v1/ready":
-            assert request.headers["authorization"].startswith("VoicekitRelay ")
-            assert request.headers["x-voicekit-relay-nonce"]
+            assert request.headers["authorization"].startswith("VoiceyRelay ")
+            assert request.headers["x-voicey-relay-nonce"]
             if ready:
                 return httpx.Response(
                     200,
                     json={
                         "ready": True,
-                        "protocol": "voicekit-results-relay/v1",
+                        "protocol": "voicey-results-relay/v1",
                         "storage_ready": True,
                     },
                 )
-            return httpx.Response(503, json={"code": "VK-REL-002"})
+            return httpx.Response(503, json={"code": "VY-REL-002"})
         return httpx.Response(404)
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -209,8 +207,8 @@ def test_fly_cli_output_normalization_accepts_documented_json_and_table_shapes()
     assert _item_text({"clusterId": "mpg_123"}, "cluster") == "mpg_123"
     assert _item_text({"name": 123}, "name") == ""
     assert _table_contains_name(
-        "\x1b[32mNAME ACCESS\x1b[0m\nvoicekit-results-objects private\n",
-        "voicekit-results-objects",
+        "\x1b[32mNAME ACCESS\x1b[0m\nvoicey-results-objects private\n",
+        "voicey-results-objects",
     )
     assert _check_passing({"Status": "HEALTHY"})
     assert not _check_passing({"status": "failing"})
@@ -223,33 +221,33 @@ def test_fly_plan_and_artifacts_enforce_managed_topology(tmp_path: Path) -> None
     config = artifacts.config.read_text(encoding="utf-8")
     dockerfile = artifacts.dockerfile.read_text(encoding="utf-8")
     ignored = artifacts.dockerignore.read_text(encoding="utf-8")
-    assert 'app = "voicekit-results"' in config
-    assert 'VOICEKIT_DEPLOY_TARGET = "fly"' in config
-    assert 'VOICEKIT_STORAGE_BACKEND = "postgres"' in config
-    assert 'VOICEKIT_ARTIFACT_BACKEND = "s3"' in config
-    assert 'VOICEKIT_CALLBACK_PROVIDERS = "twilio"' in config
-    assert 'VOICEKIT_PROMETHEUS_ENABLED = "1"' in config
-    assert 'VOICEKIT_PROMETHEUS_BIND = "0.0.0.0"' in config
+    assert 'app = "voicey-results"' in config
+    assert 'VOICEY_DEPLOY_TARGET = "fly"' in config
+    assert 'VOICEY_STORAGE_BACKEND = "postgres"' in config
+    assert 'VOICEY_ARTIFACT_BACKEND = "s3"' in config
+    assert 'VOICEY_CALLBACK_PROVIDERS = "twilio"' in config
+    assert 'VOICEY_PROMETHEUS_ENABLED = "1"' in config
+    assert 'VOICEY_PROMETHEUS_BIND = "0.0.0.0"' in config
     assert '[metrics]\n  port = 9464\n  path = "/metrics"' in config
     assert "EXPOSE 8080 9464" in dockerfile
     assert "min_machines_running = 2" in config
     assert 'path = "/healthz"' in config
-    assert "VOICEKIT_RELAY_CREDENTIAL" not in config
-    assert "VOICEKIT_RESULTS_SECRET" not in config
-    assert "voicekit.deploy.results_service" in dockerfile
+    assert "VOICEY_RELAY_CREDENTIAL" not in config
+    assert "VOICEY_RESULTS_SECRET" not in config
+    assert "voicey.deploy.results_service" in dockerfile
     assert "[companion]" in dockerfile
     assert "[pipecat]" not in dockerfile
     assert "[livekit]" not in dockerfile
     assert wheel.name in ignored
     assert len(artifacts.digest) == 64
 
-    with pytest.raises(VoicekitError, match="VK-DEP-003"):
+    with pytest.raises(VoiceyError, match="VY-DEP-003"):
         FlyPlan(
             app_name="Bad_App",
-            organization="voicekit-test",
+            organization="voicey-test",
             region="iad",
-            postgres_name="voicekit-results-pg",
-            bucket_name="voicekit-results-objects",
+            postgres_name="voicey-results-pg",
+            bucket_name="voicey-results-objects",
         )
 
 
@@ -259,8 +257,8 @@ def test_flyctl_runner_maps_discovery_process_failure_and_timeout(
     def missing_executable(_name: str) -> None:
         return None
 
-    monkeypatch.setattr("voicekit.deploy.fly.shutil.which", missing_executable)
-    with pytest.raises(VoicekitError, match="VK-DEP-006"):
+    monkeypatch.setattr("voicey.deploy.fly.shutil.which", missing_executable)
+    with pytest.raises(VoiceyError, match="VY-DEP-006"):
         FlyctlRunner()
 
     success = subprocess.CompletedProcess(
@@ -273,7 +271,7 @@ def test_flyctl_runner_maps_discovery_process_failure_and_timeout(
     def successful_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return success
 
-    monkeypatch.setattr("voicekit.deploy.fly.subprocess.run", successful_run)
+    monkeypatch.setattr("voicey.deploy.fly.subprocess.run", successful_run)
     runner = FlyctlRunner("/usr/local/bin/fly")
     assert runner.run(["auth", "whoami"]).stdout == "operator@example.test\n"
 
@@ -287,11 +285,11 @@ def test_flyctl_runner_maps_discovery_process_failure_and_timeout(
     def failed_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return failed
 
-    monkeypatch.setattr("voicekit.deploy.fly.subprocess.run", failed_run)
-    with pytest.raises(VoicekitError, match="VK-DEP-006") as caught:
-        runner.run(["status", "--app", "voicekit-results"])
+    monkeypatch.setattr("voicey.deploy.fly.subprocess.run", failed_run)
+    with pytest.raises(VoiceyError, match="VY-DEP-006") as caught:
+        runner.run(["status", "--app", "voicey-results"])
     assert "super-secret" not in str(caught.value)
-    with pytest.raises(VoicekitError, match="VK-DEP-006") as imported:
+    with pytest.raises(VoiceyError, match="VY-DEP-006") as imported:
         runner.run(["secrets", "import"], stdin="KEY=super-secret\n")
     assert "super-secret" not in str(imported.value)
     assert runner.run(["status"], check=False).returncode == 1
@@ -299,8 +297,8 @@ def test_flyctl_runner_maps_discovery_process_failure_and_timeout(
     def timeout(*_args: object, **_kwargs: object) -> object:
         raise subprocess.TimeoutExpired(["fly", "status"], 1)
 
-    monkeypatch.setattr("voicekit.deploy.fly.subprocess.run", timeout)
-    with pytest.raises(VoicekitError, match="TimeoutExpired"):
+    monkeypatch.setattr("voicey.deploy.fly.subprocess.run", timeout)
+    with pytest.raises(VoiceyError, match="TimeoutExpired"):
         runner.run(["status"])
 
 
@@ -309,50 +307,50 @@ def test_fly_artifacts_support_published_install_and_reject_bad_wheels(
     tmp_path: Path,
 ) -> None:
     generator = FlyArtifactGenerator(tmp_path)
-    with pytest.raises(VoicekitError, match=r"requires.*engine-wheel"):
+    with pytest.raises(VoiceyError, match=r"requires.*engine-wheel"):
         generator.generate(_plan(callbacks=()), engine_wheel=None)
-    bad = tmp_path / "not-voicekit.txt"
+    bad = tmp_path / "not-voicey.txt"
     bad.write_text("bad", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="engine wheel is invalid"):
+    with pytest.raises(VoiceyError, match="engine wheel is invalid"):
         generator.generate(_plan(callbacks=()), engine_wheel=bad)
 
-    monkeypatch.setattr("voicekit.deploy.fly.__version__", "1.0.0")
+    monkeypatch.setattr("voicey.deploy.fly.__version__", "1.0.0")
     published = generator.generate(_plan(callbacks=()), engine_wheel=None)
     assert published.engine_wheel is None
-    assert '"voicekit[companion]==1.0.0"' in published.dockerfile.read_text(encoding="utf-8")
+    assert '"voicey[companion]==1.0.0"' in published.dockerfile.read_text(encoding="utf-8")
 
 
 def test_fly_resource_state_rejects_invalid_payload_and_plan_drift(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(VoicekitError, match="not an object"):
+    with pytest.raises(VoiceyError, match="not an object"):
         FlyResourceState.from_payload([])
-    with pytest.raises(VoicekitError, match="fields are invalid"):
+    with pytest.raises(VoiceyError, match="fields are invalid"):
         FlyResourceState.from_payload({"schema_version": "bad"})
     invalid = {
         **asdict(FlyResourceState.initial(_plan(callbacks=()))),
         "schema_version": 99,
     }
-    with pytest.raises(VoicekitError, match="version or identity"):
+    with pytest.raises(VoiceyError, match="version or identity"):
         FlyResourceState.from_payload(invalid)
 
     state = FlyResourceState.initial(_plan(callbacks=()))
     changed = FlyPlan(
         app_name="other-results",
-        organization="voicekit-test",
+        organization="voicey-test",
         region="iad",
-        postgres_name="voicekit-results-pg",
-        bucket_name="voicekit-results-objects",
+        postgres_name="voicey-results-pg",
+        bucket_name="voicey-results-objects",
     )
-    with pytest.raises(VoicekitError, match="does not match"):
+    with pytest.raises(VoiceyError, match="does not match"):
         state.validate_plan(changed)
-    with pytest.raises(VoicekitError, match="already rolled back"):
+    with pytest.raises(VoiceyError, match="already rolled back"):
         state.checkpoint(rolled_back=True).validate_plan(_plan(callbacks=()))
 
     path = tmp_path / "invalid.json"
     path.write_text("{bad json", encoding="utf-8")
     path.chmod(0o600)
-    with pytest.raises(VoicekitError, match="cannot be read"):
+    with pytest.raises(VoiceyError, match="cannot be read"):
         FlyResourceStore(path).load()
 
 
@@ -399,12 +397,12 @@ async def test_fly_deploy_provisions_checkpoints_smokes_and_resumes(
     dotenv = tmp_path / ".env"
     assert stat.S_IMODE(dotenv.stat().st_mode) == 0o600
     values = EnvFileStore(dotenv).read()
-    relay = RelayCredential.parse(values["VOICEKIT_RELAY_CREDENTIAL"])
+    relay = RelayCredential.parse(values["VOICEY_RELAY_CREDENTIAL"])
     assert relay.key_id == first.state.relay_key_id
-    assert values["VOICEKIT_RESULTS_SECRET"].startswith("whsec_")
-    ledger = (tmp_path / ".voicekit/deploy/fly-resources.json").read_text(encoding="utf-8")
-    assert values["VOICEKIT_RELAY_CREDENTIAL"] not in ledger
-    assert values["VOICEKIT_RESULTS_SECRET"] not in ledger
+    assert values["VOICEY_RESULTS_SECRET"].startswith("whsec_")
+    ledger = (tmp_path / ".voicey/deploy/fly-resources.json").read_text(encoding="utf-8")
+    assert values["VOICEY_RELAY_CREDENTIAL"] not in ledger
+    assert values["VOICEY_RESULTS_SECRET"] not in ledger
     assert ".env*" in (tmp_path / ".gitignore").read_text(encoding="utf-8")
 
 
@@ -420,7 +418,7 @@ async def test_fly_adoption_is_explicit_and_never_claims_delete_ownership(
     )
     manager = FlyDeploymentManager(tmp_path, runner=runner, http_client=_http_client())
     wheel = _wheel(tmp_path)
-    with pytest.raises(VoicekitError, match="VK-DEP-007"):
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
         await manager.deploy(
             _plan(callbacks=()),
             environment={},
@@ -468,14 +466,14 @@ async def test_fly_rotation_preserves_previous_credentials_and_updates_fingerpri
     await manager.http_client.aclose()  # type: ignore[union-attr]
     after = store.read()
 
-    assert after["VOICEKIT_RELAY_CREDENTIAL"] != before["VOICEKIT_RELAY_CREDENTIAL"]
-    assert after["VOICEKIT_RELAY_PREVIOUS_CREDENTIAL"] == before["VOICEKIT_RELAY_CREDENTIAL"]
-    assert after["VOICEKIT_RESULTS_SECRET"] != before["VOICEKIT_RESULTS_SECRET"]
-    assert after["VOICEKIT_RESULTS_PREVIOUS_SECRET"] == before["VOICEKIT_RESULTS_SECRET"]
+    assert after["VOICEY_RELAY_CREDENTIAL"] != before["VOICEY_RELAY_CREDENTIAL"]
+    assert after["VOICEY_RELAY_PREVIOUS_CREDENTIAL"] == before["VOICEY_RELAY_CREDENTIAL"]
+    assert after["VOICEY_RESULTS_SECRET"] != before["VOICEY_RESULTS_SECRET"]
+    assert after["VOICEY_RESULTS_PREVIOUS_SECRET"] == before["VOICEY_RESULTS_SECRET"]
     assert second.state.relay_fingerprint != first.state.relay_fingerprint
     assert second.state.results_fingerprint != first.state.results_fingerprint
-    assert "VOICEKIT_RELAY_PREVIOUS_CREDENTIAL=" in runner.secret_payloads[-1]
-    assert "VOICEKIT_RESULTS_PREVIOUS_SECRET=" in runner.secret_payloads[-1]
+    assert "VOICEY_RELAY_PREVIOUS_CREDENTIAL=" in runner.secret_payloads[-1]
+    assert "VOICEY_RESULTS_PREVIOUS_SECRET=" in runner.secret_payloads[-1]
 
 
 @pytest.mark.asyncio
@@ -493,10 +491,10 @@ async def test_fly_credential_drift_and_missing_callbacks_fail_before_mutation(
     )
     prior_commands = len(runner.commands)
     other = RelayCredential.issue("other-key").reveal()
-    with pytest.raises(VoicekitError, match="VK-DEP-007"):
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
         await manager.deploy(
             _plan(callbacks=()),
-            environment={"VOICEKIT_RELAY_CREDENTIAL": other},
+            environment={"VOICEY_RELAY_CREDENTIAL": other},
             engine_wheel=wheel,
             skip_smoke=True,
         )
@@ -508,7 +506,7 @@ async def test_fly_credential_drift_and_missing_callbacks_fail_before_mutation(
         runner=empty_runner,
         http_client=_http_client(),
     )
-    with pytest.raises(VoicekitError, match="TWILIO_ACCOUNT_SID"):
+    with pytest.raises(VoiceyError, match="TWILIO_ACCOUNT_SID"):
         await missing.deploy(
             _plan(),
             environment={},
@@ -535,7 +533,7 @@ async def test_fly_rejects_unattached_bucket_and_failed_platform_check(
         runner=unattached_runner,
         http_client=_http_client(),
     )
-    with pytest.raises(VoicekitError, match="Tigris bucket is not attached"):
+    with pytest.raises(VoiceyError, match="Tigris bucket is not attached"):
         await unattached.deploy(
             _plan(callbacks=()),
             environment={},
@@ -550,7 +548,7 @@ async def test_fly_rejects_unattached_bucket_and_failed_platform_check(
         runner=failing_runner,
         http_client=_http_client(),
     )
-    with pytest.raises(VoicekitError, match="VK-DEP-004"):
+    with pytest.raises(VoiceyError, match="VY-DEP-004"):
         await failing.deploy(
             _plan(callbacks=()),
             environment={},
@@ -598,14 +596,14 @@ def test_fly_resource_store_rejects_open_permissions_and_symlinks(
     store.save(FlyResourceState.initial(plan))
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     path.chmod(0o644)
-    with pytest.raises(VoicekitError, match="VK-SEC-001"):
+    with pytest.raises(VoiceyError, match="VY-SEC-001"):
         store.load()
 
     path.unlink()
     target = tmp_path / "target.json"
     target.write_text("{}\n", encoding="utf-8")
     path.symlink_to(target)
-    with pytest.raises(VoicekitError, match="VK-SEC-002"):
+    with pytest.raises(VoiceyError, match="VY-SEC-002"):
         store.load()
 
 
@@ -622,7 +620,7 @@ async def test_fly_validate_existing_runs_same_signed_smoke(tmp_path: Path) -> N
         )
     finally:
         await client.aclose()
-    assert report.public_base == "https://voicekit-results.fly.dev"
+    assert report.public_base == "https://voicey-results.fly.dev"
     assert report.liveness
     assert report.signed_readiness
 
@@ -642,7 +640,7 @@ async def test_fly_smoke_maps_liveness_transport_and_json_failures(
         runner=runner,
         http_client=bad_status_client,
     )
-    with pytest.raises(VoicekitError, match="liveness returned HTTP 503"):
+    with pytest.raises(VoiceyError, match="liveness returned HTTP 503"):
         await bad_status.validate_existing(
             _plan(callbacks=()),
             relay_credential=credential,
@@ -658,7 +656,7 @@ async def test_fly_smoke_maps_liveness_transport_and_json_failures(
         runner=runner,
         http_client=offline_client,
     )
-    with pytest.raises(VoicekitError, match="ConnectError"):
+    with pytest.raises(VoiceyError, match="ConnectError"):
         await offline.validate_existing(
             _plan(callbacks=()),
             relay_credential=credential,
@@ -689,7 +687,7 @@ async def test_fly_smoke_maps_liveness_transport_and_json_failures(
         runner=InvalidChecks(app_exists=True),
         http_client=invalid_client,
     )
-    with pytest.raises(VoicekitError, match="not valid JSON"):
+    with pytest.raises(VoiceyError, match="not valid JSON"):
         await invalid.validate_existing(
             _plan(callbacks=()),
             relay_credential=credential,
@@ -701,12 +699,12 @@ def test_fly_rollback_requires_ledger_and_store_save_rejects_symlink(
     tmp_path: Path,
 ) -> None:
     manager = FlyDeploymentManager(tmp_path, runner=FakeFlyRunner())
-    with pytest.raises(VoicekitError, match="no Fly resource ledger"):
+    with pytest.raises(VoiceyError, match="no Fly resource ledger"):
         manager.rollback_created(_plan(callbacks=()))
 
     target = tmp_path / "real-ledger.json"
     target.write_text("{}\n", encoding="utf-8")
     link = tmp_path / "linked-ledger.json"
     link.symlink_to(target)
-    with pytest.raises(VoicekitError, match="VK-SEC-002"):
+    with pytest.raises(VoiceyError, match="VY-SEC-002"):
         FlyResourceStore(link).save(FlyResourceState.initial(_plan(callbacks=())))

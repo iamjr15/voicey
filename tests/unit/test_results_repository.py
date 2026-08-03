@@ -13,21 +13,21 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from voicekit.errors import VoicekitError
-from voicekit.obs import (
+from voicey.errors import VoiceyError
+from voicey.obs import (
     CallRecord,
     LatencySample,
     NewCall,
     TimelineEvent,
     TranscriptTurn,
 )
-from voicekit.results import (
+from voicey.results import (
     DeliveryWorker,
     ProviderReconciliation,
     RecoveryCoordinator,
 )
-from voicekit.results.signing import WebhookSigner, encode_secret
-from voicekit.storage import (
+from voicey.results.signing import WebhookSigner, encode_secret
+from voicey.storage import (
     MAX_DELIVERY_ATTEMPTS,
     RETRY_DELAYS_SECONDS,
     CallLease,
@@ -211,13 +211,13 @@ async def test_generation_fences_delayed_heartbeat_and_late_completion(
             now=started + timedelta(seconds=2),
         )
 
-        with pytest.raises(VoicekitError) as heartbeat_error:
+        with pytest.raises(VoiceyError) as heartbeat_error:
             await repository.renew_lease(
                 stale,
                 lease_ttl=LEASE_TTL,
                 now=started + timedelta(seconds=2),
             )
-        with pytest.raises(VoicekitError) as terminal_error:
+        with pytest.raises(VoiceyError) as terminal_error:
             await repository.terminalize(
                 stale,
                 TerminalRequest(
@@ -236,8 +236,8 @@ async def test_generation_fences_delayed_heartbeat_and_late_completion(
         )
 
     assert current.generation == stale.generation + 1
-    assert heartbeat_error.value.code == "VK-RES-006"
-    assert terminal_error.value.code == "VK-RES-006"
+    assert heartbeat_error.value.code == "VY-RES-006"
+    assert terminal_error.value.code == "VY-RES-006"
     assert event.event_type == "call.failed"
 
 
@@ -261,7 +261,7 @@ async def test_reserved_call_handoff_is_atomic_and_fences_the_reserver(
             lease_ttl=LEASE_TTL,
             now=now + timedelta(seconds=1),
         )
-        with pytest.raises(VoicekitError) as duplicate:
+        with pytest.raises(VoiceyError) as duplicate:
             await repository.handoff_call(
                 "call_reserved",
                 expected_owner_id="browser_reservation",
@@ -269,13 +269,13 @@ async def test_reserved_call_handoff_is_atomic_and_fences_the_reserver(
                 lease_ttl=LEASE_TTL,
                 now=now + timedelta(seconds=2),
             )
-        with pytest.raises(VoicekitError) as stale:
+        with pytest.raises(VoiceyError) as stale:
             await repository.flush_results(reserved, ResultSnapshot())
         await repository.flush_results(worker, ResultSnapshot(outcome="connected"))
 
     assert worker.generation == reserved.generation + 1
-    assert duplicate.value.code == "VK-RES-006"
-    assert stale.value.code == "VK-RES-006"
+    assert duplicate.value.code == "VY-RES-006"
+    assert stale.value.code == "VY-RES-006"
 
 
 @pytest.mark.asyncio
@@ -326,7 +326,7 @@ async def test_terminal_event_and_outbox_roll_back_together_on_insert_failure(
         injector.commit()
         injector.close()
 
-        with pytest.raises(VoicekitError) as failed:
+        with pytest.raises(VoiceyError) as failed:
             await repository.terminalize(
                 lease,
                 TerminalRequest(
@@ -336,7 +336,7 @@ async def test_terminal_event_and_outbox_roll_back_together_on_insert_failure(
                 ),
             )
         call = await repository.get_call("call_01")
-        with pytest.raises(VoicekitError):
+        with pytest.raises(VoiceyError):
             await repository.get_terminal_event_for_call("call_01")
 
         injector = sqlite3.connect(path)
@@ -352,7 +352,7 @@ async def test_terminal_event_and_outbox_roll_back_together_on_insert_failure(
             ),
         )
 
-    assert failed.value.code == "VK-RES-008"
+    assert failed.value.code == "VY-RES-008"
     assert call.status == "active"
     assert recovered.event_type == "call.completed"
 
@@ -450,12 +450,12 @@ async def test_recovery_reconciles_active_provider_without_terminalizing(
 
         run = await coordinator.run_once()
 
-        with pytest.raises(VoicekitError) as no_event:
+        with pytest.raises(VoiceyError) as no_event:
             await repository.get_terminal_event_for_call("call_01")
 
     assert run.active == 1
     assert run.terminalized == 0
-    assert no_event.value.code == "VK-RES-009"
+    assert no_event.value.code == "VY-RES-009"
 
 
 @pytest.mark.asyncio
@@ -574,7 +574,7 @@ async def test_outbox_rejects_invalid_claim_and_jitter_operations(tmp_path: Path
     now = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
     async with SQLiteRepository(tmp_path / "calls.sqlite3") as repository:
         _, event = await _terminal_call(repository, now=now)
-        with pytest.raises(VoicekitError) as limit:
+        with pytest.raises(VoiceyError) as limit:
             await repository.claim_deliveries(
                 owner_id="worker",
                 limit=0,
@@ -589,23 +589,23 @@ async def test_outbox_rejects_invalid_claim_and_jitter_operations(tmp_path: Path
                 now=now,
             )
         )[0]
-        with pytest.raises(VoicekitError) as jitter:
+        with pytest.raises(VoiceyError) as jitter:
             await repository.fail_delivery(
                 claim,
                 error="failed",
                 jitter=lambda delay: delay * 2,
                 now=now,
             )
-        with pytest.raises(VoicekitError) as missing:
+        with pytest.raises(VoiceyError) as missing:
             await repository.get_event("evt_missing")
-        with pytest.raises(VoicekitError) as redeliver:
+        with pytest.raises(VoiceyError) as redeliver:
             await repository.redeliver("evt_missing", now=now)
 
     assert event.event_id == claim.event_id
-    assert limit.value.code == "VK-OBS-005"
-    assert jitter.value.code == "VK-RES-008"
-    assert missing.value.code == "VK-RES-009"
-    assert redeliver.value.code == "VK-RES-009"
+    assert limit.value.code == "VY-OBS-005"
+    assert jitter.value.code == "VY-RES-008"
+    assert missing.value.code == "VY-RES-009"
+    assert redeliver.value.code == "VY-RES-009"
 
 
 @pytest.mark.asyncio
@@ -736,7 +736,7 @@ async def test_recording_ready_before_terminal_is_rejected(tmp_path: Path) -> No
         assert call.status == "active"
         assert recording_row is not None
 
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await repository.mark_recording_ready(
                 RecordingReady(
                     recording_id=str(recording_row[0]),
@@ -746,7 +746,7 @@ async def test_recording_ready_before_terminal_is_rejected(tmp_path: Path) -> No
                 )
             )
 
-    assert caught.value.code == "VK-RES-010"
+    assert caught.value.code == "VY-RES-010"
 
 
 @pytest.mark.asyncio
@@ -786,14 +786,14 @@ async def test_retention_purges_database_wal_recordings_and_backups(
         worker = RetentionWorker(repository, artifacts)
 
         assert await worker.run_once() == 2
-        with pytest.raises(VoicekitError) as missing_call:
+        with pytest.raises(VoiceyError) as missing_call:
             await repository.get_call("call_01")
         assert await repository.queue_retention(now=now) == ()
 
-    assert missing_call.value.code == "VK-OBS-003"
-    with pytest.raises(VoicekitError):
+    assert missing_call.value.code == "VY-OBS-003"
+    with pytest.raises(VoiceyError):
         await artifacts.read(recording_key)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await artifacts.read(backup_key)
     wal_path = database_path.with_name(f"{database_path.name}-wal")
     assert not wal_path.exists() or wal_path.stat().st_size == 0
@@ -810,10 +810,10 @@ async def test_local_artifact_store_rejects_path_escape(
 ) -> None:
     store = LocalArtifactStore(tmp_path / "artifacts")
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await store.put(storage_key, b"no")
 
-    assert caught.value.code == "VK-ART-001"
+    assert caught.value.code == "VY-ART-001"
 
 
 @pytest.mark.asyncio
@@ -829,9 +829,9 @@ async def test_local_artifacts_are_private_and_symlink_safe(tmp_path: Path) -> N
     outside.mkdir()
     linked = tmp_path / "artifacts" / "linked"
     linked.symlink_to(outside, target_is_directory=True)
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await store.put("linked/escape", b"no")
-    assert caught.value.code == "VK-ART-001"
+    assert caught.value.code == "VY-ART-001"
     await store.delete("recordings/call.wav")
     await store.delete("recordings/call.wav")
     assert not path.exists()

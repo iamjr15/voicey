@@ -20,16 +20,16 @@ from unittest.mock import patch
 from livekit.agents import Agent as LiveKitAgent
 from typer.testing import CliRunner
 
-from voicekit._p0.livekit_probe import run_livekit_probe
-from voicekit._p0.pipecat_probe import run_pipecat_probe
-from voicekit.cli.app import app
-from voicekit.cli.keys import KeyCheck
-from voicekit.config.catalog import ProviderKind
-from voicekit.results import WebhookSigner
+from voicey._p0.livekit_probe import run_livekit_probe
+from voicey._p0.pipecat_probe import run_pipecat_probe
+from voicey.cli.app import app
+from voicey.cli.keys import KeyCheck
+from voicey.config.catalog import ProviderKind
+from voicey.results import WebhookSigner
 
 _BLOCK = re.compile(
-    r"<!-- voicekit-doc-test:start -->\s*```bash\s*(.*?)```\s*"
-    r"<!-- voicekit-doc-test:end -->",
+    r"<!-- voicey-doc-test:start -->\s*```bash\s*(.*?)```\s*"
+    r"<!-- voicey-doc-test:end -->",
     re.DOTALL,
 )
 _REFERENCE_ENV = {
@@ -92,8 +92,8 @@ def main() -> int:
     with (
         _environment(_REFERENCE_ENV),
         _working_directory(args.workspace),
-        patch("voicekit.cli.wizard.ProviderKeyValidator", ProviderMockValidator),
-        patch("voicekit.cli.wizard.LiveKitKeyValidator", LiveKitMockValidator),
+        patch("voicey.cli.wizard.ProviderKeyValidator", ProviderMockValidator),
+        patch("voicey.cli.wizard.LiveKitKeyValidator", LiveKitMockValidator),
     ):
         result = CliRunner().invoke(app, command[1:])
     if result.exit_code != 0:
@@ -136,8 +136,8 @@ def _command(page: Path) -> list[str]:
         raise AssertionError(f"{page} has no marked quickstart command")
     normalized = re.sub(r"\\\s*\n\s*", " ", match.group(1)).strip()
     command = shlex.split(normalized)
-    if command[:2] != ["voicekit", "init"]:
-        raise AssertionError(f"{page} marked command must begin with `voicekit init`")
+    if command[:2] != ["voicey", "init"]:
+        raise AssertionError(f"{page} marked command must begin with `voicey init`")
     return command
 
 

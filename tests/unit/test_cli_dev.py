@@ -11,19 +11,19 @@ from typing import Any, Literal, cast
 import pytest
 from fastapi import FastAPI
 
-from voicekit import Agent, Models, Phone, Results, Web
-from voicekit.cli.context import ProjectContext
-from voicekit.cli.dev import (
+from voicey import Agent, Models, Phone, Results, Web
+from voicey.cli.context import ProjectContext
+from voicey.cli.dev import (
     _load_agent,
     _project_environment,
     _provision_livekit_phone,
     run_dev,
 )
-from voicekit.config.manifest import ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.errors import VoicekitError
-from voicekit.results.signing import encode_secret
-from voicekit.telephony.models import PipecatTarget, RollbackToken
+from voicey.config.manifest import ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.errors import VoiceyError
+from voicey.results.signing import encode_secret
+from voicey.telephony.models import PipecatTarget, RollbackToken
 
 
 def _agent(*, runtime: str = "pipecat") -> Agent:
@@ -41,7 +41,7 @@ def _agent(*, runtime: str = "pipecat") -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -80,7 +80,7 @@ def _context(
             "VOBIZ_AUTH_TOKEN": "vobiz-token",  # pragma: allowlist secret
             "PLIVO_AUTH_ID": "MA" + "2" * 18,
             "PLIVO_AUTH_TOKEN": "plivo-token",  # pragma: allowlist secret
-            "VOICEKIT_WEBHOOK_SECRET": encode_secret(b"d" * 32),
+            "VOICEY_WEBHOOK_SECRET": encode_secret(b"d" * 32),
         },
     )
 
@@ -102,17 +102,17 @@ def _livekit_context(tmp_path: Path) -> ProjectContext:
 
 
 def test_project_environment_restores_process_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VOICEKIT_EXISTING", "before")
-    monkeypatch.delenv("VOICEKIT_NEW", raising=False)
+    monkeypatch.setenv("VOICEY_EXISTING", "before")
+    monkeypatch.delenv("VOICEY_NEW", raising=False)
 
-    with _project_environment({"VOICEKIT_EXISTING": "during", "VOICEKIT_NEW": "temporary"}):
+    with _project_environment({"VOICEY_EXISTING": "during", "VOICEY_NEW": "temporary"}):
         import os
 
-        assert os.environ["VOICEKIT_EXISTING"] == "during"
-        assert os.environ["VOICEKIT_NEW"] == "temporary"
+        assert os.environ["VOICEY_EXISTING"] == "during"
+        assert os.environ["VOICEY_NEW"] == "temporary"
 
-    assert os.environ["VOICEKIT_EXISTING"] == "before"
-    assert "VOICEKIT_NEW" not in os.environ
+    assert os.environ["VOICEY_EXISTING"] == "before"
+    assert "VOICEY_NEW" not in os.environ
 
 
 def test_load_agent_requires_exported_typed_agent(
@@ -126,12 +126,12 @@ def test_load_agent_requires_exported_typed_agent(
     def import_module(name: str) -> ModuleType:
         return good if name == "good_agent" else bad
 
-    monkeypatch.setattr("voicekit.cli.dev.importlib.import_module", import_module)
+    monkeypatch.setattr("voicey.cli.dev.importlib.import_module", import_module)
 
     assert _load_agent("good_agent").name == "dev-agent"
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         _load_agent("bad_agent")
-    assert caught.value.code == "VK-CLI-007"
+    assert caught.value.code == "VY-CLI-007"
 
 
 @pytest.mark.asyncio
@@ -239,21 +239,21 @@ async def test_phone_dev_supervisor_points_probes_and_restores(
         events.append(f"config:{_kwargs['port']}")
         return SimpleNamespace()
 
-    monkeypatch.setattr("voicekit.cli.dev._load_agent", load_agent)
-    monkeypatch.setattr("voicekit.cli.dev.SQLiteRepository", FakeRepository)
-    monkeypatch.setattr("voicekit.cli.dev.TunnelManager", FakeTunnelManager)
-    monkeypatch.setattr("voicekit.cli.dev.TunnelProbe", FakeProbe)
-    monkeypatch.setattr("voicekit.cli.dev.TwilioAdapter", FakeAdapter)
-    import voicekit.telephony.plivo as plivo_runtime
-    import voicekit.telephony.telnyx as telnyx_runtime
-    import voicekit.telephony.vobiz as vobiz_runtime
+    monkeypatch.setattr("voicey.cli.dev._load_agent", load_agent)
+    monkeypatch.setattr("voicey.cli.dev.SQLiteRepository", FakeRepository)
+    monkeypatch.setattr("voicey.cli.dev.TunnelManager", FakeTunnelManager)
+    monkeypatch.setattr("voicey.cli.dev.TunnelProbe", FakeProbe)
+    monkeypatch.setattr("voicey.cli.dev.TwilioAdapter", FakeAdapter)
+    import voicey.telephony.plivo as plivo_runtime
+    import voicey.telephony.telnyx as telnyx_runtime
+    import voicey.telephony.vobiz as vobiz_runtime
 
     monkeypatch.setattr(telnyx_runtime, "TelnyxAdapter", FakeAdapter)
     monkeypatch.setattr(vobiz_runtime, "VobizAdapter", FakeAdapter)
     monkeypatch.setattr(plivo_runtime, "PlivoAdapter", FakeAdapter)
-    monkeypatch.setattr("voicekit.cli.dev.PipecatHost", FakeHost)
-    monkeypatch.setattr("voicekit.cli.dev.uvicorn.Server", FakeServer)
-    monkeypatch.setattr("voicekit.cli.dev.uvicorn.Config", config)
+    monkeypatch.setattr("voicey.cli.dev.PipecatHost", FakeHost)
+    monkeypatch.setattr("voicey.cli.dev.uvicorn.Server", FakeServer)
+    monkeypatch.setattr("voicey.cli.dev.uvicorn.Config", config)
 
     await run_dev(
         _context(tmp_path, phone=True, carrier=carrier),
@@ -357,17 +357,17 @@ async def test_livekit_dev_supervises_worker_token_and_admin_listeners(
         events.append(f"config:{kwargs['port']}")
         return SimpleNamespace()
 
-    import voicekit.runtimes.livekit as livekit_runtime
+    import voicey.runtimes.livekit as livekit_runtime
 
     def load_livekit_agent(_name: str) -> Agent:
         return _agent(runtime="livekit")
 
-    monkeypatch.setattr("voicekit.cli.dev._load_agent", load_livekit_agent)
-    monkeypatch.setattr("voicekit.cli.dev.SQLiteRepository", FakeRepository)
-    monkeypatch.setattr("voicekit.cli.dev.PlaygroundService", FakePlayground)
-    monkeypatch.setattr("voicekit.cli.dev.ReloadController", FakeReloads)
-    monkeypatch.setattr("voicekit.cli.dev.uvicorn.Server", FakeServer)
-    monkeypatch.setattr("voicekit.cli.dev.uvicorn.Config", config)
+    monkeypatch.setattr("voicey.cli.dev._load_agent", load_livekit_agent)
+    monkeypatch.setattr("voicey.cli.dev.SQLiteRepository", FakeRepository)
+    monkeypatch.setattr("voicey.cli.dev.PlaygroundService", FakePlayground)
+    monkeypatch.setattr("voicey.cli.dev.ReloadController", FakeReloads)
+    monkeypatch.setattr("voicey.cli.dev.uvicorn.Server", FakeServer)
+    monkeypatch.setattr("voicey.cli.dev.uvicorn.Config", config)
     monkeypatch.setattr(livekit_runtime, "LiveKitHost", FakeLiveKitHost)
     monkeypatch.setattr(livekit_runtime, "LiveKitTokenIssuer", FakeTokenIssuer)
 
@@ -443,18 +443,18 @@ async def test_livekit_phone_provisioning_builds_native_sip_resources_and_cleans
     monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setattr("twilio.rest.Client", FakeTwilioClient)
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.sip.TwilioElasticSipBackend",
+        "voicey.runtimes.livekit.sip.TwilioElasticSipBackend",
         FakeBackend,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.sip.TwilioLiveKitSipConfig",
+        "voicey.runtimes.livekit.sip.TwilioLiveKitSipConfig",
         FakeConfig,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.sip.TwilioLiveKitSipProvisioner",
+        "voicey.runtimes.livekit.sip.TwilioLiveKitSipProvisioner",
         FakeProvisioner,
     )
-    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+    monkeypatch.setattr("voicey.telephony.ledger.TelephonyLedger", FakeLedger)
 
     base = _context(tmp_path, phone=True)
     assert base.manifest is not None
@@ -464,10 +464,10 @@ async def test_livekit_phone_provisioning_builds_native_sip_resources_and_cleans
         checkpoint=False,
         environment={
             **base.environment,
-            "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
-            "VOICEKIT_TWILIO_SIP_DOMAIN": "voicekit.pstn.twilio.com",
-            "VOICEKIT_TWILIO_SIP_USERNAME": "voicekit-user",
-            "VOICEKIT_TWILIO_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+            "VOICEY_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+            "VOICEY_TWILIO_SIP_DOMAIN": "voicey.pstn.twilio.com",
+            "VOICEY_TWILIO_SIP_USERNAME": "voicey-user",
+            "VOICEY_TWILIO_SIP_PASSWORD": "VoiceyPassword1",  # pragma: allowlist secret
         },
     )
     agent = _agent(runtime="livekit").model_copy(
@@ -561,18 +561,18 @@ async def test_livekit_phone_provisioning_selects_telnyx_control_planes(
 
     monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.telnyx.TelnyxSipHTTPBackend",
+        "voicey.runtimes.livekit.telnyx.TelnyxSipHTTPBackend",
         FakeBackend,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.telnyx.TelnyxLiveKitSipConfig",
+        "voicey.runtimes.livekit.telnyx.TelnyxLiveKitSipConfig",
         FakeConfig,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.telnyx.TelnyxLiveKitSipProvisioner",
+        "voicey.runtimes.livekit.telnyx.TelnyxLiveKitSipProvisioner",
         FakeProvisioner,
     )
-    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+    monkeypatch.setattr("voicey.telephony.ledger.TelephonyLedger", FakeLedger)
 
     base = _context(tmp_path, phone=True, carrier="telnyx")
     assert base.manifest is not None
@@ -582,9 +582,9 @@ async def test_livekit_phone_provisioning_selects_telnyx_control_planes(
         checkpoint=False,
         environment={
             **base.environment,
-            "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
-            "VOICEKIT_TELNYX_SIP_USERNAME": "voicekit-user",
-            "VOICEKIT_TELNYX_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+            "VOICEY_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+            "VOICEY_TELNYX_SIP_USERNAME": "voicey-user",
+            "VOICEY_TELNYX_SIP_PASSWORD": "voicey-password",  # pragma: allowlist secret
         },
     )
     agent = _agent(runtime="livekit").model_copy(
@@ -616,7 +616,7 @@ async def test_livekit_phone_provisioning_selects_telnyx_control_planes(
         if isinstance(event, tuple) and event[0] == "telnyx-config"
     )
     assert config_event[1]["number"] == "+14155550123"
-    assert config_event[1]["auth_username"] == "voicekit-user"
+    assert config_event[1]["auth_username"] == "voicey-user"
     await livekit_client.aclose()
     ledger.close()
 
@@ -670,18 +670,18 @@ async def test_livekit_phone_provisioning_selects_vobiz_control_planes(
 
     monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.vobiz.VobizSipHTTPBackend",
+        "voicey.runtimes.livekit.vobiz.VobizSipHTTPBackend",
         FakeBackend,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.vobiz.VobizLiveKitSipConfig",
+        "voicey.runtimes.livekit.vobiz.VobizLiveKitSipConfig",
         FakeConfig,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.vobiz.VobizLiveKitSipProvisioner",
+        "voicey.runtimes.livekit.vobiz.VobizLiveKitSipProvisioner",
         FakeProvisioner,
     )
-    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+    monkeypatch.setattr("voicey.telephony.ledger.TelephonyLedger", FakeLedger)
 
     base = _context(tmp_path, phone=True, carrier="vobiz")
     assert base.manifest is not None
@@ -691,10 +691,10 @@ async def test_livekit_phone_provisioning_selects_vobiz_control_planes(
         checkpoint=False,
         environment={
             **base.environment,
-            "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
-            "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID": "cred-vobiz",
-            "VOICEKIT_VOBIZ_SIP_USERNAME": "voicekit-user",
-            "VOICEKIT_VOBIZ_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+            "VOICEY_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+            "VOICEY_VOBIZ_SIP_CREDENTIAL_ID": "cred-vobiz",
+            "VOICEY_VOBIZ_SIP_USERNAME": "voicey-user",
+            "VOICEY_VOBIZ_SIP_PASSWORD": "voicey-password",  # pragma: allowlist secret
         },
     )
     agent = _agent(runtime="livekit").model_copy(
@@ -776,18 +776,18 @@ async def test_livekit_phone_provisioning_selects_plivo_control_planes(
 
     monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.plivo.PlivoSipHTTPBackend",
+        "voicey.runtimes.livekit.plivo.PlivoSipHTTPBackend",
         FakeBackend,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.plivo.PlivoLiveKitSipConfig",
+        "voicey.runtimes.livekit.plivo.PlivoLiveKitSipConfig",
         FakeConfig,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.plivo.PlivoLiveKitSipProvisioner",
+        "voicey.runtimes.livekit.plivo.PlivoLiveKitSipProvisioner",
         FakeProvisioner,
     )
-    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+    monkeypatch.setattr("voicey.telephony.ledger.TelephonyLedger", FakeLedger)
 
     base = _context(tmp_path, phone=True, carrier="plivo")
     assert base.manifest is not None
@@ -797,9 +797,9 @@ async def test_livekit_phone_provisioning_selects_plivo_control_planes(
         checkpoint=False,
         environment={
             **base.environment,
-            "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
-            "VOICEKIT_PLIVO_SIP_USERNAME": "voicekituser",
-            "VOICEKIT_PLIVO_SIP_PASSWORD": "voicekit-password!",  # pragma: allowlist secret
+            "VOICEY_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+            "VOICEY_PLIVO_SIP_USERNAME": "voiceyuser",
+            "VOICEY_PLIVO_SIP_PASSWORD": "voicey-password!",  # pragma: allowlist secret
         },
     )
     agent = _agent(runtime="livekit").model_copy(
@@ -823,7 +823,7 @@ async def test_livekit_phone_provisioning_selects_plivo_control_planes(
         if isinstance(event, tuple) and event[0] == "plivo-config"
     )
     assert config_event[1]["livekit_sip_uri"] == "sip:project.sip.livekit.cloud"
-    assert config_event[1]["auth_username"] == "voicekituser"
+    assert config_event[1]["auth_username"] == "voiceyuser"
     await livekit_client.aclose()
     ledger.close()
 
@@ -866,14 +866,14 @@ async def test_livekit_phone_provisioning_selects_operator_managed_generic_sip(
 
     monkeypatch.setattr("livekit.api.LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.generic_sip.GenericSipConfig",
+        "voicey.runtimes.livekit.generic_sip.GenericSipConfig",
         FakeConfig,
     )
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.generic_sip.GenericSipProvisioner",
+        "voicey.runtimes.livekit.generic_sip.GenericSipProvisioner",
         FakeProvisioner,
     )
-    monkeypatch.setattr("voicekit.telephony.ledger.TelephonyLedger", FakeLedger)
+    monkeypatch.setattr("voicey.telephony.ledger.TelephonyLedger", FakeLedger)
 
     base = _context(tmp_path, phone=True, carrier="sip")
     assert base.manifest is not None
@@ -883,12 +883,12 @@ async def test_livekit_phone_provisioning_selects_operator_managed_generic_sip(
         checkpoint=False,
         environment={
             **base.environment,
-            "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
-            "VOICEKIT_SIP_ALLOWED_ADDRESSES": "203.0.113.0/24,2001:db8::/32",
-            "VOICEKIT_SIP_USERNAME": "voicekit",
-            "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
-            "VOICEKIT_SIP_TRANSPORT": "tls",
-            "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+            "VOICEY_SIP_ADDRESS": "trunk.example.test:5061",
+            "VOICEY_SIP_ALLOWED_ADDRESSES": "203.0.113.0/24,2001:db8::/32",
+            "VOICEY_SIP_USERNAME": "voicey",
+            "VOICEY_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+            "VOICEY_SIP_TRANSPORT": "tls",
+            "VOICEY_SIP_MEDIA_ENCRYPTION": "require",
         },
     )
     agent = _agent(runtime="livekit").model_copy(
@@ -919,7 +919,7 @@ async def test_livekit_phone_provisioning_selects_operator_managed_generic_sip(
 
 @pytest.mark.asyncio
 async def test_dev_rejects_phone_flag_for_web_only_project(tmp_path: Path) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await run_dev(
             _context(tmp_path, phone=False),
             phone=True,
@@ -928,12 +928,12 @@ async def test_dev_rejects_phone_flag_for_web_only_project(tmp_path: Path) -> No
             port=7860,
             notice=lambda _message: None,
         )
-    assert caught.value.code == "VK-CLI-007"
+    assert caught.value.code == "VY-CLI-007"
 
 
 @pytest.mark.asyncio
 async def test_dev_reserves_adjacent_loopback_admin_port(tmp_path: Path) -> None:
-    with pytest.raises(VoicekitError, match="admin listener") as caught:
+    with pytest.raises(VoiceyError, match="admin listener") as caught:
         await run_dev(
             _context(tmp_path, phone=False),
             phone=False,
@@ -942,4 +942,4 @@ async def test_dev_reserves_adjacent_loopback_admin_port(tmp_path: Path) -> None
             port=65535,
             notice=lambda _message: None,
         )
-    assert caught.value.code == "VK-CLI-010"
+    assert caught.value.code == "VY-CLI-010"

@@ -1,6 +1,6 @@
 # Runtime compatibility
 
-This table records versions empirically installed and inspected during P0. Runtime code must use only the current symbols listed here; deprecated aliases are excluded from voicekit source.
+This table records versions empirically installed and inspected during P0. Runtime code must use only the current symbols listed here; deprecated aliases are excluded from voicey source.
 
 | Layer | Supported/tested pin | P0 evidence |
 |---|---|---|
@@ -8,7 +8,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Pipecat | certified `>=1.6.0,<1.6.1`; project extra pins `pipecat-ai[anthropic,cartesia,deepgram,evals,google,webrtc,websocket]==1.6.0` | Installed from PyPI; the only current edge, 1.6.0, runs on Python 3.11 and 3.14 in scheduled CI; live caller symbols (`PipelineWorker`, universal `LLMContext`, `FastAPIWebsocketTransport`, `TwilioFrameSerializer`) re-inspected on 2026-07-28 |
 | Pipecat Flows | core `pipecat.flows` from `pipecat-ai==1.6.0` | `FlowManager` and `NodeConfig` import from core; `pipecat-ai-flows` is not installed |
 | Pipecat Evals | `pipecat-ai[evals]==1.6.0` | Installed `pipecat eval run/suite`, `EvalRunnerArguments`, `EvalTransportParams`, text/audio scenario parser, and 0/1 exit contract verified 2026-07-27 |
-| Rich | `>=13.9.4,<16` (`13.9.4` selected) | Pipecat 1.6.0's CLI extra requires Rich below 14; the full voicekit CLI suite is green on the resolver-selected version |
+| Rich | `>=13.9.4,<16` (`13.9.4` selected) | Pipecat 1.6.0's CLI extra requires Rich below 14; the full voicey CLI suite is green on the resolver-selected version |
 | LiveKit Agents | certified `>=1.6.7,<1.6.8`; project extra pins `livekit-agents==1.6.7` | Installed from PyPI; the only current edge, 1.6.7, runs on Python 3.11 and 3.14 in scheduled CI; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-07-28 |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
@@ -16,7 +16,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |
 | cloudflared CLI | `2026.3.0` observed locally | Quick-tunnel URL emission and bounded process cleanup ran; public hostname DNS remained unavailable, so external WS evidence is pending |
 | Railway CLI | `>=5.30.1,<6` (`5.30.1` executed locally) | Current project/service/Postgres/bucket/domain/variable/deploy/scale/delete JSON surfaces inspected and the version contract executed on 2026-07-28; authenticated mutations remain pending-live |
-| uv CLI | `>=0.11,<1` (`0.11.7` executed locally) | `uv lock --upgrade-package voicekit --prerelease allow\|if-necessary-or-explicit`, `uv sync --locked`, and `uv run --locked` help surfaces inspected and exercised on 2026-07-28 |
+| uv CLI | `>=0.11,<1` (`0.11.7` executed locally) | `uv lock --upgrade-package voicey --prerelease allow\|if-necessary-or-explicit`, `uv sync --locked`, and `uv run --locked` help surfaces inspected and exercised on 2026-07-28 |
 | websockets Python | `>=13.1,<17` (`15.0.1` selected with both runtime extras) | Pipecat uses APIs present across the range; LiveKit 1.6.7's OpenAI plugin requires `<16` |
 | Pipecat client JS | `@pipecat-ai/client-js==1.13.0` | npm registry checked 2026-07-26 |
 | Pipecat React | `@pipecat-ai/client-react==1.8.1` | npm registry checked 2026-07-26 |
@@ -41,17 +41,17 @@ This table records versions empirically installed and inspected during P0. Runti
   short-lived participant token, attach remote `AudioTrack` publications, call
   `setMicrophoneEnabled()`, and `disconnect()` during cleanup.
 - LiveKit turn detection: the installed 1.6.7 `livekit.plugins.turn_detector` path is deprecated; use `livekit.agents.inference.TurnDetector(version="v1-mini")` locally.
-- LiveKit's 1.6.7 OpenAI plugin requires `websockets<16`; the shared supported range is `>=13.1,<17`, with the lock selecting 15.x when all runtime extras are installed. Voicekit uses APIs present throughout that range and tests both runtime extras together.
+- LiveKit's 1.6.7 OpenAI plugin requires `websockets<16`; the shared supported range is `>=13.1,<17`, with the lock selecting 15.x when all runtime extras are installed. Voicey uses APIs present throughout that range and tests both runtime extras together.
 - LiveKit SIP: current trunk/rule methods are `create_inbound_trunk` and `create_dispatch_rule`; their `create_sip_*` aliases are deprecated. `create_sip_participant` and `transfer_sip_participant` remain current.
 - Twilio↔LiveKit SIP: Twilio-originated traffic cannot use username/password auth, so the number-scoped LiveKit inbound trunk is unauthenticated; Twilio termination credentials are configured on the LiveKit outbound trunk. A secure Twilio trunk uses `;transport=tls` for its origination URI and `SIP_TRANSPORT_TLS` outbound. This is the current documented provider contract, not an SDK inference.
-- Twilio Elastic SIP automatic recording: the trunk resource exposes only `RecordingContext.fetch()` / `update(mode, trim)` and no status-callback field. LiveKit supplies the authenticated carrier correlation as participant attribute `sip.twilio.callSid`; voicekit queries Core Recordings by that CA SID, requires exactly one completed item with source `Trunking`, and then reuses the authenticated media downloader.
+- Twilio Elastic SIP automatic recording: the trunk resource exposes only `RecordingContext.fetch()` / `update(mode, trim)` and no status-callback field. LiveKit supplies the authenticated carrier correlation as participant attribute `sip.twilio.callSid`; voicey queries Core Recordings by that CA SID, requires exactly one completed item with source `Trunking`, and then reuses the authenticated media downloader.
 - Twilio request validation: `RequestValidator.validate(uri, params, signature)`; JSON body hashing is selected by the signed `bodySHA256` query parameter.
 - Plivo request validation: installed
   `validate_v3_signature(method, uri, nonce, auth_token, signature, params)`
   canonicalizes the POST form; V3 signature and nonce headers are both
-  mandatory and voicekit adds replay rejection.
+  mandatory and voicey adds replay rejection.
 - Pipecat Plivo media: `PlivoFrameSerializer` consumes and emits the documented
-  PCMU/8 kHz media envelope. Voicekit sets `auto_hang_up=False` so carrier
+  PCMU/8 kHz media envelope. Voicey sets `auto_hang_up=False` so carrier
   control remains in the fenced adapter.
 - Plivo↔LiveKit SIP: the current provider guide uses
   `<livekit-sip-host>;transport=tcp` inbound. The Plivo outbound trunk uses
@@ -64,12 +64,12 @@ This table records versions empirically installed and inspected during P0. Runti
   `add --database postgres`, `bucket create`, `variable set --stdin`,
   detached `up`, JSON deployment polling, `scale <region>=2`, and explicit
   domain/bucket/service/project deletion. Service variables reference managed
-  dependencies as `${{Namespace.VARIABLE}}`; voicekit never invokes Railway's
+  dependencies as `${{Namespace.VARIABLE}}`; voicey never invokes Railway's
   optional MCP surface.
 - uv 0.11.7 changes only lock resolution with
-  `lock --upgrade-package voicekit`; prerelease policy is `allow` for canary
+  `lock --upgrade-package voicey`; prerelease policy is `allow` for canary
   and `if-necessary-or-explicit` for stable. Stable mode separately rejects a
-  prerelease voicekit version before sync, while allowing required
+  prerelease voicey version before sync, while allowing required
   prerelease-tagged transitive contracts. `sync --locked` installs the
   validated resolution without rewriting `pyproject.toml`, and `run --locked`
   executes drift inspection from the synchronized environment. Both commands
@@ -92,7 +92,7 @@ have empirical symbol and recipe evidence. `PipecatHost` and `LiveKitHost`
 inspect the installed distribution at startup. A version outside the table
 emits `RuntimeCompatibilityWarning` and continues; it does not create an
 availability outage merely because a resolver selected an untested version.
-`voicekit doctor` follows the same rule: missing runtime packages fail the
+`voicey doctor` follows the same rule: missing runtime packages fail the
 check, while installed out-of-range or invalid versions produce loud advice and
 leave the check green.
 

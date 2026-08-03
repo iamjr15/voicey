@@ -11,11 +11,11 @@ Build the exact wheel under test, then run the phase aggregator:
 ```bash
 uv build --wheel --out-dir dist
 uv run python tests/verification/run_p1_gate.py \
-  --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl
+  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl
 ```
 
 The report is written atomically to
-`.voicekit/verification/p1-gate-report.json`. CI runs the same command and
+`.voicey/verification/p1-gate-report.json`. CI runs the same command and
 uploads the report.
 
 | Check | Current evidence |
@@ -50,14 +50,15 @@ three provider credentials:
 
 ```bash
 uv run python tests/verification/p1_latency_gate.py \
-  --project "$VOICEKIT_EVAL_PROJECT"
+  --project "$VOICEY_EVAL_PROJECT"
 ```
 
 Missing credentials return status `pending-live` and exit 2. A missing sample,
 failed Pipecat suite, wrong model selection, or budget breach returns
-`failed` and exit 1. The current environment has Deepgram and Cartesia keys in
-the untracked backup but no Anthropic key, so this gate has not run and remains
-pending-live.
+`failed` and exit 1. The 2026-08-03 reference text suite used the available
+Deepgram, Anthropic, and Cartesia credentials and passed all seven Pipecat cases
+on the first attempt, but that does not generate the 20 real audio samples.
+This latency gate has not run and remains pending-live.
 
 ## Credentialed aggregate
 
@@ -67,9 +68,9 @@ explicit acknowledgements are present:
 
 ```bash
 uv run python tests/verification/run_p1_gate.py \
-  --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
   --require-live \
-  --latency-project "$VOICEKIT_EVAL_PROJECT"
+  --latency-project "$VOICEY_EVAL_PROJECT"
 ```
 
 `--require-live` fails before external mutations if any prerequisite or
@@ -78,8 +79,10 @@ the operator.
 
 ## Phase status
 
-All automatable local P1 gates are green. P1 remains `pending-live` overall
-until the reference latency run, credentialed Twilio/PSTN/public-edge checks,
+All automatable local P1 gates and the credentialed Pipecat reference text
+suite are green. Twilio's no-charge API and live account/owned-number readiness
+checks are also green without a real call. P1 remains `pending-live` overall
+until the reference audio and latency runs, Twilio route/PSTN/public-edge checks,
 public Docker smoke, and the human wizard/doctor/microphone/physical-handset
 checks in `GAPS.md` actually run green. Implementation may proceed to P2 under
 the repository's reality-boundary rule; this status is not promoted.

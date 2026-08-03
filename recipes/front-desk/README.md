@@ -6,9 +6,9 @@ with the organization's knowledge and ticket systems. Review the emergency
 policy and approved answer corpus before accepting calls.
 
 The recipe requests `warm_transfer_to_human`; LiveKit supplies its native
-`WarmTransferTask`, while Pipecat uses voicekit's Twilio conference bridge.
+`WarmTransferTask`, while Pipecat uses voicey's Twilio conference bridge.
 When warm transfer is unavailable, the agent offers a message rather than
 pretending a person was reached.
 
-Run `voicekit doctor`, then `voicekit dev --phone`. Next: request a department,
+Run `voicey doctor`, then `voicey dev --phone`. Next: request a department,
 decline transfer, and verify the durable `front_desk_message_taken` outcome.

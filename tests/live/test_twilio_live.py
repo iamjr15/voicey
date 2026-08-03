@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 from twilio.rest import Client
 
-from voicekit.telephony import PipecatTarget
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.twilio import TwilioAdapter
+from voicey.telephony import PipecatTarget
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.twilio import TwilioAdapter
 
 pytestmark = pytest.mark.live
 
@@ -57,7 +57,7 @@ def test_twilio_test_credentials_accept_outbound_contract_without_charge(
 def test_twilio_live_account_and_owned_number_are_ready() -> None:
     account_sid = _required("TWILIO_ACCOUNT_SID")
     auth_token = _required("TWILIO_AUTH_TOKEN")
-    from_number = _required("VOICEKIT_TWILIO_LIVE_FROM")
+    from_number = _required("VOICEY_TWILIO_LIVE_FROM")
     client = Client(account_sid, auth_token)
 
     account = client.api.accounts(account_sid).fetch()
@@ -71,12 +71,12 @@ def test_twilio_live_account_and_owned_number_are_ready() -> None:
 
 
 def test_twilio_live_route_point_and_crash_safe_restore(tmp_path: Path) -> None:
-    if os.environ.get("VOICEKIT_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
-        pytest.skip("VOICEKIT_LIVE_ROUTE_CONFIRM acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
+        pytest.skip("VOICEY_LIVE_ROUTE_CONFIRM acknowledgement is absent")
     account_sid = _required("TWILIO_ACCOUNT_SID")
     auth_token = _required("TWILIO_AUTH_TOKEN")
-    from_number = _required("VOICEKIT_TWILIO_LIVE_FROM")
-    public_base = _required("VOICEKIT_LIVE_PUBLIC_BASE")
+    from_number = _required("VOICEY_TWILIO_LIVE_FROM")
+    public_base = _required("VOICEY_LIVE_PUBLIC_BASE")
     ledger = TelephonyLedger(tmp_path / "live-route.sqlite3")
     adapter = TwilioAdapter(
         account_sid=account_sid,
@@ -96,14 +96,14 @@ def test_twilio_live_route_point_and_crash_safe_restore(tmp_path: Path) -> None:
 def test_twilio_live_paid_pstn_dtmf_recording_and_cold_transfer(
     tmp_path: Path,
 ) -> None:
-    if os.environ.get("VOICEKIT_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
-        pytest.skip("VOICEKIT_LIVE_CONFIRM charge acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
+        pytest.skip("VOICEY_LIVE_CONFIRM charge acknowledgement is absent")
     account_sid = _required("TWILIO_ACCOUNT_SID")
     auth_token = _required("TWILIO_AUTH_TOKEN")
-    from_number = _required("VOICEKIT_TWILIO_LIVE_FROM")
-    to_number = _required("VOICEKIT_TWILIO_LIVE_TO")
-    transfer_to = _required("VOICEKIT_TWILIO_TRANSFER_TO")
-    public_base = _required("VOICEKIT_LIVE_PUBLIC_BASE")
+    from_number = _required("VOICEY_TWILIO_LIVE_FROM")
+    to_number = _required("VOICEY_TWILIO_LIVE_TO")
+    transfer_to = _required("VOICEY_TWILIO_TRANSFER_TO")
+    public_base = _required("VOICEY_LIVE_PUBLIC_BASE")
     ledger = TelephonyLedger(tmp_path / "live-call.sqlite3")
     client = Client(account_sid, auth_token)
     adapter = TwilioAdapter(

@@ -8,7 +8,7 @@ agent workflow.
 ## Complete example
 
 ```python
-from voicekit import (
+from voicey import (
     Agent,
     Behavior,
     Limits,
@@ -46,7 +46,7 @@ agent = Agent(
     ),
     results=Results(
         webhook="https://api.sunrisedental.example/voice-results",
-        secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+        secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         previous_secret_env=None,
         redact=["phone_number"],
         purge_after_days=30,
@@ -59,7 +59,7 @@ agent = Agent(
     observability=Observability(
         prometheus_enabled=True,
         otlp_endpoint="https://collector.example/v1/traces",
-        otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+        otlp_headers_env="VOICEY_OTLP_HEADERS",
     ),
     behavior=Behavior(
         allow_interruptions=True,
@@ -73,6 +73,12 @@ agent = Agent(
 `tools` accepts either an importable module or an explicit list of importable,
 module-level callables. Conversation functions remain ordinary typed Python
 functions; secret values are never configuration fields.
+
+Leaving `Voice.id` unset selects a checked-in, runtime-independent default:
+Skylar for Cartesia Sonic 3.5, the LiveKit-curated default voice for ElevenLabs
+Flash 2.5, and `alloy` for OpenAI TTS. Set `Voice.id` to an account-accessible
+provider voice ID to override it. Explicit defaults prevent Pipecat and LiveKit
+SDK upgrades from silently changing the rendered voice.
 
 `Observability()` is off by default. Prometheus uses a separate
 `127.0.0.1:9464/metrics` listener unless its bind/port/path are explicitly
@@ -94,13 +100,13 @@ check the selected provider catalog:
 - current and previous result secrets use Standard Webhooks `whsec_` encoding.
 
 Validation collects independent failures in one pass. Every issue has a stable
-`VK-CFG-*` code, an exact field path, and a direct fix. Carrier account
+`VY-CFG-*` code, an exact field path, and a direct fix. Carrier account
 ownership is deliberately a live validation stage and is implemented by the
 carrier adapter and `doctor`, rather than guessed from local configuration.
 
 ## Provider catalog
 
-`voicekit.config.DEFAULT_PROVIDER_CATALOG` is the shared source for validation,
+`voicey.config.DEFAULT_PROVIDER_CATALOG` is the shared source for validation,
 wizard choices, and key checks. Each entry records:
 
 - stable `provider/model` id and STT, LLM, TTS, or carrier kind;
@@ -126,7 +132,7 @@ The value is stable across dictionary insertion order and changes when any
 serialized setting changes. Runtime bootstraps stamp it into call records and
 result events so operators can identify exactly what was live for a call.
 
-## `voicekit.jsonc`
+## `voicey.jsonc`
 
 The project manifest is an engine-owned, resumable record of wizard choices. It
 contains the project, runtime, recipe version, channels, providers, deploy
@@ -143,10 +149,10 @@ use the stricter permissions documented in [Security](../SECURITY.md).
 ```python
 from pathlib import Path
 
-from voicekit.config import ManifestStore
+from voicey.config import ManifestStore
 
-manifest = ManifestStore(Path("voicekit.jsonc")).load()
+manifest = ManifestStore(Path("voicey.jsonc")).load()
 ```
 
-Next step after changing configuration: run `voicekit doctor` before starting
+Next step after changing configuration: run `voicey doctor` before starting
 or deploying the agent.

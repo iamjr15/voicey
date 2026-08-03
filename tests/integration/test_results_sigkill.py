@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.obs import CallRecord
-from voicekit.results import (
+from voicey.obs import CallRecord
+from voicey.results import (
     ProviderReconciliation,
     RecoveryCoordinator,
 )
-from voicekit.storage import SQLiteRepository
+from voicey.storage import SQLiteRepository
 
 pytestmark = [pytest.mark.integration]
 
@@ -41,8 +41,8 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from voicekit.obs import NewCall, TranscriptTurn
-from voicekit.storage import ResultDeliveryConfig, SQLiteRepository
+from voicey.obs import NewCall, TranscriptTurn
+from voicey.storage import ResultDeliveryConfig, SQLiteRepository
 
 async def main():
     repository = SQLiteRepository(Path(sys.argv[1]))

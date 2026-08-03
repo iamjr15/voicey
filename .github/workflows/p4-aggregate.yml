@@ -16,18 +16,18 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: voicekit
-          POSTGRES_PASSWORD: voicekit-test # pragma: allowlist secret
-          POSTGRES_DB: voicekit
+          POSTGRES_USER: voicey
+          POSTGRES_PASSWORD: voicey-test # pragma: allowlist secret
+          POSTGRES_DB: voicey
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U voicekit -d voicekit"
+          --health-cmd "pg_isready -U voicey -d voicey"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      VOICEKIT_TEST_POSTGRES_DSN: postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit # pragma: allowlist secret
+      VOICEY_TEST_POSTGRES_DSN: postgresql://voicey:voicey-test@127.0.0.1:5432/voicey # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,7 +51,7 @@ jobs:
       - name: Run truthful aggregate
         run: |
           uv run python tests/verification/run_p4_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --short-soak-s 30 \
             --max-concurrent 8 \
             --report p4-gate-report.json

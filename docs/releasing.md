@@ -1,6 +1,6 @@
 # Release engineering
 
-Voicekit release preparation is automated, but publication is intentionally
+Voicey release preparation is automated, but publication is intentionally
 human-only. The workflow never uploads to PyPI, creates a repository, registers
 a name, or mutates a public release.
 
@@ -20,7 +20,7 @@ SemVer canary such as `1.2.0-rc.1` is normally exposed by installers as
 
 A public API may be deprecated only with:
 
-1. a `VoicekitDeprecationWarning` at runtime;
+1. a `VoiceyDeprecationWarning` at runtime;
 2. an entry in `CHANGELOG.md`;
 3. an exact replacement and migration URL; and
 4. a removal version at least two minor releases after the first warning.
@@ -75,11 +75,11 @@ Build the release-shaped wheel and validate the current prerelease locally:
 
 ```bash
 uv build --out-dir dist
-VOICEKIT_WHEEL="$(find dist -maxdepth 1 -name '*.whl' -type f)"
+VOICEY_WHEEL="$(find dist -maxdepth 1 -name '*.whl' -type f)"
 uv run python tests/verification/run_p4_release_gate.py \
-  --wheel "$VOICEKIT_WHEEL" \
+  --wheel "$VOICEY_WHEEL" \
   --channel canary \
-  --report .voicekit/verification/p4-release-report.json
+  --report .voicey/verification/p4-release-report.json
 ```
 
 The gate reads wheel metadata, creates a fresh environment, installs only that
@@ -102,10 +102,10 @@ Stable validation command, using the downloaded report:
 
 ```bash
 uv run python tests/verification/run_p4_release_gate.py \
-  --wheel dist/voicekit-1.2.0-py3-none-any.whl \
+  --wheel dist/voicey-1.2.0-py3-none-any.whl \
   --channel stable \
   --canary-report canary-evidence/p4-release-report.json \
-  --report .voicekit/verification/p4-stable-report.json
+  --report .voicey/verification/p4-stable-report.json
 ```
 
 Publishing remains blocked until the human chooses the final name, executes

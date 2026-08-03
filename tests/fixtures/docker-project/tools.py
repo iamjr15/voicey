@@ -1,6 +1,6 @@
 """Typed fixture tool."""
 
-from voicekit import tool
+from voicey import tool
 
 
 @tool

@@ -4,8 +4,8 @@ from typing import Any, ClassVar
 
 import pytest
 
-from voicekit.cli.prompts import PromptChoice, QuestionaryPromptIO
-from voicekit.errors import VoicekitError
+from voicey.cli.prompts import PromptChoice, QuestionaryPromptIO
+from voicey.errors import VoiceyError
 
 
 class StubQuestion:
@@ -42,10 +42,10 @@ class QuestionaryStub:
 @pytest.fixture(autouse=True)
 def stub_questionary(monkeypatch: pytest.MonkeyPatch) -> None:
     QuestionaryStub.calls.clear()
-    monkeypatch.setattr("voicekit.cli.prompts.questionary.select", QuestionaryStub.select)
-    monkeypatch.setattr("voicekit.cli.prompts.questionary.checkbox", QuestionaryStub.checkbox)
-    monkeypatch.setattr("voicekit.cli.prompts.questionary.text", QuestionaryStub.text)
-    monkeypatch.setattr("voicekit.cli.prompts.questionary.password", QuestionaryStub.password)
+    monkeypatch.setattr("voicey.cli.prompts.questionary.select", QuestionaryStub.select)
+    monkeypatch.setattr("voicey.cli.prompts.questionary.checkbox", QuestionaryStub.checkbox)
+    monkeypatch.setattr("voicey.cli.prompts.questionary.text", QuestionaryStub.text)
+    monkeypatch.setattr("voicey.cli.prompts.questionary.password", QuestionaryStub.password)
 
 
 def test_questionary_adapter_never_supplies_semantic_defaults() -> None:
@@ -75,7 +75,7 @@ def test_questionary_text_secret_notice_and_cancellation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     notices: list[str] = []
-    monkeypatch.setattr("voicekit.cli.prompts.questionary.print", notices.append)
+    monkeypatch.setattr("voicey.cli.prompts.questionary.print", notices.append)
     prompt = QuestionaryPromptIO()
 
     StubQuestion.value = "  words  "
@@ -87,17 +87,17 @@ def test_questionary_text_secret_notice_and_cancellation(
     assert notices == ["Shown"]
 
     StubQuestion.value = None
-    with pytest.raises(VoicekitError) as cancelled:
+    with pytest.raises(VoiceyError) as cancelled:
         prompt.select("Cancelled", ())
-    assert cancelled.value.code == "VK-CLI-002"
+    assert cancelled.value.code == "VY-CLI-002"
 
 
 def test_noninteractive_prompt_fails_before_questionary_call() -> None:
     prompt = QuestionaryPromptIO(interactive=False)
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         prompt.select("No default", ())
 
-    assert caught.value.code == "VK-CLI-001"
+    assert caught.value.code == "VY-CLI-001"
     assert not prompt.interactive
     assert QuestionaryStub.calls == []

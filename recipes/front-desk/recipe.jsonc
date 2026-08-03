@@ -7,7 +7,7 @@
   "summary": "Answer common questions, triage callers, take messages, and warm transfer.",
   "integration_points": [
     "tools.py:TodoFrontDeskGateway",
-    "VOICEKIT_TRANSFER_NUMBER",
+    "VOICEY_TRANSFER_NUMBER",
     "agent.py:Results.webhook"
   ]
 }

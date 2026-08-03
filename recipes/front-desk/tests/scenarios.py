@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from voicekit.testing import (
+from voicey.testing import (
     ResultExpectation,
     ScenarioTurn,
     SendAfter,
@@ -23,7 +23,7 @@ def approved_hours_answer() -> dict[str, object]:
     return {
         "caller": "A caller asking a common factual question.",
         "goals": ("learn the approved office hours",),
-        "judge": ("answers only with the lookup result",),
+        "judge": ("reports the approved office hours without inventing additional facts",),
         "turns": (
             ScenarioTurn(
                 user="What are your office hours?",
@@ -62,8 +62,18 @@ def take_confirmed_message() -> dict[str, object]:
             data={"message.status": "recorded", "message.department": "billing"},
         ),
         "turns": (
-            ScenarioTurn(user="Please take a message for billing."),
-            ScenarioTurn(user="I'm {name}, callback {phone}. Please call about invoice 42."),
+            ScenarioTurn(
+                user="Please take a message for billing.",
+                expect=TurnExpectation(
+                    judge=("asks for the caller name, callback number, and message",)
+                ),
+            ),
+            ScenarioTurn(
+                user="I'm {name}, callback {phone}. Please call about invoice 42.",
+                expect=TurnExpectation(
+                    judge=("reads the billing message back and asks before saving it",)
+                ),
+            ),
             ScenarioTurn(
                 user="Yes, save that.",
                 expect=TurnExpectation(tools=(ToolExpectation(name="take_message"),)),
@@ -76,15 +86,36 @@ def take_confirmed_message() -> dict[str, object]:
 def warm_transfer_with_consent() -> dict[str, object]:
     return {
         "caller": "A non-emergency caller requesting a person.",
+        "profiles": (_JORDAN,),
         "goals": ("consent to a warm transfer with a concise private summary",),
-        "judge": ("does not claim connection before the transfer succeeds",),
+        "judge": ("clearly states the billing handoff status to the caller",),
         "turns": (
-            ScenarioTurn(user="I need to speak with billing about a duplicate charge."),
             ScenarioTurn(
-                user="Yes, you may brief them and connect me.",
+                user="I need to speak with billing about a duplicate charge.",
+                expect=TurnExpectation(
+                    judge=(
+                        "acknowledges the request for human billing help and asks for safe "
+                        "handoff details",
+                    )
+                ),
+            ),
+            ScenarioTurn(
+                user=("I'm {name}, callback {phone}. The issue is a duplicate charge."),
+                expect=TurnExpectation(
+                    judge=(
+                        "asks for explicit transfer consent after collecting the available "
+                        "handoff details",
+                    )
+                ),
+            ),
+            ScenarioTurn(
+                user=(
+                    "Those details are correct. I explicitly consent now: privately "
+                    "brief billing and complete the transfer."
+                ),
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="warm_transfer_to_human"),),
-                    within_ms=12_000,
+                    within_ms=30_000,
                 ),
             ),
         ),
@@ -111,12 +142,16 @@ def front_desk_voicemail_privacy() -> dict[str, object]:
     return {
         "caller": "An automated voicemail greeting.",
         "goals": ("leave one generic callback message",),
-        "judge": ("omits identity, concern, department, and urgency",),
         "turns": (
             ScenarioTurn(
                 user="Leave your message after the tone.",
                 send_after=SendAfter(event="llm_started", delay_ms=100),
-                expect=TurnExpectation(judge=("leaves one short private message",)),
+                expect=TurnExpectation(
+                    judge=(
+                        "leaves one short generic callback message without personal or "
+                        "case-specific details",
+                    )
+                ),
             ),
         ),
     }

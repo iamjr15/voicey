@@ -11,35 +11,35 @@ write through the authenticated results relay.
 Install repository/object adapters alone with the cloud extra:
 
 ```bash
-pip install 'voicekit[cloud]'
+pip install 'voicey[cloud]'
 ```
 
 For the executable results companion, install the companion extra. It adds the
 carrier-signature/download dependencies without installing Pipecat or LiveKit:
 
 ```bash
-pip install 'voicekit[companion]'
+pip install 'voicey[companion]'
 ```
 
 The resolved P3 implementation uses Psycopg 3 with `psycopg_pool` and boto3.
 Applications pass the platform's Postgres DSN to `PostgresRepository` and the
 private bucket settings to `S3ArtifactStore`. Credentials belong in platform
-secrets or workload identity, never in `voicekit.jsonc`, generated artifacts,
+secrets or workload identity, never in `voicey.jsonc`, generated artifacts,
 or the resource ledger.
 
 ```python
 import os
 
-from voicekit.storage.postgres import PostgresRepository
-from voicekit.storage.s3 import S3ArtifactStore
+from voicey.storage.postgres import PostgresRepository
+from voicey.storage.s3 import S3ArtifactStore
 
 repository = PostgresRepository(
-    os.environ["VOICEKIT_DATABASE_URL"],
+    os.environ["VOICEY_DATABASE_URL"],
     min_size=1,
     max_size=10,
 )
 artifacts = S3ArtifactStore(
-    "private-voicekit-artifacts",
+    "private-voicey-artifacts",
     prefix="production/relay",
     endpoint_url="https://fly.storage.tigris.dev",
     region_name="auto",
@@ -47,7 +47,7 @@ artifacts = S3ArtifactStore(
 ```
 
 The object endpoint must use HTTPS, except for an explicit loopback endpoint
-used by local S3 emulators. Keys are relative and traversal-safe. Voicekit
+used by local S3 emulators. Keys are relative and traversal-safe. Voicey
 stores SHA-256 metadata on every object and rejects reads whose metadata is
 missing or whose bytes no longer match.
 
@@ -57,7 +57,7 @@ missing or whose bytes no longer match.
 the packaged append-only SQL migrations and checksum rows in one transaction,
 then validates the complete migration history. Concurrent old/new processes
 may open against the same schema. An unknown migration or a changed checksum
-fails startup with `VK-OBS-004`.
+fails startup with `VY-OBS-004`.
 
 Migration policy is expand/contract:
 
@@ -92,17 +92,17 @@ Run the same contract and chaos matrix against SQLite and a disposable
 Postgres 17 database:
 
 ```bash
-docker run --rm --name voicekit-postgres-p35 \
-  -e POSTGRES_USER=voicekit \
-  -e POSTGRES_PASSWORD=voicekit-test \
-  -e POSTGRES_DB=voicekit \
+docker run --rm --name voicey-postgres-p35 \
+  -e POSTGRES_USER=voicey \
+  -e POSTGRES_PASSWORD=voicey-test \
+  -e POSTGRES_DB=voicey \
   -p 55432:5432 -d postgres:17-alpine
-TEST_DB_AUTH='voicekit:voicekit-test'
-VOICEKIT_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicekit" \
+TEST_DB_AUTH='voicey:voicey-test'
+VOICEY_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicey" \
   uv run pytest -q --no-cov \
   tests/integration/test_repository_backends.py \
   tests/integration/test_postgres_repository.py
-docker stop voicekit-postgres-p35
+docker stop voicey-postgres-p35
 ```
 
 The suite verifies observation parity, terminal/outbox atomicity, duplicate
@@ -114,11 +114,11 @@ target preflight against the actual Postgres schema under forced rollback and
 proves that no synthetic rows survive:
 
 ```bash
-TEST_DB_AUTH='voicekit:voicekit-test'
-VOICEKIT_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicekit" \
+TEST_DB_AUTH='voicey:voicey-test'
+VOICEY_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicey" \
   uv run pytest -q --no-cov tests/integration/test_managed_results_service.py
 ```
 
 For a real AWS S3, Tigris, R2, or MinIO-compatible bucket, use the guarded
 command in `docs/GAPS.md`. The probe creates and removes only one object under
-`VOICEKIT_OBJECT_PREFIX`.
+`VOICEY_OBJECT_PREFIX`.

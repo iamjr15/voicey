@@ -1,6 +1,6 @@
 """One bounded, paid black-box smoke scenario for the nightly LiveKit path."""
 
-from voicekit.testing import ScenarioTurn, scenario
+from voicey.testing import ScenarioTurn, scenario
 
 
 @scenario

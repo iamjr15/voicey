@@ -26,16 +26,16 @@ from livekit.agents.inference import TurnDetector
 from livekit.agents.llm import FunctionCall
 from livekit.agents.voice.room_io import RoomOptions
 
-from voicekit import Agent, Models, Results, Voice, Web
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.flow import load_native_agent
-from voicekit.runtimes.livekit.mapping import LiveKitPolicy
-from voicekit.runtimes.livekit.observability import LiveKitObservationBridge
-from voicekit.runtimes.livekit.providers import (
+from voicey import Agent, Models, Results, Voice, Web
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.flow import load_native_agent
+from voicey.runtimes.livekit.mapping import LiveKitPolicy
+from voicey.runtimes.livekit.observability import LiveKitObservationBridge
+from voicey.runtimes.livekit.providers import (
     DefaultLiveKitProviderFactory,
     LiveKitServices,
 )
-from voicekit.runtimes.livekit.session import (
+from voicey.runtimes.livekit.session import (
     LiveKitLanguageController,
     LiveKitSession,
     _close_reason,  # pyright: ignore[reportPrivateUsage]
@@ -44,7 +44,7 @@ from voicekit.runtimes.livekit.session import (
     _language_tool,  # pyright: ignore[reportPrivateUsage]
     _warm_transfer_tool,  # pyright: ignore[reportPrivateUsage]
 )
-from voicekit.runtimes.livekit.token import LiveKitTokenIssuer
+from voicey.runtimes.livekit.token import LiveKitTokenIssuer
 
 
 def _agent() -> Agent:
@@ -62,7 +62,7 @@ def _agent() -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -142,9 +142,9 @@ async def test_observation_bridge_surfaces_background_store_failure() -> None:
         on_end_phrase=_noop,
     )
     bridge.schedule_timeline("runtime.will_fail")
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await bridge.drain()
-    assert caught.value.code == "VK-RUN-006"
+    assert caught.value.code == "VY-RUN-006"
 
 
 async def _noop() -> None:
@@ -170,13 +170,13 @@ def test_livekit_provider_factory_all_catalog_edges() -> None:
     assert factory.create_tts("openai/gpt-4o-mini-tts", voice) is not None
     assert factory.create_tts("cartesia/sonic-3.5", voice) is not None
     assert factory.create_tts("elevenlabs/flash-2.5", voice) is not None
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         factory.create_stt("google/unknown", voice)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         factory.create_llm("deepgram/unknown")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         factory.create_tts("anthropic/unknown", voice)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         DefaultLiveKitProviderFactory({}).create_llm("anthropic/claude-sonnet-5")
 
 
@@ -184,7 +184,7 @@ def test_livekit_provider_factory_all_catalog_edges() -> None:
 async def test_native_flow_loader_supports_async_object_and_rejects_invalid_entries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = types.ModuleType("voicekit_edge_flow")
+    module = types.ModuleType("voicey_edge_flow")
     native = NativeAgent(instructions="Native object.")
     module.native = native  # type: ignore[attr-defined]
 
@@ -220,9 +220,9 @@ async def test_native_flow_loader_supports_async_object_and_rejects_invalid_entr
         f"{module.__name__}:bad_result",
         "missing_livekit_flow:entry",
     ):
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await load_native_agent(reference, shared_tools=[])
-        assert caught.value.code == "VK-RUN-003"
+        assert caught.value.code == "VY-RUN-003"
 
 
 @pytest.mark.parametrize(
@@ -243,9 +243,9 @@ def test_livekit_token_issuer_rejects_unsafe_configuration(
         "api_secret": "api-secret",  # pragma: allowlist secret
         "agent_name": "agent",
     }
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         LiveKitTokenIssuer(**{**defaults, **values})  # type: ignore[arg-type]
-    assert caught.value.code == "VK-RUN-002"
+    assert caught.value.code == "VY-RUN-002"
 
 
 @pytest.mark.asyncio
@@ -275,9 +275,9 @@ async def test_language_controller_noop_and_unsupported_provider() -> None:
         repository=cast(Any, store),
         call_id="call-unsupported",
     )
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await unsupported.activate()
-    assert caught.value.code == "VK-RUN-002"
+    assert caught.value.code == "VY-RUN-002"
 
 
 class FakeLifecycle:
@@ -366,7 +366,7 @@ async def test_livekit_session_start_wait_end_and_failure_paths() -> None:
     native = FakeNativeSession()
     observations = FakeObservations()
     session = _session(native=native, observations=observations)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await session.wait()
 
     await session.start(cast(rtc.Room, object()))
@@ -480,7 +480,7 @@ async def test_livekit_language_cold_and_warm_tools_execute_native_actions(
             self.interruptions_disabled = True
 
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.session.WarmTransferTask",
+        "voicey.runtimes.livekit.session.WarmTransferTask",
         warm_task,
     )
     context = Context()

@@ -30,7 +30,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-hardening-report.json"),
+        default=Path(".voicey/verification/p4-hardening-report.json"),
     )
     parser.add_argument("--short-soak-s", type=float, default=2.0)
     parser.add_argument("--max-concurrent", type=int, default=4)
@@ -148,12 +148,12 @@ def main() -> int:
 
 
 def _backend_chaos(pytest: list[str]) -> GateResult:
-    if not os.environ.get("VOICEKIT_TEST_POSTGRES_DSN"):
+    if not os.environ.get("VOICEY_TEST_POSTGRES_DSN"):
         return GateResult(
             name="sqlite_postgres_chaos_equivalence",
             status="pending-local-environment",
             command=(
-                "VOICEKIT_TEST_POSTGRES_DSN=postgresql://... uv run pytest --no-cov -q "
+                "VOICEY_TEST_POSTGRES_DSN=postgresql://... uv run pytest --no-cov -q "
                 "tests/integration/test_repository_backends.py::"
                 "test_repository_backend_chaos_invariants"
             ),

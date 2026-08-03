@@ -143,7 +143,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // The status and catalog fallback remain actionable for non-JSON proxy errors.
     }
-    const code = body.error?.code ?? "VK-WEB-005";
+    const code = body.error?.code ?? "VY-WEB-005";
     const detail = body.error?.detail ?? `request failed with HTTP ${response.status}`;
     throw new PlaygroundApiError(code, detail, body.error?.fix ?? null);
   }

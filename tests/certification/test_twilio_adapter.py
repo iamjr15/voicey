@@ -13,15 +13,15 @@ import pytest
 from twilio.base.exceptions import TwilioRestException
 from twilio.request_validator import RequestValidator
 
-from voicekit.errors import VoicekitError
-from voicekit.telephony import (
+from voicey.errors import VoiceyError
+from voicey.telephony import (
     LiveKitTarget,
     PipecatTarget,
     RollbackToken,
     TelephonyRequest,
 )
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.twilio import TwilioAdapter
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.twilio import TwilioAdapter
 
 ACCOUNT_SID = "AC" + "1" * 32
 AUTH_TOKEN = "test-auth-token"
@@ -353,15 +353,15 @@ def test_live_call_recording_fails_closed_on_ambiguity_and_provider_error(
         SimpleNamespace(sid=RECORDING_SID),
         SimpleNamespace(sid="RE" + "5" * 32),
     ]
-    with pytest.raises(VoicekitError) as ambiguous:
+    with pytest.raises(VoiceyError) as ambiguous:
         adapter.start_recording(CALL_SID, TARGET)
-    assert ambiguous.value.code == "VK-TEL-009"
+    assert ambiguous.value.code == "VY-TEL-009"
 
     client.calls.recordings.values = []
     client.calls.recordings.list_error = ConnectionError("private")
-    with pytest.raises(VoicekitError) as unavailable:
+    with pytest.raises(VoiceyError) as unavailable:
         adapter.start_recording(CALL_SID, TARGET)
-    assert unavailable.value.code == "VK-TEL-011"
+    assert unavailable.value.code == "VY-TEL-011"
 
 
 def test_point_and_restore_snapshot_all_precedence_fields_before_mutation(
@@ -445,9 +445,9 @@ def test_crash_recovery_restores_prepared_route_and_cas_rejects_manual_change(
         applied=applied,
     )
     resource.voice_url = "https://manual.example.test"
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         adapter.restore(RollbackToken(provider="twilio", token=conflict.token))
-    assert caught.value.code == "VK-TEL-006"
+    assert caught.value.code == "VY-TEL-006"
     assert resource.voice_url == "https://manual.example.test"
     assert ledger.get_route(conflict.token).state == "conflict"
 
@@ -469,14 +469,14 @@ def test_number_list_buy_and_release(
 
 
 def test_number_and_initialization_failures_are_cataloged(tmp_path: Path) -> None:
-    with pytest.raises(VoicekitError) as credentials:
+    with pytest.raises(VoiceyError) as credentials:
         TwilioAdapter(
             account_sid="not-an-account",
             auth_token="",
             client=FakeClient(),
             ledger_path=tmp_path / "invalid.sqlite3",
         )
-    with pytest.raises(VoicekitError) as public_base:
+    with pytest.raises(VoiceyError) as public_base:
         TwilioAdapter(
             account_sid=ACCOUNT_SID,
             auth_token=AUTH_TOKEN,
@@ -484,8 +484,8 @@ def test_number_and_initialization_failures_are_cataloged(tmp_path: Path) -> Non
             ledger_path=tmp_path / "base.sqlite3",
             expected_public_base="http://unsafe.example.test",
         )
-    assert credentials.value.code == "VK-TEL-002"
-    assert public_base.value.code == "VK-TEL-002"
+    assert credentials.value.code == "VY-TEL-002"
+    assert public_base.value.code == "VY-TEL-002"
 
     client = FakeClient(_number())
     ledger = TelephonyLedger(tmp_path / "errors.sqlite3")
@@ -495,24 +495,24 @@ def test_number_and_initialization_failures_are_cataloged(tmp_path: Path) -> Non
         client=client,
         ledger=ledger,
     )
-    with pytest.raises(VoicekitError) as country:
+    with pytest.raises(VoiceyError) as country:
         adapter.buy_number("USA")
-    with pytest.raises(VoicekitError) as area:
+    with pytest.raises(VoiceyError) as area:
         adapter.buy_number("US", "four")
     client.available_phone_numbers.local.values = []
-    with pytest.raises(VoicekitError) as unavailable:
+    with pytest.raises(VoiceyError) as unavailable:
         adapter.buy_number("US")
     client.incoming_phone_numbers.delete_result = False
-    with pytest.raises(VoicekitError) as release:
+    with pytest.raises(VoiceyError) as release:
         adapter.release_number(NUMBER_SID)
     client.incoming_phone_numbers.list_error = ConnectionError("private")
-    with pytest.raises(VoicekitError) as listing:
+    with pytest.raises(VoiceyError) as listing:
         adapter.list_numbers()
-    assert country.value.code == "VK-TEL-002"
-    assert area.value.code == "VK-TEL-002"
-    assert unavailable.value.code == "VK-TEL-003"
-    assert release.value.code == "VK-TEL-004"
-    assert listing.value.code == "VK-TEL-011"
+    assert country.value.code == "VY-TEL-002"
+    assert area.value.code == "VY-TEL-002"
+    assert unavailable.value.code == "VY-TEL-003"
+    assert release.value.code == "VY-TEL-004"
+    assert listing.value.code == "VY-TEL-011"
     ledger.close()
 
 
@@ -520,27 +520,27 @@ def test_point_failure_mismatch_and_livekit_path_are_fail_closed(
     adapter_bundle: tuple[TwilioAdapter, FakeClient, TelephonyLedger],
 ) -> None:
     adapter, client, ledger = adapter_bundle
-    with pytest.raises(VoicekitError) as livekit:
+    with pytest.raises(VoiceyError) as livekit:
         adapter.point_inbound(
             "+14155550100",
             LiveKitTarget(project="project", sip_uri="sip:example.test"),
         )
-    assert livekit.value.code == "VK-TEL-002"
+    assert livekit.value.code == "VY-TEL-002"
 
     client.incoming_phone_numbers.update_error = TwilioRestException(
         400,
         "/IncomingPhoneNumbers",
         code=21401,
     )
-    with pytest.raises(VoicekitError) as rejected:
+    with pytest.raises(VoiceyError) as rejected:
         adapter.point_inbound("+14155550100", TARGET)
-    assert rejected.value.code == "VK-TEL-004"
+    assert rejected.value.code == "VY-TEL-004"
     assert ledger.open_routes(provider="twilio") == ()
 
     client.incoming_phone_numbers.update_error = ConnectionError("unknown")
-    with pytest.raises(VoicekitError) as ambiguous:
+    with pytest.raises(VoiceyError) as ambiguous:
         adapter.point_inbound("+14155550100", TARGET)
-    assert ambiguous.value.code == "VK-TEL-006"
+    assert ambiguous.value.code == "VY-TEL-006"
     assert ledger.open_routes(provider="twilio")[0].state == "ambiguous"
 
     client.incoming_phone_numbers.update_error = None
@@ -549,24 +549,24 @@ def test_point_failure_mismatch_and_livekit_path_are_fail_closed(
         "voice_url",
         "https://mismatch.example.test",
     )
-    with pytest.raises(VoicekitError) as mismatch:
+    with pytest.raises(VoiceyError) as mismatch:
         adapter.point_inbound("+14155550100", TARGET)
-    assert mismatch.value.code == "VK-TEL-006"
+    assert mismatch.value.code == "VY-TEL-006"
 
 
 def test_restore_wrong_provider_fetch_failure_mismatch_and_idempotence(
     adapter_bundle: tuple[TwilioAdapter, FakeClient, TelephonyLedger],
 ) -> None:
     adapter, client, ledger = adapter_bundle
-    with pytest.raises(VoicekitError) as provider:
+    with pytest.raises(VoiceyError) as provider:
         adapter.restore(RollbackToken(provider="other", token="route_1"))
-    assert provider.value.code == "VK-TEL-006"
+    assert provider.value.code == "VY-TEL-006"
 
     token = adapter.point_inbound("+14155550100", TARGET)
     client.incoming_phone_numbers.fetch_error = ConnectionError("down")
-    with pytest.raises(VoicekitError) as fetch:
+    with pytest.raises(VoiceyError) as fetch:
         adapter.restore(token)
-    assert fetch.value.code == "VK-TEL-006"
+    assert fetch.value.code == "VY-TEL-006"
     client.incoming_phone_numbers.fetch_error = None
 
     client.incoming_phone_numbers.after_update = lambda: setattr(
@@ -574,9 +574,9 @@ def test_restore_wrong_provider_fetch_failure_mismatch_and_idempotence(
         "voice_url",
         "https://restore-mismatch.example.test",
     )
-    with pytest.raises(VoicekitError) as mismatch:
+    with pytest.raises(VoiceyError) as mismatch:
         adapter.restore(token)
-    assert mismatch.value.code == "VK-TEL-006"
+    assert mismatch.value.code == "VY-TEL-006"
 
     client.incoming_phone_numbers.after_update = None
     resource = client.incoming_phone_numbers.resources[NUMBER_SID]
@@ -636,7 +636,7 @@ def test_ambiguous_outbound_is_recorded_once_and_never_blind_retried(
     adapter, client, ledger = adapter_bundle
     client.calls.create_error = ConnectionError("uncertain wire result")
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         adapter.start_call(
             "+14155550100",
             "+14155550101",
@@ -644,7 +644,7 @@ def test_ambiguous_outbound_is_recorded_once_and_never_blind_retried(
             intent_id="intent_ambiguous",
         )
 
-    assert caught.value.code == "VK-TEL-007"
+    assert caught.value.code == "VY-TEL-007"
     assert len(client.calls.creates) == 1
     assert ledger.get_intent("intent_ambiguous").state == "ambiguous"
 
@@ -660,7 +660,7 @@ def test_definitive_outbound_rejection_is_not_ambiguous(
         code=21211,
     )
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         adapter.start_call(
             "+14155550100",
             "+14155550101",
@@ -668,7 +668,7 @@ def test_definitive_outbound_rejection_is_not_ambiguous(
             intent_id="intent_rejected",
         )
 
-    assert caught.value.code == "VK-TEL-004"
+    assert caught.value.code == "VY-TEL-004"
     assert "private detail" not in str(caught.value)
     assert ledger.get_intent("intent_rejected").state == "rejected"
 
@@ -677,33 +677,33 @@ def test_outbound_validation_invalid_provider_sid_and_reconcile_failures(
     adapter_bundle: tuple[TwilioAdapter, FakeClient, TelephonyLedger],
 ) -> None:
     adapter, client, ledger = adapter_bundle
-    with pytest.raises(VoicekitError) as number:
+    with pytest.raises(VoiceyError) as number:
         adapter.start_call("invalid", "+14155550101", TARGET)
-    with pytest.raises(VoicekitError) as timeout:
+    with pytest.raises(VoiceyError) as timeout:
         adapter.start_call(
             "+14155550100",
             "+14155550101",
             TARGET,
             timeout_s=1,
         )
-    with pytest.raises(VoicekitError) as digits:
+    with pytest.raises(VoiceyError) as digits:
         adapter.start_call(
             "+14155550100",
             "+14155550101",
             TARGET,
             send_digits="invalid",
         )
-    assert {number.value.code, timeout.value.code, digits.value.code} == {"VK-TEL-002"}
+    assert {number.value.code, timeout.value.code, digits.value.code} == {"VY-TEL-002"}
 
     client.calls.created_sid = "invalid"
-    with pytest.raises(VoicekitError) as invalid_sid:
+    with pytest.raises(VoiceyError) as invalid_sid:
         adapter.start_call(
             "+14155550100",
             "+14155550101",
             TARGET,
             intent_id="intent_invalid_sid",
         )
-    assert invalid_sid.value.code == "VK-TEL-007"
+    assert invalid_sid.value.code == "VY-TEL-007"
     assert ledger.get_intent("intent_invalid_sid").state == "ambiguous"
 
     client.calls.created_sid = CALL_SID
@@ -714,13 +714,13 @@ def test_outbound_validation_invalid_provider_sid_and_reconcile_failures(
         to_number="+14155550101",
         target={},
     )
-    with pytest.raises(VoicekitError) as no_candidates:
+    with pytest.raises(VoiceyError) as no_candidates:
         adapter.reconcile_outbound("intent_no_candidates")
-    assert no_candidates.value.code == "VK-TEL-007"
+    assert no_candidates.value.code == "VY-TEL-007"
     client.calls.list_error = ConnectionError("down")
-    with pytest.raises(VoicekitError) as unavailable:
+    with pytest.raises(VoiceyError) as unavailable:
         adapter.reconcile_outbound("intent_no_candidates")
-    assert unavailable.value.code == "VK-TEL-011"
+    assert unavailable.value.code == "VY-TEL-011"
 
 
 def test_status_callback_binds_ambiguous_intent_and_maps_all_terminal_states(
@@ -919,7 +919,7 @@ def test_callback_variants_request_rejection_and_call_update_failure(
         {"CallSid": "invalid", "CallStatus": "ringing"},
         {"CallSid": CALL_SID, "CallStatus": "new-status"},
     ):
-        with pytest.raises(VoicekitError) as invalid:
+        with pytest.raises(VoiceyError) as invalid:
             adapter.parse_event(
                 TelephonyRequest(
                     scheme="https",
@@ -929,7 +929,7 @@ def test_callback_variants_request_rejection_and_call_update_failure(
                     form=form,
                 )
             )
-        assert invalid.value.code == "VK-TEL-008"
+        assert invalid.value.code == "VY-TEL-008"
 
     no_signature = TelephonyRequest(
         scheme="https",
@@ -942,9 +942,9 @@ def test_callback_variants_request_rejection_and_call_update_failure(
     assert not adapter.verify_request(no_signature)
 
     client.calls.update_error = ConnectionError("down")
-    with pytest.raises(VoicekitError) as update:
+    with pytest.raises(VoiceyError) as update:
         adapter.hangup(CALL_SID)
-    assert update.value.code == "VK-TEL-011"
+    assert update.value.code == "VY-TEL-011"
 
 
 @pytest.mark.asyncio
@@ -1046,7 +1046,7 @@ async def test_recording_download_failures_are_cataloged(
             ledger=ledger,
             recording_client=http,
         )
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await adapter.download_recording(
                 RECORDING_SID,
                 artifact_store=MemoryArtifacts(),
@@ -1055,7 +1055,7 @@ async def test_recording_download_failures_are_cataloged(
             )
         ledger.close()
 
-    assert caught.value.code == "VK-TEL-009"
+    assert caught.value.code == "VY-TEL-009"
 
 
 @pytest.mark.asyncio
@@ -1076,11 +1076,11 @@ async def test_invalid_recording_download_arguments_are_cataloged(
             del storage_key
 
     for sid, limit in (("invalid", 1), (RECORDING_SID, 0)):
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await adapter.download_recording(
                 sid,
                 artifact_store=MemoryArtifacts(),
                 storage_key="recordings/rec.mp3",
                 max_bytes=limit,
             )
-        assert caught.value.code == "VK-TEL-009"
+        assert caught.value.code == "VY-TEL-009"

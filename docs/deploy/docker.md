@@ -1,6 +1,6 @@
 # Docker deployment
 
-Docker is voicekit's canonical self-hosted target. It runs one Pipecat agent
+Docker is voicey's canonical self-hosted target. It runs one Pipecat agent
 generation with a local SQLite WAL database and protected local artifacts on a
 Docker-managed host-local volume. The generated production process owns
 SIGTERM, admission drain, result delivery, and both web listeners.
@@ -10,7 +10,7 @@ SIGTERM, admission drain, result delivery, and both web listeners.
 From the agent project:
 
 ```bash
-voicekit deploy docker --skip-smoke
+voicey deploy docker --skip-smoke
 ```
 
 An unpublished development checkout must first build and pass its wheel
@@ -19,24 +19,24 @@ explicitly:
 ```bash
 uv build --wheel --out-dir dist
 cd /path/to/agent
-voicekit deploy docker \
-  --engine-wheel /path/to/voicekit/dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+voicey deploy docker \
+  --engine-wheel /path/to/voicey/dist/voicey-0.0.0.dev0-py3-none-any.whl \
   --skip-smoke
 ```
 
-Generation is idempotent for byte-identical files and fails with `VK-DEP-001`
+Generation is idempotent for byte-identical files and fails with `VY-DEP-001`
 instead of overwriting a user-owned conflict. It emits:
 
-- `Dockerfile.voicekit`: multi-stage Python 3.14 glibc image, non-root UID/GID
+- `Dockerfile.voicey`: multi-stage Python 3.14 glibc image, non-root UID/GID
   10001, build-time NLTK data, and a process healthcheck;
-- `compose.voicekit.yaml`: hardened service, local named volume, public port
+- `compose.voicey.yaml`: hardened service, local named volume, public port
   7860, internal-only admin port 7861, and bounded graceful stop;
 - `.dockerignore`: excludes VCS state, build state, and every `.env*` file;
 - `docker.env.example`: variable names and safe topology examples only;
-- `.voicekit/deploy/project-requirements.txt`: project dependencies other than
-  voicekit;
+- `.voicey/deploy/project-requirements.txt`: project dependencies other than
+  voicey;
 - for unpublished builds only, a mode-0600 local engine wheel under
-  `.voicekit/deploy/`.
+  `.voicey/deploy/`.
 
 The wheel and requirements are build inputs, then removed from the runtime
 image. Provider, carrier, webhook, and integrator secrets are never Docker
@@ -45,28 +45,28 @@ build arguments or image layers.
 ## Configure and start
 
 The Compose service reads the agent project's gitignored `.env`, which the
-guided voicekit setup writes. Supply deployment-only values in the process
+guided voicey setup writes. Supply deployment-only values in the process
 environment or the same protected file:
 
 ```bash
-export VOICEKIT_PUBLIC_BASE=https://voice.example.com
-docker compose -f compose.voicekit.yaml up -d --build
-docker compose -f compose.voicekit.yaml ps
+export VOICEY_PUBLIC_BASE=https://voice.example.com
+docker compose -f compose.voicey.yaml up -d --build
+docker compose -f compose.voicey.yaml ps
 curl --fail https://voice.example.com/health
 ```
 
-`VOICEKIT_PUBLIC_BASE` must be the normalized public HTTPS base. Terminate TLS
+`VOICEY_PUBLIC_BASE` must be the normalized public HTTPS base. Terminate TLS
 at a reverse proxy or load balancer and forward only the public listener on
 container port 7860. Never publish port 7861. The internal listener mints
 browser session tokens and serves protected call data; it requires
-`VOICEKIT_INTEGRATOR_SECRET` whenever web is enabled.
+`VOICEY_INTEGRATOR_SECRET` whenever web is enabled.
 
-Set `VOICEKIT_TRUSTED_PROXY_IPS` to the exact reverse-proxy peer addresses used
-for Twilio signature reconstruction. Set `VOICEKIT_TRUSTED_PROXY_CIDRS` to only
+Set `VOICEY_TRUSTED_PROXY_IPS` to the exact reverse-proxy peer addresses used
+for Twilio signature reconstruction. Set `VOICEY_TRUSTED_PROXY_CIDRS` to only
 the proxy networks permitted to supply browser forwarded headers. Do not use
 open-ended public CIDRs.
 
-The default `VOICEKIT_STOP_GRACE_PERIOD=14460s` safely exceeds voicekit's
+The default `VOICEY_STOP_GRACE_PERIOD=14460s` safely exceeds voicey's
 maximum allowed `limits.max_duration_s` by 60 seconds. If it is reduced, keep
 it at least `limits.max_duration_s + 60s`.
 
@@ -90,7 +90,7 @@ similar volumes are unsupported. Cross-host or steady multi-replica SQLite is
 unsupported; use the managed-Postgres targets introduced later in the build
 plan for that topology.
 
-Back up the stopped `voicekit-data` volume as one unit, including
+Back up the stopped `voicey-data` volume as one unit, including
 `calls.sqlite3`, its WAL files, `telephony.sqlite3`, artifacts, and recordings.
 Do not copy a live SQLite main file without its WAL or a SQLite-aware backup.
 
@@ -117,7 +117,7 @@ and that both generations observe the same single terminal event.
 After public HTTPS ingress is healthy, explicitly point the owned number:
 
 ```bash
-voicekit numbers point +14155550123 \
+voicey numbers point +14155550123 \
   --url https://voice.example.com \
   --yes
 ```
@@ -125,7 +125,7 @@ voicekit numbers point +14155550123 \
 Then place one real paid smoke call:
 
 ```bash
-voicekit deploy docker \
+voicey deploy docker \
   --smoke https://voice.example.com \
   --to +15551234567 \
   --yes
@@ -134,7 +134,7 @@ voicekit deploy docker \
 The smoke command first verifies the public `/health` contract, including
 runtime, storage readiness, and open admission, then places the call through
 the configured Twilio adapter. `--to` may instead be provided through
-`VOICEKIT_SMOKE_TO`. The command does not point the number automatically, and
+`VOICEY_SMOKE_TO`. The command does not point the number automatically, and
 the call can incur carrier charges. An unpublished checkout must also pass the
 same `--engine-wheel` used during generation; the generated next step includes
 its safe local copy automatically.
@@ -147,7 +147,7 @@ If a post-cutover check fails, restore the route with the rollback token printed
 by `numbers point`:
 
 ```bash
-voicekit numbers restore <rollback-token> --yes
+voicey numbers restore <rollback-token> --yes
 ```
 
 ## Operational checks
@@ -160,13 +160,13 @@ port through public carrier/browser ingress. OTLP export needs no additional
 listener and uses the endpoint in `agent.py`.
 
 ```bash
-docker compose -f compose.voicekit.yaml logs --tail 200 agent
-docker compose -f compose.voicekit.yaml exec agent \
+docker compose -f compose.voicey.yaml logs --tail 200 agent
+docker compose -f compose.voicey.yaml exec agent \
   python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:7860/health').read().decode())"
-docker compose -f compose.voicekit.yaml stop
+docker compose -f compose.voicey.yaml stop
 ```
 
 The release security workflow builds this exact image, starts it read-only and
 non-root, exercises health plus SIGTERM drain, and fails on fixed high or
 critical vulnerabilities. See the [error catalog](../errors.md) for
-`VK-DEP-*` recovery.
+`VY-DEP-*` recovery.

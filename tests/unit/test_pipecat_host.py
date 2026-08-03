@@ -11,12 +11,12 @@ import pytest
 from pipecat.runner.types import CallData
 from starlette.datastructures import URL
 
-from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Web, tool
-from voicekit.errors import VoicekitError
-from voicekit.playground.security import OriginPolicy, SessionTokenManager, WebSessionSecurity
-from voicekit.results.signing import encode_secret
-from voicekit.runtimes.pipecat import host as host_module
-from voicekit.runtimes.pipecat.host import (
+from voicey import Agent, Behavior, Limits, Models, Phone, Results, Web, tool
+from voicey.errors import VoiceyError
+from voicey.playground.security import OriginPolicy, SessionTokenManager, WebSessionSecurity
+from voicey.results.signing import encode_secret
+from voicey.runtimes.pipecat import host as host_module
+from voicey.runtimes.pipecat.host import (
     LongLivedRunner,
     PipecatHost,
     PipecatHostSettings,
@@ -27,11 +27,11 @@ from voicekit.runtimes.pipecat.host import (
     telnyx_transport_params,
     twilio_transport_params,
 )
-from voicekit.runtimes.pipecat.lifecycle import PipecatCall, PipecatCallLifecycle
-from voicekit.runtimes.pipecat.session import PipecatSessionBuilder
-from voicekit.storage.sqlite import SQLiteRepository
-from voicekit.telephony import CallEvent, PipecatTarget, TelephonyRequest
-from voicekit.telephony.ledger import WarmTransferRecord
+from voicey.runtimes.pipecat.lifecycle import PipecatCall, PipecatCallLifecycle
+from voicey.runtimes.pipecat.session import PipecatSessionBuilder
+from voicey.storage.sqlite import SQLiteRepository
+from voicey.telephony import CallEvent, PipecatTarget, TelephonyRequest
+from voicey.telephony.ledger import WarmTransferRecord
 
 
 @tool
@@ -293,7 +293,7 @@ class _WarmAdapter:
         self.events.append("bridge")
         if self.bridge_fails:
             self.record = replace(self.record, state="failed")
-            raise VoicekitError("VK-TEL-012", detail="definitive bridge failure.")
+            raise VoiceyError("VY-TEL-012", detail="definitive bridge failure.")
         self.record = replace(self.record, state="bridged")
         return self.record
 
@@ -324,7 +324,7 @@ class _RecordingHandler:
 
     async def read(self, recording_id: str, authorization: str | None) -> bytes:
         if authorization != "Bearer whsec-test":
-            raise VoicekitError("VK-WEB-004", detail="denied")
+            raise VoiceyError("VY-WEB-004", detail="denied")
         return f"audio:{recording_id}".encode()
 
 
@@ -518,11 +518,11 @@ async def test_drain_closes_admission_terminalizes_pending_and_changes_readiness
     assert terminal.event_type == "call.completed"
     record = await repository.get_call(pending.call.call_id)
     assert record.terminal_reason == "duration_limit"
-    with pytest.raises(VoicekitError) as rejected:
+    with pytest.raises(VoiceyError) as rejected:
         await host.reserve_call(
             PipecatCall(call_id="call-after-drain", channel="web", direction="inbound")
         )
-    assert rejected.value.code == "VK-RUN-008"
+    assert rejected.value.code == "VY-RUN-008"
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=host.app)) as client:
         response = await client.get("http://test/health")
@@ -578,7 +578,7 @@ def test_telnyx_transport_is_exactly_8khz_pcmu_and_auto_hangs_up() -> None:
     assert serializer._params.outbound_encoding == "PCMU"
     assert serializer._params.auto_hang_up is True
 
-    with pytest.raises(VoicekitError, match="VK-TEL-010"):
+    with pytest.raises(VoiceyError, match="VY-TEL-010"):
         telnyx_transport_params(
             settings=PipecatHostSettings(
                 public_base="https://voice.example",
@@ -618,7 +618,7 @@ def test_telnyx_transport_is_exactly_8khz_pcmu_and_auto_hangs_up() -> None:
 def test_host_settings_reject_unsafe_media_configuration(
     settings: dict[str, object],
 ) -> None:
-    with pytest.raises(Exception, match="VK-RUN-002"):
+    with pytest.raises(Exception, match="VY-RUN-002"):
         PipecatHostSettings(**cast(Any, settings))
 
 
@@ -662,7 +662,7 @@ async def test_twilio_warm_coordinator_marks_before_bridge_and_clears_definitive
         target=PipecatTarget(https_base="https://voice.example"),
         timeout_s=1,
     )
-    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+    with pytest.raises(VoiceyError, match="VY-TEL-012"):
         await failure(
             "CA" + "1" * 32,
             "+14155550124",
@@ -681,7 +681,7 @@ async def test_twilio_warm_coordinator_timeout_aborts_only_human_leg() -> None:
         timeout_s=0.001,
     )
 
-    with pytest.raises(VoicekitError, match="timed out"):
+    with pytest.raises(VoiceyError, match="timed out"):
         await coordinator(
             "CA" + "1" * 32,
             "+14155550124",
@@ -714,7 +714,7 @@ async def test_twilio_answer_reserves_before_returning_stream(tmp_path: Path) ->
     assert response.status_code == 200
     assert record.status == "active"
     assert host.admission.active_count == 1
-    assert adapter.targets[0].custom_parameters["voicekit_token"]
+    assert adapter.targets[0].custom_parameters["voicey_token"]
     assert adapter.targets[0].custom_parameters["from_number"] == "+14155550100"
     await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
         "CA-first",
@@ -910,15 +910,15 @@ async def test_recording_callback_retry_and_signature_failures_are_visible(
     class RetryHandler(_RecordingHandler):
         async def handle_twilio(self, event: CallEvent) -> None:
             del event
-            raise VoicekitError("VK-RES-010", detail="terminal pending")
+            raise VoiceyError("VY-RES-010", detail="terminal pending")
 
         async def handle_telnyx(self, event: CallEvent) -> None:
             del event
-            raise VoicekitError("VK-RES-010", detail="terminal pending")
+            raise VoiceyError("VY-RES-010", detail="terminal pending")
 
         async def handle_plivo(self, event: CallEvent) -> None:
             del event
-            raise VoicekitError("VK-RES-010", detail="terminal pending")
+            raise VoiceyError("VY-RES-010", detail="terminal pending")
 
     retry, repository, _adapter = await _host(
         tmp_path / "retry",
@@ -979,8 +979,8 @@ async def test_twilio_answer_is_idempotent_for_retries(tmp_path: Path) -> None:
     assert first.status_code == second.status_code == 200
     assert host.admission.active_count == 1
     assert (
-        adapter.targets[0].custom_parameters["voicekit_token"]
-        == adapter.targets[1].custom_parameters["voicekit_token"]
+        adapter.targets[0].custom_parameters["voicey_token"]
+        == adapter.targets[1].custom_parameters["voicey_token"]
     )
     await host._finish_pending("CA-retry", "provider_hangup")  # pyright: ignore[reportPrivateUsage]
     await repository.close()
@@ -1005,7 +1005,7 @@ async def test_twilio_answer_returns_native_busy_at_limit(tmp_path: Path) -> Non
     assert first.status_code == 200
     assert second.status_code == 200
     assert '<Reject reason="busy"' in second.text
-    with pytest.raises(Exception, match="VK-OBS-003"):
+    with pytest.raises(Exception, match="VY-OBS-003"):
         await repository.get_call("CA-two")
     await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
         "CA-one",
@@ -1027,7 +1027,7 @@ async def test_unauthenticated_twilio_answer_is_rejected(tmp_path: Path) -> None
         )
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "VK-RUN-007"
+    assert response.json()["error"]["code"] == "VY-RUN-007"
     assert host.admission.active_count == 0
     await repository.close()
 
@@ -1087,7 +1087,7 @@ async def test_twilio_media_route_claims_reservation_and_runs_session(
             CallData(
                 call_id="CA-media-route",
                 stream_id="MZ-media-route",
-                body={"voicekit_token": pending.admission.token},
+                body={"voicey_token": pending.admission.token},
             ),
         )
 
@@ -1116,7 +1116,7 @@ async def test_twilio_media_rejects_unauthenticated_socket(tmp_path: Path) -> No
     await cast(Any, route).endpoint(websocket)
 
     assert not websocket.accepted
-    assert websocket.closed == (1008, "VK-RUN-007")
+    assert websocket.closed == (1008, "VY-RUN-007")
     await repository.close()
 
 
@@ -1137,7 +1137,7 @@ async def test_twilio_media_rejects_wrong_transport(
     await cast(Any, route).endpoint(websocket)
 
     assert websocket.accepted
-    assert websocket.closed == (1011, "VK-RUN-006")
+    assert websocket.closed == (1011, "VY-RUN-006")
     await repository.close()
 
 
@@ -1267,7 +1267,7 @@ async def test_telnyx_media_rejects_wrong_token_transport_and_codec(
     monkeypatch.setattr(host_module, "parse_telephony_websocket", wrong_transport)
     wrong = _WebSocket()
     await cast("Any", route).endpoint(wrong, pending.admission.token)
-    assert wrong.closed == (1011, "VK-RUN-006")
+    assert wrong.closed == (1011, "VY-RUN-006")
 
     async def wrong_codec(_websocket: object) -> tuple[str, CallData]:
         return (
@@ -1282,7 +1282,7 @@ async def test_telnyx_media_rejects_wrong_token_transport_and_codec(
     monkeypatch.setattr(host_module, "parse_telephony_websocket", wrong_codec)
     codec = _WebSocket()
     await cast("Any", route).endpoint(codec, pending.admission.token)
-    assert codec.closed == (1011, "VK-RUN-006")
+    assert codec.closed == (1011, "VY-RUN-006")
 
     await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
         "v3:telnyx-reject",
@@ -1354,7 +1354,7 @@ async def test_telnyx_texml_answer_uses_one_use_media_path(
     assert len(adapter.texml_targets) == 1
     target = adapter.texml_targets[0]
     assert target.ws_path.startswith("/telnyx/media/")
-    assert target.custom_parameters["voicekit_token"] == target.ws_path.rsplit("/", 1)[-1]
+    assert target.custom_parameters["voicey_token"] == target.ws_path.rsplit("/", 1)[-1]
     await host._finish_pending(  # pyright: ignore[reportPrivateUsage]
         "v3:texml-call",
         "provider_hangup",
@@ -1464,7 +1464,7 @@ async def test_web_ice_patch_accepts_browser_candidate_shapes(tmp_path: Path) ->
 
     assert response.status_code == 204
     assert invalid.status_code == 400
-    assert invalid.json()["error"]["code"] == "VK-RUN-007"
+    assert invalid.json()["error"]["code"] == "VY-RUN-007"
     await repository.close()
 
 
@@ -1478,7 +1478,7 @@ async def test_invalid_web_offer_is_cataloged(tmp_path: Path) -> None:
         response = await client.post("/api/offer", json={"type": "not-an-offer"})
 
     assert response.status_code == 400
-    assert response.json()["error"]["code"] == "VK-RUN-007"
+    assert response.json()["error"]["code"] == "VY-RUN-007"
     await repository.close()
 
 
@@ -1602,7 +1602,7 @@ async def test_failed_authenticated_offer_consumes_token_and_terminalizes_reserv
     terminal = await repository.get_terminal_event_for_call(issued.identity.call_id)
     assert before.status == "active"
     assert failed.status_code == 400
-    assert failed.json()["error"]["code"] == "VK-RUN-007"
+    assert failed.json()["error"]["code"] == "VY-RUN-007"
     assert replay.status_code == 401
     assert after.status == "failed"
     assert terminal.event_type == "call.failed"
@@ -1613,7 +1613,7 @@ async def test_host_refuses_ungated_web_channel_by_default(tmp_path: Path) -> No
     repository = SQLiteRepository(tmp_path / "host.sqlite3")
     await repository.open()
     adapter = _Twilio()
-    with pytest.raises(Exception, match="VK-WEB-001"):
+    with pytest.raises(Exception, match="VY-WEB-001"):
         PipecatHost(
             agent=_agent(),
             repository=repository,
@@ -1650,6 +1650,6 @@ async def test_host_reload_is_fenced_at_call_boundary(tmp_path: Path) -> None:
     assert host.admission.max_concurrent == 4
 
     renamed = updated.model_copy(update={"name": "renamed"})
-    with pytest.raises(VoicekitError, match="require restarting"):
+    with pytest.raises(VoiceyError, match="require restarting"):
         await host.reload_agent(renamed, restart_runner=False)
     await repository.close()

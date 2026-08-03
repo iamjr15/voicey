@@ -15,21 +15,21 @@ from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.runner.types import CallData
 from starlette.datastructures import URL
 
-from voicekit.config.manifest import ManifestStore
-from voicekit.errors import VoicekitError
-from voicekit.telephony.models import CallEvent, PipecatTarget, TelephonyRequest
-from voicekit.testing import (
+from voicey.config.manifest import ManifestStore
+from voicey.errors import VoiceyError
+from voicey.telephony.models import CallEvent, PipecatTarget, TelephonyRequest
+from voicey.testing import (
     LiveTestingConfig,
     ResultExpectation,
     ScenarioDefinition,
 )
-from voicekit.testing import (
+from voicey.testing import (
     TestProfile as ScenarioProfile,
 )
-from voicekit.testing import live as live_testing
-from voicekit.testing import live_pipecat as pipecat_live
-from voicekit.testing.discovery import discover_scenarios
-from voicekit.testing.live import (
+from voicey.testing import live as live_testing
+from voicey.testing import live_pipecat as pipecat_live
+from voicey.testing.discovery import discover_scenarios
+from voicey.testing.live import (
     LiveCallEvidence,
     LiveCallPlan,
     LiveEnvironment,
@@ -39,26 +39,26 @@ from voicekit.testing.live import (
     live_judge_criteria,
     validate_live_environment,
 )
-from voicekit.testing.live_livekit import LiveKitSipPstnBackend
-from voicekit.testing.models import JudgeConfig, ScenarioTurn, TurnExpectation
-from voicekit.testing.sim_caller import JudgeDecision, load_testing_config
+from voicey.testing.live_livekit import LiveKitSipPstnBackend
+from voicey.testing.models import JudgeConfig, ScenarioTurn, TurnExpectation
+from voicey.testing.sim_caller import JudgeDecision, load_testing_config
 
 
 def _base_environment() -> dict[str, str]:
     return {
-        "VOICEKIT_LIVE_PSTN_ACK": "I_ACKNOWLEDGE_PAID_PSTN",
-        "VOICEKIT_LIVE_PSTN_MAX_CALLS": "4",
-        "VOICEKIT_LIVE_TARGET_NUMBER": "+14155550123",
+        "VOICEY_LIVE_PSTN_ACK": "I_ACKNOWLEDGE_PAID_PSTN",
+        "VOICEY_LIVE_PSTN_MAX_CALLS": "4",
+        "VOICEY_LIVE_TARGET_NUMBER": "+14155550123",
         "DEEPGRAM_API_KEY": "deepgram-test",  # pragma: allowlist secret
         "ANTHROPIC_API_KEY": "anthropic-test",  # pragma: allowlist secret
         "CARTESIA_API_KEY": "cartesia-test",  # pragma: allowlist secret
         "TWILIO_ACCOUNT_SID": "AC" + "1" * 32,
         "TWILIO_AUTH_TOKEN": "twilio-test",  # pragma: allowlist secret
-        "VOICEKIT_LIVE_TWILIO_FROM": "+14155550124",
+        "VOICEY_LIVE_TWILIO_FROM": "+14155550124",
         "LIVEKIT_URL": "wss://test.livekit.cloud",
         "LIVEKIT_API_KEY": "livekit-key",  # pragma: allowlist secret
         "LIVEKIT_API_SECRET": "livekit-secret-xxxxxxxxxxxxxxxxxxxxxxxx",  # pragma: allowlist secret
-        "VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID": "ST_test_trunk",
+        "VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID": "ST_test_trunk",
     }
 
 
@@ -99,14 +99,14 @@ def test_live_environment_accepts_only_complete_acknowledged_budget(
 @pytest.mark.parametrize(
     ("name", "value", "remove", "match"),
     [
-        ("VOICEKIT_LIVE_PSTN_ACK", "", True, "must equal"),
-        ("VOICEKIT_LIVE_PSTN_ACK", "yes", False, "must equal"),
-        ("VOICEKIT_LIVE_PSTN_MAX_CALLS", "many", False, "must be an integer"),
-        ("VOICEKIT_LIVE_PSTN_MAX_CALLS", "3", False, "between 4 and 1000"),
-        ("VOICEKIT_LIVE_TARGET_NUMBER", "555", False, "must contain an E.164"),
+        ("VOICEY_LIVE_PSTN_ACK", "", True, "must equal"),
+        ("VOICEY_LIVE_PSTN_ACK", "yes", False, "must equal"),
+        ("VOICEY_LIVE_PSTN_MAX_CALLS", "many", False, "must be an integer"),
+        ("VOICEY_LIVE_PSTN_MAX_CALLS", "3", False, "between 4 and 1000"),
+        ("VOICEY_LIVE_TARGET_NUMBER", "555", False, "must contain an E.164"),
         ("DEEPGRAM_API_KEY", "", True, "prerequisites are missing"),
         (
-            "VOICEKIT_LIVE_PUBLIC_URL",
+            "VOICEY_LIVE_PUBLIC_URL",
             "http://not-secure.example",
             False,
             "HTTPS origin",
@@ -124,7 +124,7 @@ def test_live_environment_rejects_before_spending(
         environment.pop(name)
     else:
         environment[name] = value
-    with pytest.raises(VoicekitError, match=match):
+    with pytest.raises(VoiceyError, match=match):
         validate_live_environment(
             LiveTestingConfig(),
             environment,
@@ -135,8 +135,8 @@ def test_live_environment_rejects_before_spending(
 
 def test_live_environment_rejects_path_specific_misconfiguration() -> None:
     same_number = _base_environment()
-    same_number["VOICEKIT_LIVE_TWILIO_FROM"] = same_number["VOICEKIT_LIVE_TARGET_NUMBER"]
-    with pytest.raises(VoicekitError, match="must differ"):
+    same_number["VOICEY_LIVE_TWILIO_FROM"] = same_number["VOICEY_LIVE_TARGET_NUMBER"]
+    with pytest.raises(VoiceyError, match="must differ"):
         validate_live_environment(
             LiveTestingConfig(),
             same_number,
@@ -145,8 +145,8 @@ def test_live_environment_rejects_path_specific_misconfiguration() -> None:
         )
 
     no_trunk = _base_environment()
-    no_trunk["VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID"] = "!"
-    with pytest.raises(VoicekitError, match="required and malformed"):
+    no_trunk["VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID"] = "!"
+    with pytest.raises(VoiceyError, match="required and malformed"):
         validate_live_environment(
             LiveTestingConfig(),
             no_trunk,
@@ -154,7 +154,7 @@ def test_live_environment_rejects_path_specific_misconfiguration() -> None:
             case_count=1,
         )
 
-    with pytest.raises(VoicekitError, match="requires VOICEKIT_LIVE_PUBLIC_URL"):
+    with pytest.raises(VoiceyError, match="requires VOICEY_LIVE_PUBLIC_URL"):
         validate_live_environment(
             LiveTestingConfig(tunnel="url"),
             _base_environment(),
@@ -177,7 +177,7 @@ def test_paid_live_fixtures_are_one_case_and_secret_free(runtime: str) -> None:
         / "fixtures"
         / f"live-pstn-{'pipecat' if runtime == 'pipecat' else 'livekit'}"
     )
-    assert ManifestStore(fixture / "voicekit.jsonc").load().runtime == runtime
+    assert ManifestStore(fixture / "voicey.jsonc").load().runtime == runtime
     scenarios = discover_scenarios(fixture)
     assert len(scenarios) == 1
     assert scenarios[0].turns
@@ -195,11 +195,11 @@ def test_paid_live_fixtures_are_one_case_and_secret_free(runtime: str) -> None:
 def test_paid_live_workflow_is_guarded_and_bounded() -> None:
     workflow = Path(__file__).parents[2] / ".github" / "workflows" / "live-pstn.yml"
     source = workflow.read_text(encoding="utf-8")
-    assert source.count("vars.VOICEKIT_LIVE_PSTN_ENABLED == 'true'") == 2
-    assert source.count('VOICEKIT_LIVE_PSTN_MAX_CALLS: "4"') == 2
-    assert source.count("VOICEKIT_LIVE_PSTN_ACK: ${{ vars.VOICEKIT_LIVE_PSTN_ACK }}") == 2
+    assert source.count("vars.VOICEY_LIVE_PSTN_ENABLED == 'true'") == 2
+    assert source.count('VOICEY_LIVE_PSTN_MAX_CALLS: "4"') == 2
+    assert source.count("VOICEY_LIVE_PSTN_ACK: ${{ vars.VOICEY_LIVE_PSTN_ACK }}") == 2
     assert "cancel-in-progress: false" in source
-    assert "voicekit test --live --report junit" in source
+    assert "voicey test --live --report junit" in source
 
 
 def test_caller_prompt_and_criteria_are_profile_bound_and_black_box() -> None:
@@ -217,7 +217,7 @@ def test_caller_prompt_and_criteria_are_profile_bound_and_black_box() -> None:
             "turns": (ScenarioTurn(user="Hello {missing}"),),
         }
     )
-    with pytest.raises(VoicekitError, match="missing profile field"):
+    with pytest.raises(VoiceyError, match="missing profile field"):
         caller_prompt(missing, missing.turns)
 
 
@@ -502,7 +502,7 @@ async def test_livekit_sip_backend_runs_native_room_call_and_cleans_up() -> None
     await backend.aclose()
     await backend.aclose()
     assert not api_client.closed
-    with pytest.raises(VoicekitError, match="already closed"):
+    with pytest.raises(VoiceyError, match="already closed"):
         await backend.run_call(LiveCallPlan("closed", "case", "prompt", 10, 2))
 
 
@@ -535,11 +535,11 @@ async def test_livekit_sip_backend_maps_provider_setup_failure() -> None:
         provider_factory=cast(Any, _ProviderFactory()),
         sleep=_no_sleep,
     )
-    with pytest.raises(VoicekitError, match="provider error type RuntimeError") as captured:
+    with pytest.raises(VoiceyError, match="provider error type RuntimeError") as captured:
         await backend.run_call(LiveCallPlan("broken", "case", "prompt", 10, 2))
     assert "secret must not escape" not in str(captured.value)
 
-    with pytest.raises(VoicekitError, match="invalid LiveKit"):
+    with pytest.raises(VoiceyError, match="invalid LiveKit"):
         LiveKitSipPstnBackend(
             config=LiveTestingConfig(),
             live=LiveEnvironment(
@@ -739,7 +739,7 @@ async def test_pipecat_startup_failure_rolls_back_before_dial(tmp_path: Path) ->
         runner_host=cast(Any, runner),
         server_factory=lambda _app, _port: server,
     )
-    with pytest.raises(VoicekitError, match="no call was placed"):
+    with pytest.raises(VoiceyError, match="no call was placed"):
         await backend.run_call(LiveCallPlan("startup", "case", "prompt", 10, 3))
     assert server.should_exit
     assert not adapter.started
@@ -761,7 +761,7 @@ async def test_pipecat_server_failure_maps_catalog_error_before_dial(tmp_path: P
         runner_host=cast(Any, _Runner()),
         server_factory=lambda _app, _port: _FailedServer(),
     )
-    with pytest.raises(VoicekitError, match="callback server did not start"):
+    with pytest.raises(VoiceyError, match="callback server did not start"):
         await backend.run_call(LiveCallPlan("server-failed", "case", "prompt", 10, 3))
     await backend.aclose()
 
@@ -799,10 +799,10 @@ async def test_pipecat_twilio_backend_dials_and_returns_evidence(tmp_path: Path)
     await backend.aclose()
     assert runner.stopped
     assert tunnel.closed
-    with pytest.raises(VoicekitError, match="already closed"):
+    with pytest.raises(VoiceyError, match="already closed"):
         await backend.run_call(LiveCallPlan("closed", "case", "prompt", 10, 2))
 
-    with pytest.raises(VoicekitError, match="invalid Pipecat"):
+    with pytest.raises(VoiceyError, match="invalid Pipecat"):
         pipecat_live.PipecatTwilioPstnBackend(
             root=tmp_path,
             config=LiveTestingConfig(),
@@ -841,7 +841,7 @@ async def test_pipecat_call_maps_provider_failure_media_error_and_pending_cleanu
     private_broken._started = True
     private_broken._adapter = broken
     private_broken._tunnel = tunnel
-    with pytest.raises(VoicekitError, match="provider error type RuntimeError") as captured:
+    with pytest.raises(VoiceyError, match="provider error type RuntimeError") as captured:
         await broken_backend.run_call(LiveCallPlan("broken-call", "case", "prompt", 10, 3))
     assert "provider secret must not escape" not in str(captured.value)
 
@@ -917,7 +917,7 @@ async def test_pipecat_callback_routes_fail_closed_and_terminalize(tmp_path: Pat
         class InvalidEventAdapter(_TwilioAdapter):
             def parse_event(self, request: TelephonyRequest) -> CallEvent:
                 del request
-                raise VoicekitError("VK-TST-003", detail="invalid callback")
+                raise VoiceyError("VY-TST-003", detail="invalid callback")
 
         private_backend._adapter = InvalidEventAdapter()
         invalid = await client.post("/live/twilio/events/intent-one")
@@ -1022,7 +1022,7 @@ async def test_pipecat_media_route_binds_reserved_call(
     adapter.verified = False
     denied = _WebSocket()
     await cast(Any, route).endpoint(denied)
-    assert denied.closed == (1008, "VK-TST-003")
+    assert denied.closed == (1008, "VY-TST-003")
 
     adapter.verified = True
 
@@ -1032,7 +1032,7 @@ async def test_pipecat_media_route_binds_reserved_call(
     monkeypatch.setattr(pipecat_live, "parse_telephony_websocket", unsupported)
     wrong_transport = _WebSocket()
     await cast(Any, route).endpoint(wrong_transport)
-    assert wrong_transport.closed == (1011, "VK-TST-003")
+    assert wrong_transport.closed == (1011, "VY-TST-003")
 
     async def mismatched(_websocket: object) -> tuple[str, CallData]:
         return (
@@ -1048,8 +1048,8 @@ async def test_pipecat_media_route_binds_reserved_call(
     monkeypatch.setattr(pipecat_live, "parse_telephony_websocket", mismatched)
     wrong_call = _WebSocket()
     await cast(Any, route).endpoint(wrong_call)
-    assert wrong_call.closed == (1011, "VK-TST-003")
-    assert state.error_type == "VoicekitError"
+    assert wrong_call.closed == (1011, "VY-TST-003")
+    assert state.error_type == "VoiceyError"
     assert state.media_done.is_set()
 
     async def unreserved(_websocket: object) -> tuple[str, CallData]:
@@ -1065,7 +1065,7 @@ async def test_pipecat_media_route_binds_reserved_call(
     monkeypatch.setattr(pipecat_live, "parse_telephony_websocket", unreserved)
     unknown = _WebSocket()
     await cast(Any, route).endpoint(unknown)
-    assert unknown.closed == (1011, "VK-TST-003")
+    assert unknown.closed == (1011, "VY-TST-003")
 
 
 class _Processor(FrameProcessor):
@@ -1180,9 +1180,9 @@ async def test_pipecat_worker_and_transport_use_pinned_8khz_contract(
     )
     assert state.transcript[-2:] == ["agent: Target answer.", "caller: Caller reply."]
 
-    with pytest.raises(VoicekitError, match="callback server is not ready"):
+    with pytest.raises(VoiceyError, match="callback server is not ready"):
         private_backend._require_adapter()
-    with pytest.raises(VoicekitError, match="tunnel is not ready"):
+    with pytest.raises(VoiceyError, match="tunnel is not ready"):
         private_backend._require_tunnel()
     default_adapter = private_backend._default_adapter("https://caller.example")
     assert default_adapter.auth_token == _base_environment()["TWILIO_AUTH_TOKEN"]

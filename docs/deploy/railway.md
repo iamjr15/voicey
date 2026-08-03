@@ -1,12 +1,12 @@
 # Railway results companion
 
-Railway is a user-owned deployment target for voicekit's durable
+Railway is a user-owned deployment target for voicey's durable
 results-service companion. It runs no Pipecat or LiveKit conversation flow.
 Ephemeral cloud workers use its signed relay for durable call state, results,
 carrier callbacks, recordings, delivery, retention, and stale-call recovery.
 
 The supported operator contract is Railway CLI `>=5.30.1,<6`; 5.30.1 is
-executed in the local verification gate. Voicekit uses current project,
+executed in the local verification gate. Voicey uses current project,
 service, managed Postgres, private bucket, domain, variable, deployment, and
 scale commands. It does not use Railway's optional MCP feature.
 
@@ -14,12 +14,12 @@ scale commands. It does not use Railway's optional MCP feature.
 
 Install and authenticate the
 [Railway CLI](https://docs.railway.com/guides/cli), build the unpublished
-voicekit wheel when working from this repository, and run the command from an
-initialized voicekit agent project:
+voicey wheel when working from this repository, and run the command from an
+initialized voicey agent project:
 
 ```bash
 railway whoami
-voicekit deploy railway \
+voicey deploy railway \
   --project my-agent-results \
   --workspace exact-workspace \
   --environment production \
@@ -27,7 +27,7 @@ voicekit deploy railway \
   --bucket my-agent-results-objects \
   --service-region us-east \
   --bucket-region iad \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
@@ -47,8 +47,8 @@ default. The command:
    two replicas; and
 6. probes unsigned `/healthz`, then authenticated relay `/v1/ready`.
 
-Generated artifacts live in `.voicekit/deploy/railway/`. The owner-only,
-non-secret checkpoint is `.voicekit/deploy/railway-resources.json`. It stores
+Generated artifacts live in `.voicey/deploy/railway/`. The owner-only,
+non-secret checkpoint is `.voicey/deploy/railway-resources.json`. It stores
 exact platform ids, created/adopted flags, artifact and credential
 fingerprints, release id, and gate status—never secret values.
 
@@ -68,7 +68,7 @@ its workspace, environment, billing boundary, and contents in Railway, adopt it
 with both its exact id and the explicit adoption flag:
 
 ```bash
-voicekit deploy railway \
+voicey deploy railway \
   --project my-agent-results \
   --project-id exact-project-id \
   --workspace exact-workspace \
@@ -78,17 +78,17 @@ voicekit deploy railway \
   --service-region us-east \
   --bucket-region iad \
   --adopt \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
 Adopted resources never gain deletion ownership. Ambiguous names, missing
-ledgered ids, and identity drift stop with `VK-DEP-007`.
+ledgered ids, and identity drift stop with `VY-DEP-007`.
 
 Rotate the relay/results pair with the same resource flags plus:
 
 ```bash
-voicekit deploy railway \
+voicey deploy railway \
   --project my-agent-results \
   --workspace exact-workspace \
   --environment production \
@@ -97,7 +97,7 @@ voicekit deploy railway \
   --service-region us-east \
   --bucket-region iad \
   --rotate-credentials \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
@@ -110,7 +110,7 @@ silently replacing deployed worker access.
 Rollback is explicit and destructive:
 
 ```bash
-voicekit deploy railway \
+voicey deploy railway \
   --project my-agent-results \
   --workspace exact-workspace \
   --environment production \
@@ -122,7 +122,7 @@ voicekit deploy railway \
   --yes
 ```
 
-Voicekit deletes only resources marked created in its checkpoint, in this
+Voicey deletes only resources marked created in its checkpoint, in this
 order: service domain, private bucket, Postgres service, application service,
 project. Failed deployments are left checkpointed for inspection and resume;
 there is no automatic destructive rollback. Never use the rollback command on
@@ -135,21 +135,21 @@ Railway dependency references supply:
 | Variable | Railway reference |
 |---|---|
 | `DATABASE_URL` | managed Postgres `DATABASE_URL` |
-| `VOICEKIT_OBJECT_BUCKET` | bucket `BUCKET` |
-| `VOICEKIT_OBJECT_ENDPOINT` | bucket `ENDPOINT` |
+| `VOICEY_OBJECT_BUCKET` | bucket `BUCKET` |
+| `VOICEY_OBJECT_ENDPOINT` | bucket `ENDPOINT` |
 | `AWS_REGION` | bucket `REGION` |
 | `AWS_ACCESS_KEY_ID` | bucket `ACCESS_KEY_ID` |
 | `AWS_SECRET_ACCESS_KEY` | bucket `SECRET_ACCESS_KEY` |
 
-Voicekit also sets the strict topology `VOICEKIT_DEPLOY_TARGET=railway`,
-`VOICEKIT_STORAGE_BACKEND=postgres`, and `VOICEKIT_ARTIFACT_BACKEND=s3`. The
+Voicey also sets the strict topology `VOICEY_DEPLOY_TARGET=railway`,
+`VOICEY_STORAGE_BACKEND=postgres`, and `VOICEY_ARTIFACT_BACKEND=s3`. The
 companion listens publicly on port 8080. Prometheus listens separately on port
 9464 and is not the public service port. Optional OTLP endpoints are
 non-secret variables; optional collector headers are passed through stdin and
 read indirectly by name.
 
 The generated deployment uses two replicas in the chosen service region,
-`RAILWAY_DEPLOYMENT_OVERLAP_SECONDS=30`, a 20-second voicekit drain grace,
+`RAILWAY_DEPLOYMENT_OVERLAP_SECONDS=30`, a 20-second voicey drain grace,
 `/healthz` as the platform health check, and an on-failure restart policy.
 During replacement, the old replica rejects new relay admission before its
 grace period while allowing already fenced updates to finish.
@@ -159,7 +159,7 @@ grace period while allowing already fenced updates to finish.
 The Railway pre-deploy command runs:
 
 ```bash
-python -m voicekit.deploy.results_service --preflight-only
+python -m voicey.deploy.results_service --preflight-only
 ```
 
 It applies and validates checksummed migrations under the Postgres migration
@@ -178,7 +178,7 @@ readiness is not promoted.
 Run the credential-free gate with disposable PostgreSQL 17:
 
 ```bash
-export VOICEKIT_TEST_POSTGRES_DSN=postgresql://voicekit:voicekit-test@127.0.0.1:55434/voicekit  # pragma: allowlist secret
+export VOICEY_TEST_POSTGRES_DSN=postgresql://voicey:voicey-test@127.0.0.1:55434/voicey  # pragma: allowlist secret
 uv run python tests/verification/run_p4_railway_gate.py
 ```
 

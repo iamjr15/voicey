@@ -9,10 +9,10 @@ from xml.etree import ElementTree
 import pytest
 from twilio.base.exceptions import TwilioRestException
 
-from voicekit.errors import VoicekitError
-from voicekit.telephony import PipecatTarget, TelephonyRequest
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.twilio import TwilioAdapter
+from voicey.errors import VoiceyError
+from voicey.telephony import PipecatTarget, TelephonyRequest
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.twilio import TwilioAdapter
 
 ACCOUNT_SID = "AC" + "1" * 32
 CALLER_SID = "CA" + "2" * 32
@@ -336,10 +336,10 @@ def test_create_and_bridge_uncertainty_are_never_retried(
     adapter, client, ledger, _ = bundle
     client.calls.create_error = TimeoutError("network")
 
-    with pytest.raises(VoicekitError) as create:
+    with pytest.raises(VoiceyError) as create:
         _start(adapter)
 
-    assert create.value.code == "VK-TEL-012"
+    assert create.value.code == "VY-TEL-012"
     assert ledger.get_warm_transfer("warm_" + "a" * 32).state == "ambiguous"
     assert len(client.calls.creates) == 1
 
@@ -361,10 +361,10 @@ def test_create_and_bridge_uncertainty_are_never_retried(
     )
     client.calls.update_error = TimeoutError("network")
 
-    with pytest.raises(VoicekitError) as bridge:
+    with pytest.raises(VoiceyError) as bridge:
         adapter.bridge_warm_transfer(record.transfer_id)
 
-    assert bridge.value.code == "VK-TEL-012"
+    assert bridge.value.code == "VY-TEL-012"
     assert ledger.get_warm_transfer(record.transfer_id).state == "ambiguous"
     assert len(client.calls.updates) == 0
 
@@ -375,10 +375,10 @@ def test_definitive_create_rejection_and_bridge_rejection_are_terminal(
     adapter, client, ledger, _ = bundle
     client.calls.create_error = TwilioRestException(400, "/Calls", code=21211)
 
-    with pytest.raises(VoicekitError) as create:
+    with pytest.raises(VoiceyError) as create:
         _start(adapter)
 
-    assert create.value.code == "VK-TEL-004"
+    assert create.value.code == "VY-TEL-004"
     assert ledger.get_warm_transfer("warm_" + "a" * 32).state == "failed"
 
     client.calls.create_error = None
@@ -399,10 +399,10 @@ def test_definitive_create_rejection_and_bridge_rejection_are_terminal(
     )
     client.calls.update_error = TwilioRestException(404, "/Calls", code=20404)
 
-    with pytest.raises(VoicekitError) as bridge:
+    with pytest.raises(VoiceyError) as bridge:
         adapter.bridge_warm_transfer(record.transfer_id)
 
-    assert bridge.value.code == "VK-TEL-012"
+    assert bridge.value.code == "VY-TEL-012"
     assert ledger.get_warm_transfer(record.transfer_id).state == "failed"
 
 
@@ -412,7 +412,7 @@ def test_callback_identity_conflicts_fail_closed(
     adapter, _, ledger, _ = bundle
     record = _start(adapter)
 
-    with pytest.raises(VoicekitError) as conflict:
+    with pytest.raises(VoiceyError) as conflict:
         adapter.warm_transfer_accept_response(
             _request(
                 record.transfer_id,
@@ -421,7 +421,7 @@ def test_callback_identity_conflicts_fail_closed(
             )
         )
 
-    assert conflict.value.code == "VK-TEL-012"
+    assert conflict.value.code == "VY-TEL-012"
     assert ledger.get_warm_transfer(record.transfer_id).state == "conflict"
 
 
@@ -430,7 +430,7 @@ def test_unknown_status_and_conference_participant_are_rejected(
 ) -> None:
     adapter, _, ledger, _ = bundle
     record = _start(adapter)
-    with pytest.raises(VoicekitError) as status:
+    with pytest.raises(VoiceyError) as status:
         adapter.parse_warm_transfer_event(
             _request(
                 record.transfer_id,
@@ -438,7 +438,7 @@ def test_unknown_status_and_conference_participant_are_rejected(
                 {"CallSid": HUMAN_SID, "CallStatus": "new-status"},
             )
         )
-    assert status.value.code == "VK-TEL-008"
+    assert status.value.code == "VY-TEL-008"
     assert ledger.get_warm_transfer(record.transfer_id).state == "dialing"
 
     adapter.warm_transfer_accept_response(
@@ -448,7 +448,7 @@ def test_unknown_status_and_conference_participant_are_rejected(
             {"CallSid": HUMAN_SID, "Digits": "1"},
         )
     )
-    with pytest.raises(VoicekitError) as conference_event:
+    with pytest.raises(VoiceyError) as conference_event:
         adapter.parse_warm_conference_event(
             _request(
                 record.transfer_id,
@@ -459,10 +459,10 @@ def test_unknown_status_and_conference_participant_are_rejected(
                 },
             )
         )
-    assert conference_event.value.code == "VK-TEL-008"
+    assert conference_event.value.code == "VY-TEL-008"
     assert ledger.get_warm_transfer(record.transfer_id).state == "accepted"
 
-    with pytest.raises(VoicekitError) as participant:
+    with pytest.raises(VoiceyError) as participant:
         adapter.parse_warm_conference_event(
             _request(
                 record.transfer_id,
@@ -474,7 +474,7 @@ def test_unknown_status_and_conference_participant_are_rejected(
                 },
             )
         )
-    assert participant.value.code == "VK-TEL-012"
+    assert participant.value.code == "VY-TEL-012"
     assert ledger.get_warm_transfer(record.transfer_id).state == "conflict"
 
 
@@ -527,7 +527,7 @@ def test_warm_transfer_input_validation_precedes_provider_mutation(
     }
     arguments.update(overrides)
 
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         adapter.start_warm_transfer(**arguments)
 
     assert client.calls.creates == []
@@ -539,8 +539,8 @@ def test_warm_transfer_requires_the_verified_callback_origin_before_dial(
     adapter, client, _, _ = bundle
     adapter.expected_public_base = None
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         _start(adapter)
 
-    assert caught.value.code == "VK-TEL-002"
+    assert caught.value.code == "VY-TEL-002"
     assert client.calls.creates == []

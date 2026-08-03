@@ -11,21 +11,21 @@ import httpx
 import pytest
 from livekit.protocol import sip as lk_sip
 
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.sip import (
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.sip import (
     LiveKitSipAPI,
     ManagedSipResource,
 )
-from voicekit.runtimes.livekit.telnyx import (
+from voicey.runtimes.livekit.telnyx import (
     TelnyxLiveKitSipConfig,
     TelnyxLiveKitSipProvisioner,
     TelnyxSipBackend,
     TelnyxSipHTTPBackend,
 )
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.telephony.ledger import TelephonyLedger
 
 NUMBER = "+14155550100"
-BASE_NAME = "voicekit-booking-14155550100"
+BASE_NAME = "voicey-booking-14155550100"
 
 
 class FakeLiveKit:
@@ -101,7 +101,7 @@ class FakeLiveKit:
         self.dispatch.remove(match)
         return match
 
-    async def delete_sip_trunk(
+    async def delete_trunk(
         self,
         request: lk_sip.DeleteSIPTrunkRequest,
     ) -> lk_sip.SIPTrunkInfo:
@@ -127,7 +127,7 @@ class FakeTelnyxBackend:
         self.deleted: list[str] = []
         self.restored: list[dict[str, object]] = []
         self.fail_at: str | None = None
-        self.fail_error = VoicekitError("VK-TEL-004", detail="definitive test failure.")
+        self.fail_error = VoiceyError("VY-TEL-004", detail="definitive test failure.")
 
     def snapshot_number(self, number: str) -> dict[str, object]:
         assert number == NUMBER
@@ -243,7 +243,7 @@ def _config(**values: object) -> TelnyxLiveKitSipConfig:
         "number": NUMBER,
         "agent_name": "booking",
         "livekit_sip_uri": "sip:project.sip.livekit.cloud",
-        "auth_username": "voicekit-user",
+        "auth_username": "voicey-user",
         "auth_password": "credential-secret",  # pragma: allowlist secret
     }
     return TelnyxLiveKitSipConfig(**cast("Any", {**defaults, **values}))
@@ -286,8 +286,8 @@ async def test_provision_both_sides_with_current_official_contract(tmp_path: Pat
         assert inbound.media_encryption == lk_sip.SIP_MEDIA_ENCRYPT_DISABLE
         assert outbound.address == "sip.telnyx.com"
         assert outbound.transport == lk_sip.SIP_TRANSPORT_TCP
-        assert outbound.auth_username == "voicekit-user"
-        assert dict(outbound.headers_to_attributes) == {"X-Telnyx-Username": "voicekit-user"}
+        assert outbound.auth_username == "voicey-user"
+        assert dict(outbound.headers_to_attributes) == {"X-Telnyx-Username": "voicey-user"}
         assert outbound.media_encryption == lk_sip.SIP_MEDIA_ENCRYPT_DISABLE
         assert dispatch.rule.dispatch_rule_individual.room_prefix == "call-"
         assert dispatch.room_config.agents[0].agent_name == "booking"
@@ -367,7 +367,7 @@ async def test_definitive_failure_rolls_back_but_ambiguous_failure_does_not(
     )
     telnyx.fail_at = "fqdn"
     try:
-        with pytest.raises(VoicekitError, match="VK-TEL-004"):
+        with pytest.raises(VoiceyError, match="VY-TEL-004"):
             await provisioner.provision(_config())
         first = tuple(ledger.open_provisioning(provider="telnyx-livekit"))
         assert first == ()
@@ -378,9 +378,9 @@ async def test_definitive_failure_rolls_back_but_ambiguous_failure_does_not(
         assert livekit.inbound == []
         assert livekit.outbound == []
 
-        telnyx.fail_error = VoicekitError("VK-TEL-011", detail="unknown outcome.")
+        telnyx.fail_error = VoiceyError("VY-TEL-011", detail="unknown outcome.")
         telnyx.deleted.clear()
-        with pytest.raises(VoicekitError, match="VK-TEL-006"):
+        with pytest.raises(VoiceyError, match="VY-TEL-006"):
             await provisioner.provision(_config())
         open_operations = ledger.open_provisioning(provider="telnyx-livekit")
         assert len(open_operations) == 1
@@ -406,7 +406,7 @@ async def test_definitive_failure_rolls_back_but_ambiguous_failure_does_not(
     ],
 )
 def test_config_rejects_unsafe_or_unsupported_values(values: dict[str, object]) -> None:
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         _config(**values)
 
 
@@ -579,14 +579,14 @@ def test_http_backend_restore_delete_conflicts_and_safe_errors(
     assert fake.profile is None
 
     fake.failures[("GET", "/phone_numbers")] = 401
-    with pytest.raises(VoicekitError) as rejected:
+    with pytest.raises(VoiceyError) as rejected:
         backend.snapshot_number(NUMBER)
-    assert rejected.value.code == "VK-TEL-004"
+    assert rejected.value.code == "VY-TEL-004"
     assert "private" not in str(rejected.value)
     fake.failures[("GET", "/phone_numbers")] = 503
-    with pytest.raises(VoicekitError, match="VK-TEL-011"):
+    with pytest.raises(VoiceyError, match="VY-TEL-011"):
         backend.snapshot_number(NUMBER)
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         backend.delete_resource(ManagedSipResource("unknown", "id", True))
 
 
@@ -600,7 +600,7 @@ def test_http_backend_detects_managed_drift(
         "traffic_type": "fax",
         "service_plan": "global",
     }
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         backend.ensure_outbound_profile(name=f"{BASE_NAME}-outbound")
 
     fake.profile["traffic_type"] = "conversational"
@@ -613,7 +613,7 @@ def test_http_backend_detects_managed_drift(
         "user_name": "someone-else",
         "transport_protocol": "TCP",
     }
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         backend.ensure_connection(
             name=BASE_NAME,
             username=config.auth_username,
@@ -625,5 +625,5 @@ def test_http_backend_detects_managed_drift(
 
 
 def test_http_backend_requires_credentials() -> None:
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         TelnyxSipHTTPBackend(api_key="")  # pragma: allowlist secret

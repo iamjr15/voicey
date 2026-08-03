@@ -5,14 +5,14 @@ from collections.abc import Iterable
 import pytest
 from starlette.requests import Request
 
-from voicekit.errors import VoicekitError
-from voicekit.playground.security import (
+from voicey.errors import VoiceyError
+from voicey.playground.security import (
     OriginPolicy,
     SessionTokenManager,
     WebSessionSecurity,
     WindowRateLimiter,
 )
-from voicekit.results.signing import encode_secret
+from voicey.results.signing import encode_secret
 
 
 def _request(
@@ -71,15 +71,15 @@ async def test_session_token_is_one_use_peer_bound_and_admin_observable(
     identity = await manager.authorize(issued.token, pc_id=None)
     assert identity.call_id == "call_1"
     assert await manager.reserved_call_id(identity) == "call_1"
-    with pytest.raises(VoicekitError, match="replayed") as replay:
+    with pytest.raises(VoiceyError, match="replayed") as replay:
         await manager.authorize(issued.token, pc_id=None)
-    assert replay.value.code == "VK-WEB-001"
+    assert replay.value.code == "VY-WEB-001"
 
-    with pytest.raises(VoicekitError, match="cannot be bound"):
+    with pytest.raises(VoiceyError, match="cannot be bound"):
         await manager.bind(identity, pc_id="pc_1", call_id="call_wrong")
     await manager.bind(identity, pc_id="pc_1", call_id="call_1")
     assert await manager.authorize(issued.token, pc_id="pc_1") == identity
-    with pytest.raises(VoicekitError, match="another peer"):
+    with pytest.raises(VoiceyError, match="another peer"):
         await manager.authorize(issued.token, pc_id="pc_2")
 
     active = await manager.snapshot(identity.session_id)
@@ -88,7 +88,7 @@ async def test_session_token_is_one_use_peer_bound_and_admin_observable(
     assert not (await manager.snapshot(identity.session_id)).active
 
     clock[0] += 121
-    with pytest.raises(VoicekitError, match="invalid browser session token"):
+    with pytest.raises(VoiceyError, match="invalid browser session token"):
         await manager.authorize(issued.token, pc_id="pc_1")
 
 
@@ -107,22 +107,22 @@ async def test_session_token_tamper_cancel_capacity_and_issue_limits(secret: str
     header, payload, signature = first.token.split(".")
     replacement = "A" if signature[0] != "A" else "B"
     tampered = f"{header}.{payload}.{replacement}{signature[1:]}"
-    with pytest.raises(VoicekitError, match="invalid browser session token"):
+    with pytest.raises(VoiceyError, match="invalid browser session token"):
         await manager.authorize(tampered, pc_id=None)
 
     identity = await manager.authorize(first.token, pc_id=None)
-    with pytest.raises(VoicekitError, match="already active"):
+    with pytest.raises(VoiceyError, match="already active"):
         await manager.issue(client_key="other-browser")
     await manager.cancel(identity)
-    with pytest.raises(VoicekitError, match="does not exist"):
+    with pytest.raises(VoiceyError, match="does not exist"):
         await manager.snapshot(identity.session_id)
     second = await manager.issue(client_key="other-browser")
     assert second.identity.session_id != identity.session_id
 
     await manager.issue(client_key="browser")
-    with pytest.raises(VoicekitError, match="retry after") as limited:
+    with pytest.raises(VoiceyError, match="retry after") as limited:
         await manager.issue(client_key="browser")
-    assert limited.value.code == "VK-WEB-003"
+    assert limited.value.code == "VY-WEB-003"
 
 
 @pytest.mark.asyncio
@@ -130,15 +130,15 @@ async def test_window_limiter_expires_entries_and_validates_configuration() -> N
     clock = [100.0]
     limiter = WindowRateLimiter(limit=1, window_s=10, clock=lambda: clock[0])
     await limiter.check("client")
-    with pytest.raises(VoicekitError) as limited:
+    with pytest.raises(VoiceyError) as limited:
         await limiter.check("client")
-    assert limited.value.code == "VK-WEB-003"
+    assert limited.value.code == "VY-WEB-003"
     clock[0] += 11
     await limiter.check("client")
 
-    with pytest.raises(VoicekitError) as invalid:
+    with pytest.raises(VoiceyError) as invalid:
         WindowRateLimiter(limit=0, window_s=10)
-    assert invalid.value.code == "VK-WEB-003"
+    assert invalid.value.code == "VY-WEB-003"
 
 
 def test_origin_policy_rejects_cross_origin_host_spoofing_and_untrusted_proxy() -> None:
@@ -149,11 +149,11 @@ def test_origin_policy_rejects_cross_origin_host_spoofing_and_untrusted_proxy() 
     )
     policy.validate(_request())
 
-    with pytest.raises(VoicekitError, match="not allowed"):
+    with pytest.raises(VoiceyError, match="not allowed"):
         policy.validate(_request(origin="https://attacker.example"))
-    with pytest.raises(VoicekitError, match="does not match"):
+    with pytest.raises(VoiceyError, match="does not match"):
         policy.validate(_request(host="other.example"))
-    with pytest.raises(VoicekitError, match="untrusted peer"):
+    with pytest.raises(VoiceyError, match="untrusted peer"):
         policy.validate(
             _request(
                 extra_headers=(
@@ -191,22 +191,22 @@ async def test_web_security_requires_bearer_and_applies_signal_limit(secret: str
         ),
         signal_limit=1,
     )
-    with pytest.raises(VoicekitError, match="bearer") as missing:
+    with pytest.raises(VoiceyError, match="bearer") as missing:
         await security.authorize(_request(), pc_id=None)
-    assert missing.value.code == "VK-WEB-001"
+    assert missing.value.code == "VY-WEB-001"
 
     issued = await manager.issue(client_key="browser")
     request = _request(token=issued.token)
     identity = await security.authorize(request, pc_id=None)
     await security.bind(identity, pc_id="pc_1", call_id="call_1")
-    with pytest.raises(VoicekitError) as limited:
+    with pytest.raises(VoiceyError) as limited:
         await security.authorize(request, pc_id="pc_1")
-    assert limited.value.code == "VK-WEB-003"
+    assert limited.value.code == "VY-WEB-003"
 
     security.update_agent("support", frozenset({"https://reloaded.example"}))
     reloaded = _request(origin="https://reloaded.example", token=issued.token)
-    with pytest.raises(VoicekitError, match="retry after"):
+    with pytest.raises(VoiceyError, match="retry after"):
         await security.authorize(reloaded, pc_id="pc_1")
-    with pytest.raises(VoicekitError, match="restarting voicekit dev"):
+    with pytest.raises(VoiceyError, match="restarting voicey dev"):
         security.update_agent("renamed", frozenset({"https://reloaded.example"}))
     await security.release("pc_1")

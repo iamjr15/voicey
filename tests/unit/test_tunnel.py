@@ -8,12 +8,12 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.server import ServerConnection, serve
 
-from voicekit.errors import VoicekitError
-from voicekit.tunnel import TunnelManager, TunnelProbe
+from voicey.errors import VoiceyError
+from voicey.tunnel import TunnelManager, TunnelProbe
 
 
 class _Listener:
-    def __init__(self, url: str = "https://voicekit-test.ngrok.app") -> None:
+    def __init__(self, url: str = "https://voicey-test.ngrok.app") -> None:
         self._url = url
         self.close_calls = 0
 
@@ -124,8 +124,8 @@ async def test_ngrok_sdk_forward_and_close_are_exact_and_idempotent() -> None:
     await asyncio.gather(handle.close(), handle.close())
 
     assert handle.provider == "ngrok"
-    assert handle.public_url == "https://voicekit-test.ngrok.app"
-    assert handle.websocket_base == "wss://voicekit-test.ngrok.app"
+    assert handle.public_url == "https://voicey-test.ngrok.app"
+    assert handle.websocket_base == "wss://voicey-test.ngrok.app"
     assert captured == {
         "address": "http://127.0.0.1:7860",
         "options": {"authtoken": "test-token"},
@@ -141,7 +141,7 @@ async def test_ngrok_invalid_public_url_closes_listener() -> None:
         ngrok_module=_ngrok_module(listener, {}),
     )
 
-    with pytest.raises(VoicekitError, match="VK-TUN-002"):
+    with pytest.raises(VoiceyError, match="VY-TUN-002"):
         await manager.open(7860)
 
     assert listener.close_calls == 1
@@ -215,10 +215,10 @@ async def test_cloudflared_failure_stops_process_and_catalogs_error() -> None:
         process_factory=_ProcessFactory(process),
     )
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await manager.open(7860, preference="cloudflared")
 
-    assert caught.value.code == "VK-TUN-003"
+    assert caught.value.code == "VY-TUN-003"
     assert "private-value" not in str(caught.value)
     assert process.terminate_calls == 1
 
@@ -226,15 +226,15 @@ async def test_cloudflared_failure_stops_process_and_catalogs_error() -> None:
 @pytest.mark.parametrize(
     ("kwargs", "code"),
     [
-        ({"port": 0}, "VK-TUN-002"),
-        ({"port": 7860, "preference": "url"}, "VK-TUN-002"),
+        ({"port": 0}, "VY-TUN-002"),
+        ({"port": 7860, "preference": "url"}, "VY-TUN-002"),
         (
             {
                 "port": 7860,
                 "preference": "url",
                 "public_url": "http://public.example",
             },
-            "VK-TUN-002",
+            "VY-TUN-002",
         ),
         (
             {
@@ -242,7 +242,7 @@ async def test_cloudflared_failure_stops_process_and_catalogs_error() -> None:
                 "preference": "url",
                 "public_url": "https://public.example:not-a-port",
             },
-            "VK-TUN-002",
+            "VY-TUN-002",
         ),
         (
             {
@@ -250,16 +250,16 @@ async def test_cloudflared_failure_stops_process_and_catalogs_error() -> None:
                 "preference": "url",
                 "public_url": "https://user@public.example",
             },
-            "VK-TUN-002",
+            "VY-TUN-002",
         ),
-        ({"port": 7860, "startup_timeout_s": 0}, "VK-TUN-002"),
+        ({"port": 7860, "startup_timeout_s": 0}, "VY-TUN-002"),
     ],
 )
 async def test_invalid_tunnel_configuration_is_cataloged(
     kwargs: dict[str, object],
     code: str,
 ) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await TunnelManager(environment={}).open(**cast(Any, kwargs))
 
     assert caught.value.code == code
@@ -279,9 +279,9 @@ async def test_manual_url_handle_has_no_external_shutdown() -> None:
 
 
 async def test_missing_provider_requirements_are_cataloged() -> None:
-    with pytest.raises(VoicekitError, match="VK-TUN-002"):
+    with pytest.raises(VoiceyError, match="VY-TUN-002"):
         await TunnelManager(environment={}).open(7860, preference="ngrok")
-    with pytest.raises(VoicekitError, match="VK-TUN-001"):
+    with pytest.raises(VoiceyError, match="VY-TUN-001"):
         await TunnelManager(environment={}, which=lambda _name: None).open(
             7860,
             preference="cloudflared",
@@ -325,15 +325,15 @@ async def test_probe_wrong_response_and_invalid_origin_are_cataloged() -> None:
     async with serve(wrong, "127.0.0.1", 0) as server:
         socket = next(iter(server.sockets))
         port = cast("tuple[str, int]", socket.getsockname())[-1]
-        with pytest.raises(VoicekitError, match="VK-TUN-004"):
+        with pytest.raises(VoiceyError, match="VY-TUN-004"):
             await TunnelProbe(token="expected").verify(
                 f"http://127.0.0.1:{port}",
                 allow_insecure_localhost=True,
             )
 
-    with pytest.raises(VoicekitError, match="VK-TUN-002"):
+    with pytest.raises(VoiceyError, match="VY-TUN-002"):
         await TunnelProbe().verify("http://public.example")
-    with pytest.raises(VoicekitError, match="VK-TUN-002"):
+    with pytest.raises(VoiceyError, match="VY-TUN-002"):
         await TunnelProbe().verify("https://public.example", timeout_s=0)
 
 
@@ -341,5 +341,5 @@ def test_probe_rejects_unsafe_path_and_hides_token_from_repr() -> None:
     probe = TunnelProbe(path="relative", token="private-challenge")
     assert "private-challenge" not in repr(probe)
 
-    with pytest.raises(VoicekitError, match="VK-TUN-002"):
+    with pytest.raises(VoiceyError, match="VY-TUN-002"):
         probe.install(FastAPI())

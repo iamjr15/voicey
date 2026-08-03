@@ -12,18 +12,18 @@ from typing import Any, cast
 import pytest
 from livekit.agents import RunContext
 
-from voicekit import Agent, Models, Phone, Results, Web, results, tool
-from voicekit.config.models import RuntimeName
-from voicekit.obs.records import ToolCallObservation, TranscriptTurn
-from voicekit.runtimes.livekit.lifecycle import LiveKitLifecycleManager
-from voicekit.runtimes.livekit.tools import shared_livekit_tools
-from voicekit.runtimes.pipecat.admission import AdmissionController
-from voicekit.runtimes.pipecat.flows import shared_flow_tools
-from voicekit.runtimes.pipecat.lifecycle import (
+from voicey import Agent, Models, Phone, Results, Web, results, tool
+from voicey.config.models import RuntimeName
+from voicey.obs.records import ToolCallObservation, TranscriptTurn
+from voicey.runtimes.livekit.lifecycle import LiveKitLifecycleManager
+from voicey.runtimes.livekit.tools import shared_livekit_tools
+from voicey.runtimes.pipecat.admission import AdmissionController
+from voicey.runtimes.pipecat.flows import shared_flow_tools
+from voicey.runtimes.pipecat.lifecycle import (
     PipecatCall,
     PipecatLifecycleManager,
 )
-from voicekit.storage.sqlite import SQLiteRepository
+from voicey.storage.sqlite import SQLiteRepository
 
 ROOT = Path(__file__).parents[2]
 RECIPE = ROOT / "recipes" / "appointment-booking"
@@ -61,6 +61,8 @@ def lookup_customer(name: str) -> dict[str, str]:
 @tool(say_while_running="I am reserving that now.", mutating=True)
 def reserve_slot(slot: str) -> dict[str, str]:
     """Reserve the caller-confirmed slot."""
+    results.set("slot", slot)
+    results.set_outcome("reserved")
     return {"slot": slot, "status": "reserved"}
 
 
@@ -74,14 +76,14 @@ async def test_recipe_greeting_is_identical(
     if runtime == "pipecat":
         module = _load_module(
             RECIPE / "pipecat" / "flow.py",
-            "voicekit_parity_pipecat_recipe",
+            "voicey_parity_pipecat_recipe",
         )
         node = cast("dict[str, Any]", module.entry(cast(Any, None)))
         observed = str(node["task_messages"][0]["content"])
     else:
         module = _load_module(
             RECIPE / "livekit" / "flow.py",
-            "voicekit_parity_livekit_recipe",
+            "voicey_parity_livekit_recipe",
         )
         replies: list[str] = []
 
@@ -105,6 +107,7 @@ async def test_recipe_greeting_is_identical(
 async def test_shared_tool_sequence_is_identical(runtime: RuntimeName) -> None:
     sink = MemoryToolSink()
     call_id = f"call-tools-{runtime}"
+    buffer = results.CallResultBuffer(call_id=call_id)
     arguments = ({"name": "Ada"}, {"slot": "10:00"})
     values: list[object] = []
 
@@ -114,6 +117,7 @@ async def test_shared_tool_sequence_is_identical(runtime: RuntimeName) -> None:
         native = shared_flow_tools(
             [lookup_customer, reserve_slot],
             call_id=call_id,
+            buffer=buffer,
             sink=sink,
         )
         names = [item.name for item in native]
@@ -122,7 +126,6 @@ async def test_shared_tool_sequence_is_identical(runtime: RuntimeName) -> None:
             assert next_node is None
             values.append(value["value"])
     else:
-        buffer = results.CallResultBuffer(call_id=call_id)
         context = FakeRunContext()
         native = shared_livekit_tools(
             [lookup_customer, reserve_slot],
@@ -143,6 +146,11 @@ async def test_shared_tool_sequence_is_identical(runtime: RuntimeName) -> None:
 
     assert names == ["lookup_customer", "reserve_slot"]
     assert [item[1].tool_name for item in sink.items] == names
+    assert buffer.snapshot() == {
+        "call_id": call_id,
+        "outcome": "reserved",
+        "data": {"slot": "10:00"},
+    }
     assert values == [
         {"name": "Ada", "status": "found"},
         {"slot": "10:00", "status": "reserved"},
@@ -244,7 +252,7 @@ def _agent(runtime: RuntimeName) -> Agent:
         web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
+from voicey.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
 
 
 def prepare(root: Path) -> None:
@@ -17,7 +17,7 @@ def prepare(root: Path) -> None:
         "llm": "anthropic/claude-sonnet-5",
         "tts": "cartesia/sonic-3.5",
     }
-    ManifestStore(root / "voicekit.jsonc").save(
+    ManifestStore(root / "voicey.jsonc").save(
         ProjectManifest(
             project_name="broken-doctor-fixture",
             runtime="pipecat",
@@ -34,16 +34,16 @@ def prepare(root: Path) -> None:
         "CARTESIA_API_KEY=\n"
         "TWILIO_ACCOUNT_SID=\n"
         "TWILIO_AUTH_TOKEN=\n"
-        "VOICEKIT_WEBHOOK_SECRET=\n"
+        "VOICEY_WEBHOOK_SECRET=\n"
         "INTENTIONALLY_UNDOCUMENTED_KEY=\n",
         encoding="utf-8",
     )
     (root / "agent.py").write_text(
-        """from voicekit import Results
+        """from voicey import Results
 
 results = Results(
     webhook="https://127.0.0.1:1/unreachable",
-    secret_env="VOICEKIT_WEBHOOK_SECRET",
+    secret_env="VOICEY_WEBHOOK_SECRET",
 )
 """,
         encoding="utf-8",

@@ -1,0 +1,16 @@
+{
+  "name": "voicey",
+  "version": "0.0.1",
+  "description": "Official npm package for Voicey, an open-source voice agent toolchain.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": "./index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

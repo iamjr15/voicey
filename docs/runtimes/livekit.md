@@ -1,8 +1,8 @@
 # LiveKit runtime
 
-Voicekit’s LiveKit runtime is a thin production host around native
+Voicey’s LiveKit runtime is a thin production host around native
 `livekit-agents==1.6.7` workflows. Conversation code remains a LiveKit
-`Agent`, `@function_tool` methods, handoffs, and native tasks; voicekit does not
+`Agent`, `@function_tool` methods, handoffs, and native tasks; voicey does not
 define a flow language.
 
 ## Install
@@ -14,11 +14,11 @@ uv sync --extra livekit
 The resolved runtime is `livekit-agents==1.6.7` with
 `livekit-api==1.2.0`. Configure `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and
 `LIVEKIT_API_SECRET`, along with credentials for the selected STT, LLM, and TTS
-providers. `voicekit init`, `voicekit keys add livekit`, and `voicekit doctor`
+providers. `voicey init`, `voicey keys add livekit`, and `voicey doctor`
 validate the project with an authenticated, read-only room-list request.
 
 An agent points `flow` at either a native `Agent` object or a zero/one-argument
-factory. A one-argument factory receives voicekit’s native LiveKit tool list:
+factory. A one-argument factory receives voicey’s native LiveKit tool list:
 
 ```python
 from livekit.agents import Agent
@@ -32,7 +32,7 @@ def entrypoint(tools):
 ```
 
 Factories with any other signature and objects that are not native
-`livekit.agents.Agent` instances fail with `VK-RUN-003`.
+`livekit.agents.Agent` instances fail with `VY-RUN-003`.
 
 ## Appointment recipe
 
@@ -82,7 +82,7 @@ source, downloads through the existing authenticated media path, and emits
 ## Browser tokens
 
 The admin listener first reserves runtime capacity and the durable call, then
-mints a one-use voicekit session bearer. The browser sends that bearer only in
+mints a one-use voicey session bearer. The browser sends that bearer only in
 the `Authorization` header of public `POST /api/livekit/token`. The exchange
 consumes it once and `LiveKitTokenIssuer` mints a short-lived, least-privilege
 room token with an
@@ -91,10 +91,10 @@ publish for one room and does not grant room administration or metadata
 mutation. A failed exchange terminalizes the reservation.
 
 The pinned official client receives the provider room credential and uses
-LiveKit's native signaling protocol. The voicekit bearer and LiveKit API
+LiveKit's native signaling protocol. The voicey bearer and LiveKit API
 key/secret never enter a URL or browser bundle.
 
-`voicekit dev --port N` supervises the public token listener on `N`, the local
+`voicey dev --port N` supervises the public token listener on `N`, the local
 admin playground on `N+1`, and native worker health on `N+2`. Prompt/config
 reload applies to the next call; identity-level changes require restart.
 
@@ -138,5 +138,5 @@ Credentialed Twilio–LiveKit commands are listed in
 [`docs/GAPS.md`](../GAPS.md). They remain pending until their exact guarded
 commands run against funded accounts and real PSTN endpoints.
 
-Next step: run `voicekit doctor`, then `voicekit dev` and open the printed
+Next step: run `voicey doctor`, then `voicey dev` and open the printed
 playground URL.

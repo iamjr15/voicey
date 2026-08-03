@@ -14,17 +14,17 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.storage.artifacts import LocalArtifactStore
-from voicekit.telephony import (
+from voicey.errors import VoiceyError
+from voicey.storage.artifacts import LocalArtifactStore
+from voicey.telephony import (
     LiveKitTarget,
     PipecatTarget,
     RollbackToken,
     TelephonyAdapter,
     TelephonyRequest,
 )
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.vobiz import VobizAdapter
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.vobiz import VobizAdapter
 
 AUTH_ID = "MA_TEST1234"
 AUTH_TOKEN = "not-a-real-vobiz-token"  # pragma: allowlist secret
@@ -260,7 +260,7 @@ def test_route_conflict_and_ambiguous_provider_outcome_are_fenced(
     adapter, fake, ledger = adapter_bundle
     route_path = f"/api/v1/Account/{AUTH_ID}/numbers/+918071234567/application"
     fake.failures[("POST", route_path)] = 503
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.point_inbound(NUMBER, TARGET)
     assert ledger.open_routes(provider="vobiz")[0].state == "ambiguous"
 
@@ -268,7 +268,7 @@ def test_route_conflict_and_ambiguous_provider_outcome_are_fenced(
     fake.apps.clear()
     token = adapter.point_inbound(NUMBER, TARGET)
     fake.number["application_id"] = "human-change"
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(token)
     assert ledger.get_route(token.token).state == "conflict"
 
@@ -455,24 +455,24 @@ def test_adapter_configuration_rejects_unsafe_values(values: dict[str, object]) 
         "client": cast("httpx.Client", object()),
         "expected_public_base": "https://voice.example.test",
     }
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         VobizAdapter(**cast("Any", {**defaults, **values}))
-    assert caught.value.code == "VK-TEL-002"
+    assert caught.value.code == "VY-TEL-002"
 
 
 def test_number_and_target_validation_fail_closed(
     adapter_bundle: tuple[VobizAdapter, FakeVobiz, TelephonyLedger],
 ) -> None:
     adapter, fake, _ = adapter_bundle
-    with pytest.raises(VoicekitError, match="country"):
+    with pytest.raises(VoiceyError, match="country"):
         adapter.buy_number("india")
-    with pytest.raises(VoicekitError, match="prefix"):
+    with pytest.raises(VoiceyError, match="prefix"):
         adapter.buy_number("in", "not-digits")
 
     fake.inventory.clear()
-    with pytest.raises(VoicekitError) as unavailable:
+    with pytest.raises(VoiceyError) as unavailable:
         adapter.buy_number("in")
-    assert unavailable.value.code == "VK-TEL-003"
+    assert unavailable.value.code == "VY-TEL-003"
 
     fake.inventory.append(
         {
@@ -482,16 +482,16 @@ def test_number_and_target_validation_fail_closed(
         }
     )
     fake.purchase_number = "malformed"
-    with pytest.raises(VoicekitError) as malformed:
+    with pytest.raises(VoiceyError) as malformed:
         adapter.buy_number("in")
-    assert malformed.value.code == "VK-TEL-011"
+    assert malformed.value.code == "VY-TEL-011"
 
     fake.number["account_id"] = "another-account"
-    with pytest.raises(VoicekitError) as ownership:
+    with pytest.raises(VoiceyError) as ownership:
         adapter.inbound_route(NUMBER)
-    assert ownership.value.code == "VK-TEL-003"
+    assert ownership.value.code == "VY-TEL-003"
 
-    with pytest.raises(VoicekitError, match="LiveKit targets"):
+    with pytest.raises(VoiceyError, match="LiveKit targets"):
         adapter.point_inbound(
             NUMBER,
             LiveKitTarget(
@@ -507,7 +507,7 @@ def _managed_application(*, target: PipecatTarget = TARGET) -> dict[str, object]
     ]
     return {
         "app_id": "existing-app",
-        "app_name": f"voicekit-{fingerprint}",
+        "app_name": f"voicey-{fingerprint}",
         "answer_url": target.answer_url,
         "answer_method": "POST",
         "hangup_url": target.event_url(),
@@ -525,10 +525,10 @@ def test_existing_application_is_adopted_but_drift_and_duplicates_are_rejected(
     assert fake.apps == [_managed_application()]
 
     fake.apps[0]["answer_url"] = "https://human.example.test/answer"
-    with pytest.raises(VoicekitError, match="differs"):
+    with pytest.raises(VoiceyError, match="differs"):
         adapter.point_inbound(NUMBER, TARGET)
     fake.apps = [_managed_application(), _managed_application()]
-    with pytest.raises(VoicekitError, match="duplicate"):
+    with pytest.raises(VoiceyError, match="duplicate"):
         adapter.point_inbound(NUMBER, TARGET)
 
 
@@ -552,23 +552,23 @@ def test_route_non_confirmation_definitive_failure_and_restore_failure_are_fence
 ) -> None:
     adapter, fake, ledger = adapter_bundle
     fake.apply_route_mutations = False
-    with pytest.raises(VoicekitError) as unconfirmed:
+    with pytest.raises(VoiceyError) as unconfirmed:
         adapter.point_inbound(NUMBER, TARGET)
-    assert unconfirmed.value.code == "VK-TEL-006"
+    assert unconfirmed.value.code == "VY-TEL-006"
     assert ledger.open_routes(provider="vobiz")[-1].state == "ambiguous"
 
     fake.apply_route_mutations = True
     route_path = f"/api/v1/Account/{AUTH_ID}/numbers/+918071234567/application"
     fake.failures[("POST", route_path)] = 422
-    with pytest.raises(VoicekitError) as definitive:
+    with pytest.raises(VoiceyError) as definitive:
         adapter.point_inbound(NUMBER, TARGET)
-    assert definitive.value.code == "VK-TEL-004"
+    assert definitive.value.code == "VY-TEL-004"
     fake.failures.clear()
     fake.apps.clear()
 
     token = adapter.point_inbound(NUMBER, TARGET)
     fake.failures[("DELETE", route_path)] = 503
-    with pytest.raises(VoicekitError, match="restore conflicted"):
+    with pytest.raises(VoiceyError, match="restore conflicted"):
         adapter.restore(token)
     assert ledger.get_route(token.token).state == "conflict"
 
@@ -577,7 +577,7 @@ def test_restore_rejects_foreign_and_non_restorable_tokens(
     adapter_bundle: tuple[VobizAdapter, FakeVobiz, TelephonyLedger],
 ) -> None:
     adapter, fake, ledger = adapter_bundle
-    with pytest.raises(VoicekitError, match="another carrier"):
+    with pytest.raises(VoiceyError, match="another carrier"):
         adapter.restore(RollbackToken(provider="twilio", token="route_foreign"))
 
     foreign = ledger.prepare_route(
@@ -587,7 +587,7 @@ def test_restore_rejects_foreign_and_non_restorable_tokens(
         snapshot={"application_id": "old-app", "trunk_group_id": None},
         applied={"application_id": "managed-app", "trunk_group_id": None},
     )
-    with pytest.raises(VoicekitError, match="another carrier"):
+    with pytest.raises(VoiceyError, match="another carrier"):
         adapter.restore(RollbackToken(provider="vobiz", token=foreign.token))
 
     failed = ledger.prepare_route(
@@ -598,7 +598,7 @@ def test_restore_rejects_foreign_and_non_restorable_tokens(
         applied={"application_id": "managed-app", "trunk_group_id": None},
     )
     ledger.transition_route(failed.token, expected=("prepared",), state="failed")
-    with pytest.raises(VoicekitError, match="cannot restore"):
+    with pytest.raises(VoiceyError, match="cannot restore"):
         adapter.restore(RollbackToken(provider="vobiz", token=failed.token))
 
     already_current = ledger.prepare_route(
@@ -621,23 +621,23 @@ def test_outbound_failures_are_not_retried_and_reconciliation_is_explicit(
     adapter, fake, ledger = adapter_bundle
     call_path = f"/api/v1/Account/{AUTH_ID}/Call/"
     fake.failures[("POST", call_path)] = 422
-    with pytest.raises(VoicekitError) as rejected:
+    with pytest.raises(VoiceyError) as rejected:
         adapter.start_call(NUMBER, "+919876543210", TARGET, intent_id="intent_rejected")
-    assert rejected.value.code == "VK-TEL-004"
+    assert rejected.value.code == "VY-TEL-004"
     assert ledger.get_intent("intent_rejected").state == "rejected"
 
     fake.failures[("POST", call_path)] = 503
-    with pytest.raises(VoicekitError) as ambiguous:
+    with pytest.raises(VoiceyError) as ambiguous:
         adapter.start_call(NUMBER, "+919876543210", TARGET, intent_id="intent_ambiguous")
-    assert ambiguous.value.code == "VK-TEL-007"
-    with pytest.raises(VoicekitError, match="do not retry"):
+    assert ambiguous.value.code == "VY-TEL-007"
+    with pytest.raises(VoiceyError, match="do not retry"):
         adapter.reconcile_outbound("intent_ambiguous")
 
     fake.failures.clear()
     fake.next_call_id = ""
-    with pytest.raises(VoicekitError) as malformed:
+    with pytest.raises(VoiceyError) as malformed:
         adapter.start_call(NUMBER, "+919876543210", TARGET, intent_id="intent_malformed")
-    assert malformed.value.code == "VK-TEL-007"
+    assert malformed.value.code == "VY-TEL-007"
     assert ledger.get_intent("intent_malformed").state == "ambiguous"
 
     fake.next_call_id = CALL_ID
@@ -649,11 +649,11 @@ def test_call_controls_reject_invalid_ranges_and_missing_transfer_origin(
     adapter_bundle: tuple[VobizAdapter, FakeVobiz, TelephonyLedger],
 ) -> None:
     adapter, fake, ledger = adapter_bundle
-    with pytest.raises(VoicekitError, match="timeout"):
+    with pytest.raises(VoiceyError, match="timeout"):
         adapter.start_call(NUMBER, "+919876543210", TARGET, timeout_s=4)
-    with pytest.raises(VoicekitError, match="DTMF"):
+    with pytest.raises(VoiceyError, match="DTMF"):
         adapter.start_call(NUMBER, "+919876543210", TARGET, send_digits="A")
-    with pytest.raises(VoicekitError, match="DTMF"):
+    with pytest.raises(VoiceyError, match="DTMF"):
         adapter.send_dtmf(CALL_ID, "A")
 
     without_origin = VobizAdapter(
@@ -666,7 +666,7 @@ def test_call_controls_reject_invalid_ranges_and_missing_transfer_origin(
         ),
     )
     try:
-        with pytest.raises(VoicekitError, match="expected_public_base"):
+        with pytest.raises(VoiceyError, match="expected_public_base"):
             without_origin.cold_transfer(CALL_ID, "+918071230000")
     finally:
         without_origin._client.close()  # pyright: ignore[reportPrivateUsage]
@@ -729,14 +729,14 @@ async def test_recording_download_enforces_transport_type_and_size(
             ("https://recordings.vobiz.ai/invalid-length", 10),
             ("https://recordings.vobiz.ai/server-error", 10),
         ]:
-            with pytest.raises(VoicekitError) as caught:
+            with pytest.raises(VoiceyError) as caught:
                 await adapter.download_recording(
                     url,
                     artifact_store=artifacts,
                     storage_key="recordings/rejected.mp3",
                     max_bytes=limit,
                 )
-            assert caught.value.code == "VK-TEL-009"
+            assert caught.value.code == "VY-TEL-009"
     finally:
         await recording_client.aclose()
         await asyncio.to_thread(control_client.close)
@@ -890,7 +890,7 @@ def test_callback_parser_rejects_incomplete_or_unknown_payloads(
     form: dict[str, Any],
 ) -> None:
     adapter, _, _ = adapter_bundle
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         adapter.parse_event(
             TelephonyRequest(
                 scheme="https",
@@ -900,7 +900,7 @@ def test_callback_parser_rejects_incomplete_or_unknown_payloads(
                 form=form,
             )
         )
-    assert caught.value.code in {"VK-TEL-002", "VK-TEL-008"}
+    assert caught.value.code in {"VY-TEL-002", "VY-TEL-008"}
 
 
 @pytest.mark.parametrize(
@@ -929,7 +929,7 @@ def test_control_plane_malformed_and_http_failures_are_cataloged(
         client=client,
     )
     try:
-        with pytest.raises(VoicekitError, match=operation):
+        with pytest.raises(VoiceyError, match=operation):
             adapter.account_state()
     finally:
         client.close()
@@ -952,9 +952,9 @@ def test_control_plane_network_and_pagination_envelopes_are_strict(tmp_path: Pat
         client=network_client,
     )
     try:
-        with pytest.raises(VoicekitError) as network:
+        with pytest.raises(VoiceyError) as network:
             network_adapter.account_state()
-        assert network.value.code == "VK-TEL-011"
+        assert network.value.code == "VY-TEL-011"
     finally:
         network_client.close()
         network_ledger.close()
@@ -1021,7 +1021,7 @@ def test_control_plane_network_and_pagination_envelopes_are_strict(tmp_path: Pat
             client=malformed_client,
         )
         try:
-            with pytest.raises(VoicekitError):
+            with pytest.raises(VoiceyError):
                 malformed_adapter.list_numbers()
         finally:
             malformed_client.close()

@@ -7,7 +7,7 @@
   "summary": "Qualify an inquiry, capture consented contact details, and schedule follow-up.",
   "integration_points": [
     "tools.py:TodoLeadGateway",
-    "VOICEKIT_TRANSFER_NUMBER",
+    "VOICEY_TRANSFER_NUMBER",
     "agent.py:Results.webhook"
   ]
 }

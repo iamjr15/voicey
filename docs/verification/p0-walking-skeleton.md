@@ -7,7 +7,7 @@ This gate verifies volatile runtime integration points without provider credenti
 Both runtime probes execute:
 
 1. one native runtime bootstrap;
-2. one plain voicekit `@tool` registered through the runtime-native tool mechanism;
+2. one plain voicey `@tool` registered through the runtime-native tool mechanism;
 3. one context-local `results.set()` and `set_outcome()`;
 4. one browser-session mechanism;
 5. one idempotent provider-mocked phone termination;

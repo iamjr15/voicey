@@ -23,7 +23,7 @@ system speech is not provider or latency evidence.
 ## Create the project
 
 ```bash
-voicekit init ./restaurant \
+voicey init ./restaurant \
   --name restaurant \
   --recipe restaurant-reservations \
   --runtime pipecat \
@@ -46,8 +46,11 @@ voicekit init ./restaurant \
 
 ## Verification
 
-`voicekit test` covers search-before-offer, at most three alternatives,
+`voicey test` covers search-before-offer, at most three alternatives,
 non-guaranteed waitlist language, correction, confirmation, mutation failure,
-and both native runtime compilers.
+and both native runtime compilers. On LiveKit, only the native
+`WaitlistAgent` owns `join_waitlist`; intake must hand off before the consented
+mutation. The 2026-08-03 Anthropic API text certification passed all five cases
+first attempt on each runtime.
 
-Next: run `voicekit test`, then repeat with `--runtime livekit`.
+Next: run `voicey test`, then repeat with `--runtime livekit`.

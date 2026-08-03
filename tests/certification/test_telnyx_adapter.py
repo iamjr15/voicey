@@ -15,16 +15,16 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from voicekit.errors import VoicekitError
-from voicekit.telephony import (
+from voicey.errors import VoiceyError
+from voicey.telephony import (
     LiveKitTarget,
     PipecatTarget,
     RollbackToken,
     TelephonyAdapter,
     TelephonyRequest,
 )
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.telnyx import TelnyxAdapter
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.telnyx import TelnyxAdapter
 
 NUMBER = "+14155550100"
 NUMBER_ID = "number-1"
@@ -123,7 +123,7 @@ def adapter_bundle(
     adapter = TelnyxAdapter(
         api_key="KEY-not-real",  # pragma: allowlist secret
         public_key=public_key.hex(),
-        connection_id="connection-voicekit",
+        connection_id="connection-voicey",
         ledger=ledger,
         client=client,
         clock=lambda: 1_700_000_000,
@@ -198,7 +198,7 @@ def test_protocol_account_and_number_lifecycle(
     assert ("DELETE", f"/phone_numbers/{NUMBER_ID}", None) in fake.calls
 
     fake.available = False
-    with pytest.raises(VoicekitError, match="VK-TEL-003"):
+    with pytest.raises(VoiceyError, match="VY-TEL-003"):
         adapter.buy_number("US")
 
 
@@ -210,7 +210,7 @@ def test_routing_is_snapshot_first_confirmed_and_conflict_safe(
     route = ledger.get_route(token.token)
     assert route.state == "applied"
     assert route.snapshot == {"connection_id": "old-connection"}
-    assert fake.number["connection_id"] == "connection-voicekit"
+    assert fake.number["connection_id"] == "connection-voicey"
 
     adapter.restore(token)
     assert fake.number["connection_id"] == "old-connection"
@@ -219,7 +219,7 @@ def test_routing_is_snapshot_first_confirmed_and_conflict_safe(
 
     second = adapter.point_inbound(NUMBER, TARGET)
     fake.number["connection_id"] = "human-change"
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(second)
     assert ledger.get_route(second.token).state == "conflict"
 
@@ -229,12 +229,12 @@ def test_route_rejection_and_ambiguous_outcome_are_distinct(
 ) -> None:
     adapter, fake, ledger, _ = adapter_bundle
     fake.failures[("PATCH", f"/phone_numbers/{NUMBER_ID}")] = 422
-    with pytest.raises(VoicekitError, match="VK-TEL-004"):
+    with pytest.raises(VoiceyError, match="VY-TEL-004"):
         adapter.point_inbound(NUMBER, TARGET)
     assert ledger.open_routes(provider="telnyx") == ()
 
     fake.failures[("PATCH", f"/phone_numbers/{NUMBER_ID}")] = 503
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.point_inbound(NUMBER, TARGET)
     assert ledger.open_routes(provider="telnyx")[0].state == "ambiguous"
 
@@ -244,7 +244,7 @@ def test_route_requires_confirmation_and_restore_surfaces_provider_conflicts(
 ) -> None:
     adapter, fake, ledger, _ = adapter_bundle
     fake.patch_response_connection = "unexpected"
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.point_inbound(NUMBER, TARGET)
     assert ledger.open_routes(provider="telnyx")[0].state == "ambiguous"
 
@@ -252,7 +252,7 @@ def test_route_requires_confirmation_and_restore_surfaces_provider_conflicts(
     fake.number["connection_id"] = "old-connection"
     token = adapter.point_inbound(NUMBER, TARGET)
     fake.failures[("PATCH", f"/phone_numbers/{NUMBER_ID}")] = 422
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(token)
     assert ledger.get_route(token.token).state == "conflict"
 
@@ -260,7 +260,7 @@ def test_route_requires_confirmation_and_restore_surfaces_provider_conflicts(
     fake.number["connection_id"] = "old-connection"
     second = adapter.point_inbound(NUMBER, TARGET)
     fake.patch_response_connection = "unexpected"
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(second)
     assert ledger.get_route(second.token).state == "conflict"
 
@@ -306,15 +306,15 @@ def test_outbound_rejection_ambiguity_and_reconciliation(
 ) -> None:
     adapter, fake, ledger, private_key = adapter_bundle
     fake.failures[("POST", "/calls")] = 422
-    with pytest.raises(VoicekitError, match="VK-TEL-004"):
+    with pytest.raises(VoiceyError, match="VY-TEL-004"):
         adapter.start_call(NUMBER, "+14155550101", TARGET, intent_id="intent_rejected")
     assert ledger.get_intent("intent_rejected").state == "rejected"
 
     fake.failures[("POST", "/calls")] = 503
-    with pytest.raises(VoicekitError, match="VK-TEL-007"):
+    with pytest.raises(VoiceyError, match="VY-TEL-007"):
         adapter.start_call(NUMBER, "+14155550101", TARGET, intent_id="intent_ambiguous")
     assert ledger.get_intent("intent_ambiguous").state == "ambiguous"
-    with pytest.raises(VoicekitError, match="VK-TEL-007"):
+    with pytest.raises(VoiceyError, match="VY-TEL-007"):
         adapter.reconcile_outbound("intent_ambiguous")
 
     del fake.failures[("POST", "/calls")]
@@ -352,7 +352,7 @@ def test_number_order_waits_for_owned_resource_and_times_out(tmp_path: Path) -> 
     ledger = TelephonyLedger(tmp_path / "pending-order.sqlite3")
     adapter = TelnyxAdapter(
         api_key="KEY-not-real",  # pragma: allowlist secret
-        connection_id="connection-voicekit",
+        connection_id="connection-voicey",
         client=client,
         ledger=ledger,
         purchase_timeout_s=0.5,
@@ -361,12 +361,12 @@ def test_number_order_waits_for_owned_resource_and_times_out(tmp_path: Path) -> 
         sleeper=no_sleep,
     )
     try:
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             adapter.buy_number("US", "415")
     finally:
         client.close()
         ledger.close()
-    assert caught.value.code == "VK-TEL-011"
+    assert caught.value.code == "VY-TEL-011"
     assert "order-1" in str(caught.value)
 
 
@@ -417,7 +417,7 @@ def test_texml_response_is_bidirectional_parameterized_and_bounded(
             "https://voice.example.test",
             ws_path="/telnyx/media/token",
             event_path="/telnyx/events",
-            custom_parameters={"voicekit_token": "token-1"},
+            custom_parameters={"voicey_token": "token-1"},
         )
     )
     assert "<Connect>" in xml
@@ -425,9 +425,9 @@ def test_texml_response_is_bidirectional_parameterized_and_bounded(
     assert 'bidirectionalMode="rtp"' in xml
     assert 'bidirectionalCodec="PCMU"' in xml
     assert 'bidirectionalSamplingRate="8000"' in xml
-    assert '<Parameter name="voicekit_token" value="token-1"' in xml
+    assert '<Parameter name="voicey_token" value="token-1"' in xml
 
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         adapter.answer_response(
             PipecatTarget(
                 "https://voice.example.test",
@@ -449,7 +449,7 @@ def test_livekit_target_is_never_silently_downgraded(
         lambda: adapter.start_call(NUMBER, "+14155550101", target),
         lambda: adapter.answer_response(target),
     ):
-        with pytest.raises(VoicekitError, match="VK-TEL-002"):
+        with pytest.raises(VoiceyError, match="VY-TEL-002"):
             operation()
 
 
@@ -617,9 +617,9 @@ def test_texml_callback_and_malformed_events_are_strict(
     )
     assert completed.type == "completed"
     assert completed.ended_reason == "provider_hangup"
-    with pytest.raises(VoicekitError, match="VK-TEL-008"):
+    with pytest.raises(VoiceyError, match="VY-TEL-008"):
         adapter.parse_event(_signed_request(private_key, _event("future.event")))
-    with pytest.raises(VoicekitError, match="VK-TEL-008"):
+    with pytest.raises(VoiceyError, match="VY-TEL-008"):
         adapter.parse_event(
             TelephonyRequest(
                 scheme="https",
@@ -629,7 +629,7 @@ def test_texml_callback_and_malformed_events_are_strict(
                 form={"CallSid": CALL_ID, "CallStatus": "future-status"},
             )
         )
-    with pytest.raises(VoicekitError, match="VK-TEL-008"):
+    with pytest.raises(VoiceyError, match="VY-TEL-008"):
         adapter.parse_event(
             TelephonyRequest(
                 scheme="https",
@@ -679,7 +679,7 @@ def test_malformed_json_event_envelopes_fail_closed(
         headers={"content-type": "application/json"},
         raw_body=json.dumps(document),
     )
-    with pytest.raises(VoicekitError, match="VK-TEL-008"):
+    with pytest.raises(VoiceyError, match="VY-TEL-008"):
         adapter.parse_event(request)
 
 
@@ -734,15 +734,15 @@ def test_validation_and_safe_http_errors(
         lambda: adapter.start_call(NUMBER, "+14155550101", TARGET, timeout_s=1),
         lambda: adapter.send_dtmf(CALL_ID, "A"),
     ):
-        with pytest.raises(VoicekitError, match="VK-TEL-002"):
+        with pytest.raises(VoiceyError, match="VY-TEL-002"):
             operation()
     fake.failures[("GET", "/balance")] = 401
-    with pytest.raises(VoicekitError) as rejected:
+    with pytest.raises(VoiceyError) as rejected:
         adapter.account_state()
-    assert rejected.value.code == "VK-TEL-004"
+    assert rejected.value.code == "VY-TEL-004"
     assert "private" not in str(rejected.value)
 
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         TelnyxAdapter(
             api_key="KEY-not-real",  # pragma: allowlist secret
             public_key="invalid",
@@ -757,7 +757,7 @@ def test_validation_and_safe_http_errors(
         ),
     )
     try:
-        with pytest.raises(VoicekitError, match="VK-TEL-002"):
+        with pytest.raises(VoiceyError, match="VY-TEL-002"):
             no_connection.point_inbound(NUMBER, TARGET)
     finally:
         no_connection._client.close()  # pyright: ignore[reportPrivateUsage]
@@ -781,7 +781,7 @@ def test_constructor_rejects_unsafe_transport_and_timing(
     values: dict[str, object],
 ) -> None:
     monkeypatch.delenv("TELNYX_API_KEY", raising=False)
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         TelnyxAdapter(
             ledger_path=tmp_path / "invalid-constructor.sqlite3",
             **cast("dict[str, Any]", values),
@@ -828,7 +828,7 @@ def test_response_envelope_and_feature_shapes_are_strict(tmp_path: Path) -> None
             adapter.list_numbers,
             adapter.account_state,
         ):
-            with pytest.raises(VoicekitError, match="VK-TEL-011"):
+            with pytest.raises(VoiceyError, match="VY-TEL-011"):
                 operation()
     finally:
         client.close()
@@ -875,9 +875,9 @@ def test_restore_rejects_foreign_and_unknown_tokens(
     adapter_bundle: tuple[TelnyxAdapter, FakeTelnyx, TelephonyLedger, Ed25519PrivateKey],
 ) -> None:
     adapter, _, _, _ = adapter_bundle
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(RollbackToken(provider="twilio", token="route_foreign"))
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(RollbackToken(provider="telnyx", token="route_missing"))
 
 
@@ -1008,7 +1008,7 @@ async def test_recording_download_failures_are_cataloged(
             recording_client=recording_http,
         )
         try:
-            with pytest.raises(VoicekitError) as caught:
+            with pytest.raises(VoiceyError) as caught:
                 await adapter.download_recording(
                     url,
                     artifact_store=NullArtifacts(),
@@ -1017,4 +1017,4 @@ async def test_recording_download_failures_are_cataloged(
                 )
         finally:
             ledger.close()
-    assert caught.value.code == "VK-TEL-009"
+    assert caught.value.code == "VY-TEL-009"

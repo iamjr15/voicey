@@ -1,5 +1,5 @@
 {
-  "contract": "voicekit result webhook",
+  "contract": "voicey result webhook",
   "schema": {
     "$defs": {
       "JsonValue": {},

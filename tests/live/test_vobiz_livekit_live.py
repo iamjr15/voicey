@@ -8,13 +8,13 @@ from pathlib import Path
 import pytest
 from livekit import api
 
-from voicekit.runtimes.livekit.sip import LiveKitSipDialer
-from voicekit.runtimes.livekit.vobiz import (
+from voicey.runtimes.livekit.sip import LiveKitSipDialer
+from voicey.runtimes.livekit.vobiz import (
     VobizLiveKitSipConfig,
     VobizLiveKitSipProvisioner,
     VobizSipHTTPBackend,
 )
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.telephony.ledger import TelephonyLedger
 
 pytestmark = pytest.mark.live
 
@@ -36,19 +36,19 @@ def _livekit_api() -> api.LiveKitAPI:
 
 def _config() -> VobizLiveKitSipConfig:
     return VobizLiveKitSipConfig(
-        number=_required("VOICEKIT_VOBIZ_LIVE_FROM"),
-        agent_name=_required("VOICEKIT_LIVEKIT_AGENT_NAME"),
-        livekit_sip_uri=_required("VOICEKIT_LIVEKIT_SIP_URI"),
-        credential_id=_required("VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID"),
-        auth_username=_required("VOICEKIT_VOBIZ_SIP_USERNAME"),
-        auth_password=_required("VOICEKIT_VOBIZ_SIP_PASSWORD"),
+        number=_required("VOICEY_VOBIZ_LIVE_FROM"),
+        agent_name=_required("VOICEY_LIVEKIT_AGENT_NAME"),
+        livekit_sip_uri=_required("VOICEY_LIVEKIT_SIP_URI"),
+        credential_id=_required("VOICEY_VOBIZ_SIP_CREDENTIAL_ID"),
+        auth_username=_required("VOICEY_VOBIZ_SIP_USERNAME"),
+        auth_password=_required("VOICEY_VOBIZ_SIP_PASSWORD"),
     )
 
 
 @pytest.mark.asyncio
 async def test_live_vobiz_livekit_provision_reuse_and_rollback(tmp_path: Path) -> None:
-    if os.environ.get("VOICEKIT_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
-        pytest.skip("VOICEKIT_LIVE_ROUTE_CONFIRM acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
+        pytest.skip("VOICEY_LIVE_ROUTE_CONFIRM acknowledgement is absent")
     ledger = TelephonyLedger(tmp_path / "vobiz-livekit-provision.sqlite3")
     livekit = _livekit_api()
     provisioner = VobizLiveKitSipProvisioner(
@@ -70,18 +70,20 @@ async def test_live_vobiz_livekit_provision_reuse_and_rollback(tmp_path: Path) -
         assert first.vobiz_outbound_trunk_id == second.vobiz_outbound_trunk_id
         assert second.created_resources == 0
     finally:
-        if first is not None:
-            await provisioner.rollback(first.operation_id)
-        await livekit.aclose()
-        ledger.close()
+        try:
+            if first is not None:
+                await provisioner.rollback(first.operation_id)
+        finally:
+            await livekit.aclose()
+            ledger.close()
 
 
 @pytest.mark.asyncio
 async def test_live_vobiz_livekit_paid_outbound_and_sip_status_mapping(
     tmp_path: Path,
 ) -> None:
-    if os.environ.get("VOICEKIT_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
-        pytest.skip("VOICEKIT_LIVE_CONFIRM charge acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
+        pytest.skip("VOICEY_LIVE_CONFIRM charge acknowledgement is absent")
     ledger = TelephonyLedger(tmp_path / "vobiz-livekit-outbound.sqlite3")
     livekit = _livekit_api()
     dialer = LiveKitSipDialer(
@@ -93,10 +95,10 @@ async def test_live_vobiz_livekit_paid_outbound_and_sip_status_mapping(
     )
     try:
         result = await dialer.dial(
-            from_number=_required("VOICEKIT_VOBIZ_LIVE_FROM"),
-            to_number=_required("VOICEKIT_VOBIZ_LIVE_TO"),
-            room_name=_required("VOICEKIT_LIVEKIT_CERT_ROOM"),
-            participant_identity="voicekit-vobiz-cert-callee",
+            from_number=_required("VOICEY_VOBIZ_LIVE_FROM"),
+            to_number=_required("VOICEY_VOBIZ_LIVE_TO"),
+            room_name=_required("VOICEY_LIVEKIT_CERT_ROOM"),
+            participant_identity="voicey-vobiz-cert-callee",
             intent_id="intent_vobiz_livekit_live_cert",
         )
         assert result.ended_reason is None

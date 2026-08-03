@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from voicekit import Agent, Behavior, Limits, Models, Observability, Phone, Results, Voice, Web
-from voicekit.config import (
+from voicey import Agent, Behavior, Limits, Models, Observability, Phone, Results, Voice, Web
+from voicey.config import (
     DEFAULT_PROVIDER_CATALOG,
     ManifestState,
     ManifestStore,
@@ -21,9 +21,9 @@ from voicekit.config import (
     collect_config_issues,
     validate_agent_config,
 )
-from voicekit.config.validation import ConfigValidationError
-from voicekit.errors import VoicekitError
-from voicekit.results.signing import encode_secret
+from voicey.config.validation import ConfigValidationError
+from voicey.errors import VoiceyError
+from voicey.results.signing import encode_secret
 
 
 def example_tool(query: str) -> dict[str, str]:
@@ -49,7 +49,7 @@ def _agent(**changes: Any) -> Agent:
         "web": Web(enabled=True, allowed_origins=["https://example.test"]),
         "results": Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     }
     values.update(changes)
@@ -62,7 +62,7 @@ def _valid_environment() -> dict[str, str]:
         "CARTESIA_API_KEY": "cartesia-test",  # pragma: allowlist secret
         "DEEPGRAM_API_KEY": "deepgram-test",  # pragma: allowlist secret
         "ELEVENLABS_API_KEY": "elevenlabs-test",  # pragma: allowlist secret
-        "VOICEKIT_WEBHOOK_SECRET": encode_secret(b"current-test-key"),
+        "VOICEY_WEBHOOK_SECRET": encode_secret(b"current-test-key"),
     }
 
 
@@ -77,7 +77,7 @@ def _manifest() -> ProjectManifest:
             "llm": "anthropic/claude-sonnet-5",
             "tts": "cartesia/sonic-3.5",
         },
-        state=ManifestState(completed_steps=["runtime"], last_command="voicekit init"),
+        state=ManifestState(completed_steps=["runtime"], last_command="voicey init"),
     )
 
 
@@ -147,7 +147,7 @@ def test_agent_rejects_local_callable_tools_with_a_fix() -> None:
         (
             lambda: Results(
                 webhook="http://receiver.test",
-                secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+                secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
             ),
             "Fix: use an https://",
         ),
@@ -226,25 +226,24 @@ def test_otlp_header_secret_is_validated_without_serializing_its_value() -> None
     agent = _agent(
         observability=Observability(
             otlp_endpoint="https://collector.example.test/v1/traces",
-            otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+            otlp_headers_env="VOICEY_OTLP_HEADERS",
         )
     )
     missing = collect_config_issues(agent, environ=_valid_environment())
     malformed = collect_config_issues(
         agent,
-        environ=_valid_environment() | {"VOICEKIT_OTLP_HEADERS": "not-a-header"},
+        environ=_valid_environment() | {"VOICEY_OTLP_HEADERS": "not-a-header"},
     )
     valid = collect_config_issues(
         agent,
-        environ=_valid_environment() | {"VOICEKIT_OTLP_HEADERS": "authorization=Bearer test-only"},
+        environ=_valid_environment() | {"VOICEY_OTLP_HEADERS": "authorization=Bearer test-only"},
     )
 
     assert any(
-        issue.code == "VK-CFG-105" and issue.path == "env.VOICEKIT_OTLP_HEADERS"
-        for issue in missing
+        issue.code == "VY-CFG-105" and issue.path == "env.VOICEY_OTLP_HEADERS" for issue in missing
     )
-    assert any(issue.code == "VK-CFG-107" for issue in malformed)
-    assert not any(issue.path == "env.VOICEKIT_OTLP_HEADERS" for issue in valid)
+    assert any(issue.code == "VY-CFG-107" for issue in malformed)
+    assert not any(issue.path == "env.VOICEY_OTLP_HEADERS" for issue in valid)
     assert "Bearer test-only" not in json.dumps(agent.model_dump(mode="json"))
 
 
@@ -277,15 +276,15 @@ def test_catalog_rejects_duplicate_entries_as_an_invariant() -> None:
 def test_catalog_validation_collects_all_missing_keys() -> None:
     issues = collect_config_issues(_agent(), environ={})
 
-    assert {issue.code for issue in issues} == {"VK-CFG-105"}
+    assert {issue.code for issue in issues} == {"VY-CFG-105"}
     assert {issue.path for issue in issues} == {
         "env.ANTHROPIC_API_KEY",
         "env.CARTESIA_API_KEY",
         "env.DEEPGRAM_API_KEY",
         "env.ELEVENLABS_API_KEY",
-        "env.VOICEKIT_WEBHOOK_SECRET",
+        "env.VOICEY_WEBHOOK_SECRET",
     }
-    assert all("voicekit keys add" in issue.fix for issue in issues)
+    assert all("voicey keys add" in issue.fix for issue in issues)
 
 
 def test_catalog_validation_reports_unknown_models_missing_carrier_keys_and_bad_secret() -> None:
@@ -297,14 +296,14 @@ def test_catalog_validation_reports_unknown_models_missing_carrier_keys_and_bad_
         ),
         phone=Phone(provider="vobiz", number="+14155550123"),
     )
-    environment = _valid_environment() | {"VOICEKIT_WEBHOOK_SECRET": "not-a-secret"}
+    environment = _valid_environment() | {"VOICEY_WEBHOOK_SECRET": "not-a-secret"}
 
     issues = collect_config_issues(agent, environ=environment)
 
     assert {issue.code for issue in issues} == {
-        "VK-CFG-101",
-        "VK-CFG-105",
-        "VK-CFG-106",
+        "VY-CFG-101",
+        "VY-CFG-105",
+        "VY-CFG-106",
     }
     assert all(issue.fix for issue in issues)
 
@@ -313,20 +312,20 @@ def test_generic_sip_is_livekit_only_in_config_validation() -> None:
     pipecat = _agent(phone=Phone(provider="sip", number="+14155550123"))
     livekit = pipecat.model_copy(update={"runtime": "livekit"})
     environment = _valid_environment() | {
-        "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
-        "VOICEKIT_SIP_USERNAME": "voicekit",
-        "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
-        "VOICEKIT_SIP_TRANSPORT": "tls",
-        "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+        "VOICEY_SIP_ADDRESS": "trunk.example.test:5061",
+        "VOICEY_SIP_USERNAME": "voicey",
+        "VOICEY_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+        "VOICEY_SIP_TRANSPORT": "tls",
+        "VOICEY_SIP_MEDIA_ENCRYPTION": "require",
     }
 
     pipecat_issues = collect_config_issues(pipecat, environ=environment)
     livekit_issues = collect_config_issues(livekit, environ=environment)
 
     assert any(
-        issue.code == "VK-CFG-102" and issue.path == "phone.provider" for issue in pipecat_issues
+        issue.code == "VY-CFG-102" and issue.path == "phone.provider" for issue in pipecat_issues
     )
-    assert not any(issue.code == "VK-CFG-102" for issue in livekit_issues)
+    assert not any(issue.code == "VY-CFG-102" for issue in livekit_issues)
 
 
 def test_catalog_validation_checks_runtime_and_language() -> None:
@@ -359,7 +358,7 @@ def test_catalog_validation_checks_runtime_and_language() -> None:
 
     issues = collect_config_issues(agent, environ=_valid_environment(), catalog=constrained)
 
-    assert {"VK-CFG-102", "VK-CFG-103"} <= {issue.code for issue in issues}
+    assert {"VY-CFG-102", "VY-CFG-103"} <= {issue.code for issue in issues}
 
 
 def test_validated_agent_is_returned_and_aggregate_error_is_cataloged() -> None:
@@ -369,13 +368,13 @@ def test_validated_agent_is_returned_and_aggregate_error_is_cataloged() -> None:
     with pytest.raises(ConfigValidationError) as caught:
         validate_agent_config(agent, environ={})
 
-    assert caught.value.code == "VK-CFG-001"
+    assert caught.value.code == "VY-CFG-001"
     assert caught.value.issues
     assert "Fix:" in str(caught.value)
 
 
 def test_manifest_loads_json5_and_round_trips_atomically(tmp_path: Path) -> None:
-    path = tmp_path / "voicekit.jsonc"
+    path = tmp_path / "voicey.jsonc"
     path.write_text(
         """
         {
@@ -399,7 +398,7 @@ def test_manifest_loads_json5_and_round_trips_atomically(tmp_path: Path) -> None
     store.save(loaded)
 
     assert store.load() == loaded
-    assert path.read_text(encoding="utf-8").startswith("// Managed by voicekit.")
+    assert path.read_text(encoding="utf-8").startswith("// Managed by voicey.")
     assert "SECRET" not in path.read_text(encoding="utf-8")
     if os.name == "posix":
         assert path.stat().st_mode & 0o777 == 0o644
@@ -418,14 +417,14 @@ def test_manifest_read_and_write_failures_are_cataloged(tmp_path: Path) -> None:
     invalid = tmp_path / "invalid.jsonc"
     invalid.write_text("{runtime: 'not-a-runtime'}", encoding="utf-8")
 
-    with pytest.raises(VoicekitError) as read_error:
+    with pytest.raises(VoiceyError) as read_error:
         ManifestStore(invalid).load()
-    assert read_error.value.code == "VK-CFG-002"
+    assert read_error.value.code == "VY-CFG-002"
     assert "Fix:" in str(read_error.value)
 
     parent_is_file = tmp_path / "file"
     parent_is_file.write_text("not a directory", encoding="utf-8")
-    with pytest.raises(VoicekitError) as write_error:
-        ManifestStore(parent_is_file / "voicekit.jsonc").save(_manifest())
-    assert write_error.value.code == "VK-CFG-003"
+    with pytest.raises(VoiceyError) as write_error:
+        ManifestStore(parent_is_file / "voicey.jsonc").save(_manifest())
+    assert write_error.value.code == "VY-CFG-003"
     assert "Fix:" in str(write_error.value)

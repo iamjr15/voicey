@@ -69,12 +69,12 @@ function catalogError(error: unknown): { code: string; message: string; fix: str
     return { code: error.code, message: error.message, fix: error.fix };
   }
   if (error instanceof Error) {
-    return { code: "VK-WEB-005", message: error.message, fix: "Run voicekit doctor." };
+    return { code: "VY-WEB-005", message: error.message, fix: "Run voicey doctor." };
   }
   return {
-    code: "VK-WEB-005",
+    code: "VY-WEB-005",
     message: "The playground could not complete the request.",
-    fix: "Run voicekit doctor.",
+    fix: "Run voicey doctor.",
   };
 }
 
@@ -391,9 +391,9 @@ export function App() {
         if (state === "error") {
           setPhase("error");
           setSessionError({
-            code: "VK-WEB-005",
+            code: "VY-WEB-005",
             message: "The browser media transport entered an error state.",
-            fix: "Run voicekit doctor, then retry the session.",
+            fix: "Run voicey doctor, then retry the session.",
           });
         }
         addEvent("Transport", state);
@@ -468,9 +468,9 @@ export function App() {
     setSessionError(
       error === undefined
         ? {
-            code: "VK-WEB-005",
+            code: "VY-WEB-005",
             message: "The browser media connection could not start.",
-            fix: "Run voicekit doctor, then retry the session.",
+            fix: "Run voicey doctor, then retry the session.",
           }
         : catalogError(error),
     );
@@ -498,13 +498,13 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="/" aria-label="voicekit playground home">
+        <a className="wordmark" href="/" aria-label="voicey playground home">
           <span className="wordmark-glyph" aria-hidden="true">
             <i />
             <i />
             <i />
           </span>
-          <span>voicekit</span>
+          <span>voicey</span>
           <em>playground</em>
         </a>
         <div className="runtime-meta" aria-label="Runtime configuration">

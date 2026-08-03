@@ -388,6 +388,14 @@ Sources: https://docs.pipecat.ai/api-reference/server/utilities/service-switcher
 
 - **Deepgram STT** — `pipecat-ai[deepgram]` · `from pipecat.services.deepgram.stt import DeepgramSTTService`. `DeepgramSTTService(api_key, base_url="", encoding="linear16", sample_rate=None, live_options=None [deprecated], settings=DeepgramSTTService.Settings(...))`. Settings defaults: `model="nova-3-general"`, `language=Language.EN`, `interim_results=True`, `punctuate=True`, `smart_format=False`. Multilingual: `Settings(language="multi")`. `from pipecat.transcriptions.language import Language`.
 - **Anthropic LLM** — `pipecat-ai[anthropic]` · `from pipecat.services.anthropic.llm import AnthropicLLMService`. `AnthropicLLMService(api_key, settings=AnthropicLLMService.Settings(...), client=None [inject Bedrock/Vertex], retry_timeout_secs=5.0, retry_on_timeout=False)`. Settings: `model` (**source default `claude-sonnet-4-6`; docs examples `claude-sonnet-4-5-20250929` — set explicitly**), `system_instruction=None`, `max_tokens=4096`, `enable_prompt_caching=False`, `temperature/top_k/top_p=NOT_GIVEN`, `thinking=NOT_GIVEN`. Has `run_inference(context, max_tokens, system_instruction)` for one-shot calls.
+
+  **2026-08-02 empirical Sonnet 5 note:** with `claude-sonnet-5`, the API can
+  emit an adaptive-thinking block containing a signature but no thinking text.
+  Pipecat 1.6.0 persists that as an `LLMSpecificMessage` without a role and its
+  Anthropic adapter then raises `KeyError("role")` on the next tool turn. Voicey
+  explicitly sets `ThinkingConfig(type="disabled")` for this pinned pairing;
+  remove the workaround only after the runtime-upgrade suite proves the
+  installed adapter accepts signature-only blocks.
 - **Cartesia TTS** — `pipecat-ai[cartesia]` · `from pipecat.services.cartesia.tts import CartesiaTTSService` (+ `CartesiaHttpTTSService`). `CartesiaTTSService(api_key, sample_rate=None, encoding="pcm_s16le", container="raw", settings=CartesiaTTSService.Settings(...))`. Settings: `model` (`"sonic-3.5"`/`"sonic-2"`), `voice` (id), `language`, `generation_config`. Word timestamps auto-on.
 - **ElevenLabs TTS** — `pipecat-ai[elevenlabs]` · `from pipecat.services.elevenlabs.tts import ElevenLabsTTSService` (+ Http). `ElevenLabsTTSService(api_key, sample_rate=None, auto_mode=None, settings=ElevenLabsTTSService.Settings(...))`. Settings: `model`, `voice`, `language` (**only honored by multilingual models** `eleven_multilingual_v2`/`eleven_turbo_v2_5`/`eleven_flash_v2_5`), `stability`, `similarity_boost`, `style`, `speed`, `apply_text_normalization`.
 - **OpenAI** — `pipecat-ai[openai]` · LLM `from pipecat.services.openai.llm import OpenAILLMService` (default `gpt-4.1`; `api_key` via base). **Quickstart uses `OpenAIResponsesLLMService`** (Responses API) — pick per Chat-Completions vs Responses. STT `OpenAISTTService` (models `gpt-4o-transcribe`/`gpt-4o-mini-transcribe`/`whisper-1`). TTS `OpenAITTSService` (`Settings(voice, model, instructions, speed)`; 24 kHz PCM; voices alloy/ash/ballad/cedar/coral/echo/fable/marin/nova/onyx/sage/shimmer/verse).
@@ -436,7 +444,7 @@ Key flags (discover via `pipecat init --help` / `--list-options` JSON): `--bot-t
 **Installed-pin correction (verified 2026-07-28):** the resolved `pipecat-cli==0.1.15`
 requires the positional `IMAGE`; its installed `DeployConfigParams` has no
 cloud-build/context/Dockerfile fields. The earlier upstream example that
-allowed omitting the image does not describe this pin. Voicekit therefore
+allowed omitting the image does not describe this pin. Voicey therefore
 generates a secret-free build context with `--prepare-only`, prints the exact
 `docker build` and `docker push` commands for an operator-selected immutable
 tag, and deploys that exact tag. It does not claim a Pipecat-managed build.

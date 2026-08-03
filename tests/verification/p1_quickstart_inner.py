@@ -16,11 +16,11 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from voicekit._p0.pipecat_probe import run_pipecat_probe
-from voicekit.cli.app import app
-from voicekit.cli.keys import KeyCheck
-from voicekit.config.catalog import ProviderKind
-from voicekit.results import WebhookSigner
+from voicey._p0.pipecat_probe import run_pipecat_probe
+from voicey.cli.app import app
+from voicey.cli.keys import KeyCheck
+from voicey.config.catalog import ProviderKind
+from voicey.results import WebhookSigner
 
 _REFERENCE_ENV = {
     "DEEPGRAM_API_KEY": "quickstart-deepgram",  # pragma: allowlist secret
@@ -60,7 +60,7 @@ def main() -> int:
     runner = CliRunner()
     with (
         _environment(_REFERENCE_ENV),
-        patch("voicekit.cli.wizard.ProviderKeyValidator", _ProviderMockValidator),
+        patch("voicey.cli.wizard.ProviderKeyValidator", _ProviderMockValidator),
     ):
         result = runner.invoke(
             app,

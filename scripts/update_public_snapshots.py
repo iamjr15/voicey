@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from voicekit.release.snapshots import changed_snapshots, write_public_snapshots
+from voicey.release.snapshots import changed_snapshots, write_public_snapshots
 
 
 def main() -> int:

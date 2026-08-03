@@ -3,13 +3,13 @@ requires = ["hatchling>=1.28,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "voicekit"
+name = "voicey"
 version = "0.0.0.dev0"
 description = "Production-grade dual-runtime voice-agent toolchain for Pipecat and LiveKit"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = "Apache-2.0"
-authors = [{ name = "voicekit contributors" }]
+authors = [{ name = "voicey contributors" }]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Environment :: Console",
@@ -69,15 +69,15 @@ companion = [
 ]
 
 [project.scripts]
-voicekit = "voicekit.cli.app:app"
+voicey = "voicey.cli.app:app"
 
-[project.entry-points."voicekit.telephony"]
-twilio = "voicekit.telephony.twilio:TwilioAdapter"
-telnyx = "voicekit.telephony.telnyx:TelnyxAdapter"
-vobiz = "voicekit.telephony.vobiz:VobizAdapter"
-plivo = "voicekit.telephony.plivo:PlivoAdapter"
+[project.entry-points."voicey.telephony"]
+twilio = "voicey.telephony.twilio:TwilioAdapter"
+telnyx = "voicey.telephony.telnyx:TelnyxAdapter"
+vobiz = "voicey.telephony.vobiz:VobizAdapter"
+plivo = "voicey.telephony.plivo:PlivoAdapter"
 
-[project.entry-points."voicekit.providers"]
+[project.entry-points."voicey.providers"]
 
 [dependency-groups]
 dev = [
@@ -94,13 +94,13 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/voicekit"]
+packages = ["src/voicey"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"recipes/appointment-booking" = "voicekit/recipe_data/appointment-booking"
-"recipes/front-desk" = "voicekit/recipe_data/front-desk"
-"recipes/lead-intake" = "voicekit/recipe_data/lead-intake"
-"recipes/restaurant-reservations" = "voicekit/recipe_data/restaurant-reservations"
+"recipes/appointment-booking" = "voicey/recipe_data/appointment-booking"
+"recipes/front-desk" = "voicey/recipe_data/front-desk"
+"recipes/lead-intake" = "voicey/recipe_data/lead-intake"
+"recipes/restaurant-reservations" = "voicey/recipe_data/restaurant-reservations"
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
@@ -144,7 +144,7 @@ reportUnknownMemberType = false
 addopts = [
   "--strict-config",
   "--strict-markers",
-  "--cov=voicekit",
+  "--cov=voicey",
   "--cov-branch",
   "--cov-report=term-missing",
   "--cov-fail-under=90",
@@ -160,10 +160,10 @@ markers = [
 
 [tool.coverage.run]
 omit = [
-  "src/voicekit/_p0/*",
+  "src/voicey/_p0/*",
   # Required Postgres 17 CI covers these optional managed surfaces separately.
-  "src/voicekit/deploy/managed.py",
-  "src/voicekit/deploy/results_service.py",
-  "src/voicekit/relay/postgres.py",
-  "src/voicekit/storage/postgres.py",
+  "src/voicey/deploy/managed.py",
+  "src/voicey/deploy/results_service.py",
+  "src/voicey/relay/postgres.py",
+  "src/voicey/storage/postgres.py",
 ]

@@ -9,18 +9,18 @@ from typing import cast
 
 import pytest
 
-from voicekit.deploy.managed import managed_persistence_preflight
-from voicekit.relay.postgres import PostgresRelayJournal
-from voicekit.storage.postgres import PostgresRepository
-from voicekit.storage.s3 import S3ArtifactStore, S3Client
+from voicey.deploy.managed import managed_persistence_preflight
+from voicey.relay.postgres import PostgresRelayJournal
+from voicey.storage.postgres import PostgresRepository
+from voicey.storage.s3 import S3ArtifactStore, S3Client
 
 pytestmark = pytest.mark.integration
 
 
 def _dsn() -> str:
-    value = os.environ.get("VOICEKIT_TEST_POSTGRES_DSN")
+    value = os.environ.get("VOICEY_TEST_POSTGRES_DSN")
     if not value:
-        pytest.skip("VOICEKIT_TEST_POSTGRES_DSN is not configured")
+        pytest.skip("VOICEY_TEST_POSTGRES_DSN is not configured")
     return value
 
 
@@ -30,7 +30,7 @@ async def _isolated_postgres_dsn() -> AsyncGenerator[str]:
     from psycopg import sql
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-    schema = f"voicekit_managed_{uuid.uuid4().hex}"
+    schema = f"voicey_managed_{uuid.uuid4().hex}"
     settings = conninfo_to_dict(_dsn())
     existing_options = settings.get("options", "")
     settings["options"] = f"{existing_options} -c search_path={schema}".strip()
@@ -81,7 +81,7 @@ async def test_managed_preflight_is_rollback_only_and_checks_all_backends(
     async with _isolated_postgres_dsn() as dsn:
         objects = _MemoryObjects()
         artifacts = S3ArtifactStore(
-            "voicekit-artifacts",
+            "voicey-artifacts",
             prefix="preflight-test",
             client=cast("S3Client", objects),
         )

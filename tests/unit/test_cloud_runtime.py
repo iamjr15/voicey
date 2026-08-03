@@ -8,24 +8,24 @@ from typing import Any, cast
 
 import pytest
 
-from voicekit import Agent, Models, Results, Web
-from voicekit.config.manifest import ManifestStore, ProjectManifest
-from voicekit.deploy import cloud_runtime
-from voicekit.deploy.cloud_runtime import (
+from voicey import Agent, Models, Results, Web
+from voicey.config.manifest import ManifestStore, ProjectManifest
+from voicey.deploy import cloud_runtime
+from voicey.deploy.cloud_runtime import (
     CloudWorkerSettings,
     RelayRepositoryFactory,
     run_livekit_cloud_worker,
     run_pipecat_cloud_session,
     validate_cloud_worker_startup,
 )
-from voicekit.errors import VoicekitError
-from voicekit.relay.auth import RelayCredential
-from voicekit.runtimes.pipecat.lifecycle import PipecatCall
+from voicey.errors import VoiceyError
+from voicey.relay.auth import RelayCredential
+from voicey.runtimes.pipecat.lifecycle import PipecatCall
 
 
 def _agent(runtime: str = "pipecat") -> Agent:
     return Agent(
-        name="voicekit-agent",
+        name="voicey-agent",
         runtime=cast(Any, runtime),
         models=Models(
             stt="deepgram/nova-3",
@@ -38,7 +38,7 @@ def _agent(runtime: str = "pipecat") -> Agent:
         web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",
+            secret_env="VOICEY_WEBHOOK_SECRET",
         ),
     )
 
@@ -46,7 +46,7 @@ def _agent(runtime: str = "pipecat") -> Agent:
 def _manifest(runtime: str = "pipecat", *, carriers: list[str] | None = None) -> ProjectManifest:
     return ProjectManifest.model_validate(
         {
-            "project_name": "voicekit-agent",
+            "project_name": "voicey-agent",
             "runtime": runtime,
             "recipe": {"name": "scratch", "version": "1.0.0"},
             "carriers": carriers or [],
@@ -65,20 +65,20 @@ def _manifest(runtime: str = "pipecat", *, carriers: list[str] | None = None) ->
 
 def _environment(tmp_path: Path, runtime: str) -> dict[str, str]:
     return {
-        "VOICEKIT_RUNTIME": runtime,
-        "VOICEKIT_PROJECT_ROOT": str(tmp_path),
-        "VOICEKIT_RELAY_URL": "https://relay.example.test",
-        "VOICEKIT_RELAY_CREDENTIAL": RelayCredential.issue("runtime-key").reveal(),
+        "VOICEY_RUNTIME": runtime,
+        "VOICEY_PROJECT_ROOT": str(tmp_path),
+        "VOICEY_RELAY_URL": "https://relay.example.test",
+        "VOICEY_RELAY_CREDENTIAL": RelayCredential.issue("runtime-key").reveal(),
     }
 
 
 def _write_project(path: Path, runtime: str) -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / "agent.py").write_text(
-        f"""from voicekit import Agent, Models, Results, Web
+        f"""from voicey import Agent, Models, Results, Web
 
 agent = Agent(
-    name="voicekit-agent",
+    name="voicey-agent",
     runtime={runtime!r},
     models=Models(
         stt="deepgram/nova-3",
@@ -91,13 +91,13 @@ agent = Agent(
     web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
     results=Results(
         webhook="https://receiver.example.test/results",
-        secret_env="VOICEKIT_WEBHOOK_SECRET",
+        secret_env="VOICEY_WEBHOOK_SECRET",
     ),
 )
 """,
         encoding="utf-8",
     )
-    ManifestStore(path / "voicekit.jsonc").save(_manifest(runtime))
+    ManifestStore(path / "voicey.jsonc").save(_manifest(runtime))
 
 
 def test_cloud_worker_settings_are_fail_closed(tmp_path: Path) -> None:
@@ -107,21 +107,21 @@ def test_cloud_worker_settings_are_fail_closed(tmp_path: Path) -> None:
     assert settings.project_root == tmp_path.resolve()
     assert settings.relay_url == "https://relay.example.test"
 
-    with pytest.raises(VoicekitError, match="expects 'livekit'"):
+    with pytest.raises(VoiceyError, match="expects 'livekit'"):
         CloudWorkerSettings.from_environment(values, expected_runtime="livekit")
-    with pytest.raises(VoicekitError, match="absolute path"):
+    with pytest.raises(VoiceyError, match="absolute path"):
         CloudWorkerSettings.from_environment(
-            values | {"VOICEKIT_PROJECT_ROOT": "relative"},
+            values | {"VOICEY_PROJECT_ROOT": "relative"},
             expected_runtime="pipecat",
         )
-    with pytest.raises(VoicekitError, match="RELAY_URL is invalid"):
+    with pytest.raises(VoiceyError, match="RELAY_URL is invalid"):
         CloudWorkerSettings.from_environment(
-            values | {"VOICEKIT_RELAY_URL": "http://relay.example.test"},
+            values | {"VOICEY_RELAY_URL": "http://relay.example.test"},
             expected_runtime="pipecat",
         )
-    with pytest.raises(VoicekitError, match="VOICEKIT_RELAY_CREDENTIAL"):
+    with pytest.raises(VoiceyError, match="VOICEY_RELAY_CREDENTIAL"):
         CloudWorkerSettings.from_environment(
-            values | {"VOICEKIT_RELAY_CREDENTIAL": ""},
+            values | {"VOICEY_RELAY_CREDENTIAL": ""},
             expected_runtime="pipecat",
         )
 
@@ -192,7 +192,7 @@ async def test_livekit_cloud_worker_uses_native_host_and_per_job_relay(
         async def run(self, *, devmode: bool) -> None:
             self.devmode = devmode
 
-    import voicekit.runtimes.livekit as livekit_runtime
+    import voicey.runtimes.livekit as livekit_runtime
 
     monkeypatch.setattr(cloud_runtime, "validate_cloud_worker_startup", validate)
     monkeypatch.setattr(livekit_runtime, "LiveKitHost", FakeHost)
@@ -298,9 +298,9 @@ async def test_pipecat_cloud_session_runs_native_worker_and_closes_relay(
 
     import pipecat.workers.runner as worker_runner
 
-    import voicekit.runtimes.pipecat.admission as admission
-    import voicekit.runtimes.pipecat.lifecycle as lifecycle_module
-    import voicekit.runtimes.pipecat.session as session_module
+    import voicey.runtimes.pipecat.admission as admission
+    import voicey.runtimes.pipecat.lifecycle as lifecycle_module
+    import voicey.runtimes.pipecat.session as session_module
 
     def repository_factory(_url: str, _credential: RelayCredential) -> FakeRepository:
         return repository
@@ -409,14 +409,14 @@ async def test_pipecat_transport_rejects_wire_mismatch_and_unsupported_args(
         return "twilio", {"call_id": "CA123", "stream_id": "MZ123"}
 
     monkeypatch.setattr(utils, "parse_telephony_websocket", parse)
-    with pytest.raises(VoicekitError, match="required 'plivo' wire format"):
+    with pytest.raises(VoiceyError, match="required 'plivo' wire format"):
         await cloud_runtime._pipecat_transport_and_call(
             WebSocketRunnerArguments(websocket=cast(Any, object())),
             manifest=_manifest(carriers=["vobiz"]),
             agent=_agent(),
             environment={},
         )
-    with pytest.raises(VoicekitError, match="unsupported Pipecat Cloud runner"):
+    with pytest.raises(VoiceyError, match="unsupported Pipecat Cloud runner"):
         await cloud_runtime._pipecat_transport_and_call(
             object(),
             manifest=_manifest(),
@@ -428,7 +428,7 @@ async def test_pipecat_transport_rejects_wire_mismatch_and_unsupported_args(
         return "exotel", {"call_id": "call-123", "stream_id": "stream-123"}
 
     monkeypatch.setattr(utils, "parse_telephony_websocket", parse_unknown)
-    with pytest.raises(VoicekitError, match="provider 'exotel' is unsupported"):
+    with pytest.raises(VoiceyError, match="provider 'exotel' is unsupported"):
         await cloud_runtime._pipecat_transport_and_call(
             WebSocketRunnerArguments(websocket=cast(Any, object())),
             manifest=_manifest(),
@@ -476,7 +476,7 @@ def test_telephony_params_pin_8khz_serializers_and_credentials() -> None:
         assert params.session_timeout == 630
         assert type(params.serializer).__name__ == serializer_name
 
-    with pytest.raises(VoicekitError, match="unsupported encoding"):
+    with pytest.raises(VoiceyError, match="unsupported encoding"):
         cloud_runtime._telephony_params(
             "telnyx",
             {
@@ -487,7 +487,7 @@ def test_telephony_params_pin_8khz_serializers_and_credentials() -> None:
             environment={"TELNYX_API_KEY": "secret"},
             max_duration_s=600,
         )
-    with pytest.raises(VoicekitError, match="omitted call or stream"):
+    with pytest.raises(VoiceyError, match="omitted call or stream"):
         cloud_runtime._telephony_params(
             "twilio",
             {},
@@ -505,12 +505,12 @@ def test_cloud_project_loading_and_helpers(tmp_path: Path) -> None:
     )
     manifest, agent = cloud_runtime._load_project(settings)
     assert manifest.runtime == "pipecat"
-    assert agent.name == "voicekit-agent"
+    assert agent.name == "voicey-agent"
     assert cloud_runtime._call_data_text({"from": "+14155550100"}, "from") == "+14155550100"
     assert cloud_runtime._integer({}, "VALUE", default=2) == 2
-    with pytest.raises(VoicekitError, match="must be an integer"):
+    with pytest.raises(VoiceyError, match="must be an integer"):
         cloud_runtime._integer({"VALUE": "two"}, "VALUE", default=2)
-    with pytest.raises(VoicekitError, match="cloud project directory"):
+    with pytest.raises(VoiceyError, match="cloud project directory"):
         cloud_runtime._load_project(
             CloudWorkerSettings(
                 runtime="pipecat",
@@ -546,10 +546,10 @@ async def test_cloud_transfer_selects_provider_and_closes_resources(
         def cold_transfer(self, call_id: str, number: str) -> None:
             self.transfers.append((call_id, number))
 
-    import voicekit.telephony.plivo as plivo
-    import voicekit.telephony.telnyx as telnyx
-    import voicekit.telephony.twilio as twilio
-    import voicekit.telephony.vobiz as vobiz
+    import voicey.telephony.plivo as plivo
+    import voicey.telephony.telnyx as telnyx
+    import voicey.telephony.twilio as twilio
+    import voicey.telephony.vobiz as vobiz
 
     monkeypatch.setattr(twilio, "TwilioAdapter", FakeAdapter)
     monkeypatch.setattr(telnyx, "TelnyxAdapter", FakeAdapter)
@@ -602,13 +602,13 @@ async def test_cloud_workers_reject_project_runtime_mismatch(
         return _manifest("pipecat"), _agent("pipecat")
 
     monkeypatch.setattr(cloud_runtime, "_load_project", livekit_project)
-    with pytest.raises(VoicekitError, match="not a Pipecat agent"):
+    with pytest.raises(VoiceyError, match="not a Pipecat agent"):
         await run_pipecat_cloud_session(
             object(),
             environment=_environment(tmp_path, "pipecat"),
         )
     monkeypatch.setattr(cloud_runtime, "_load_project", pipecat_project)
-    with pytest.raises(VoicekitError, match="not a LiveKit agent"):
+    with pytest.raises(VoiceyError, match="not a LiveKit agent"):
         await run_livekit_cloud_worker(
             environment=_environment(tmp_path, "livekit"),
         )

@@ -7,7 +7,7 @@
   "summary": "Reserve tables with party-size, timing, special-request, and waitlist handling.",
   "integration_points": [
     "tools.py:TodoRestaurantGateway",
-    "VOICEKIT_TRANSFER_NUMBER",
+    "VOICEY_TRANSFER_NUMBER",
     "agent.py:Results.webhook"
   ]
 }

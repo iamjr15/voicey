@@ -2,6 +2,19 @@
 
 Decisions are append-only. A superseding decision links the earlier entry and explains the migration impact.
 
+## 2026-08-02 — Deterministic voices and Pipecat/Claude tool turns
+
+- Resolve `Voice(id=None)` to explicit checked-in IDs on both runtimes instead
+  of inheriting SDK-specific defaults. The curated defaults are Cartesia
+  Skylar (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`), ElevenLabs' installed
+  LiveKit default (`hpp4J3VqNfWAUOO0d1Us`), and OpenAI `alloy`. The Cartesia
+  choice was verified against the authenticated 2026-08-02 voice catalog.
+- Disable Anthropic adaptive thinking for the pinned Pipecat 1.6.0 + Claude
+  Sonnet 5 path. A credentialed tool-call run proved that Sonnet can emit a
+  signature-only thinking block, which this Pipecat adapter persists without
+  a role and cannot convert on the following turn. This is a narrow installed-
+  version workaround, not a custom conversation abstraction.
+
 ## 2026-07-28 — Launch documentation and security evidence
 
 - Generate the config, public Python, webhook, and error reference from
@@ -23,7 +36,7 @@ Decisions are append-only. A superseding decision links the earlier entry and ex
 
 ## 2026-07-26 — P0 defaults accepted
 
-- **Product name:** keep `voicekit` in package, CLI, entry-point groups, docs, and examples through the build. Do not publish or register public resources. Prepare `RENAME.md` for the human-selected final name.
+- **Product name:** keep `voicey` in package, CLI, entry-point groups, docs, and examples through the build. Do not publish or register public resources. Prepare `RENAME.md` for the human-selected final name.
 - **Reference latency stack:** Deepgram Nova-3 STT, Anthropic Claude LLM, and Cartesia Sonic 3.5 TTS.
 - **Simulation judge:** local Ollama by default, with an explicit cloud-model override in config.
 - **Vobiz on LiveKit:** run the P3 SIP feasibility spike. If unsupported, expose Vobiz only on the Pipecat path behind the capability registry; do not silently route or downgrade.
@@ -63,7 +76,7 @@ These choices apply the documented proposals authorized in the build mandate and
 
 ## 2026-07-27 — P1 playground listener and media boundary
 
-- `voicekit dev --port N` binds the public runtime/signaling listener to
+- `voicey dev --port N` binds the public runtime/signaling listener to
   loopback port `N` and the admin playground/read API to loopback port `N + 1`.
   Only the public listener is eligible for tunneling.
 - Browser sessions use one-use, short-lived bearer tokens derived with domain
@@ -82,28 +95,28 @@ These choices apply the documented proposals authorized in the build mandate and
 ## 2026-07-27 — Pipecat Evals dependency compatibility
 
 - Install the official `pipecat-ai[evals]==1.6.0` extra as part of
-  `voicekit[pipecat]`; the P1 harness uses the installed `pipecat eval`
-  commands and eval transport rather than a voicekit-owned simulator.
+  `voicey[pipecat]`; the P1 harness uses the installed `pipecat eval`
+  commands and eval transport rather than a voicey-owned simulator.
 - Accept Rich `>=13.9.4,<16` instead of requiring Rich 15. Pipecat 1.6.0's
-  `cli` dependency (included by `evals`) pins Rich below 14, and voicekit uses
+  `cli` dependency (included by `evals`) pins Rich below 14, and voicey uses
   only APIs present in both supported ranges. The CLI's behavior and output
   contracts are unchanged and remain regression-tested at the resolver-selected
   Rich 13.9.4.
 
 ## 2026-07-27 — Canonical Docker packaging and process boundary
 
-- Build the production runtime from the released voicekit wheel plus the
-  runtime/carrier extras selected in `voicekit.jsonc`. An unpublished `.dev0`
+- Build the production runtime from the released voicey wheel plus the
+  runtime/carrier extras selected in `voicey.jsonc`. An unpublished `.dev0`
   checkout must pass a locally built wheel explicitly; the generator copies it
   mode 0600 and the final image removes all build inputs.
-- Install non-voicekit `[project].dependencies` separately and run project
+- Install non-voicey `[project].dependencies` separately and run project
   agent/native-flow modules from `/app`. Do not package an arbitrary flat
   project tree as part of the engine distribution.
 - Use a Docker-managed local-driver volume, SQLite WAL/FULL, local artifacts,
   and one steady replica. Same-host generations may overlap only for controlled
   handover and share fenced leases; network volumes and cross-host SQLite are
   rejected at startup.
-- Let the voicekit container supervisor own SIGINT/SIGTERM and both Uvicorn
+- Let the voicey container supervisor own SIGINT/SIGTERM and both Uvicorn
   listeners. It closes admission before the bounded call drain, flushes due
   result delivery, then exits. Uvicorn's installed server API is used with
   signal capture disabled rather than installing competing handlers.
@@ -131,7 +144,7 @@ These choices apply the documented proposals authorized in the build mandate and
 
 - Automatic Elastic SIP trunk recording has no per-trunk completion callback:
   the official endpoint and pinned SDK expose only recording mode and trim.
-  Voicekit therefore does not claim a callback that Twilio cannot configure.
+  Voicey therefore does not claim a callback that Twilio cannot configure.
 - Correlate the call through LiveKit's documented built-in participant
   attribute `sip.twilio.callSid`. The LiveKit SIP service maps Twilio's carrier
   header for inbound and outbound participants; outbound attributes may arrive
@@ -149,7 +162,7 @@ These choices apply the documented proposals authorized in the build mandate and
 
 ## 2026-07-27 — LiveKit browser credential boundary
 
-- Keep the one-use voicekit session token on the authenticated HTTP exchange:
+- Keep the one-use voicey session token on the authenticated HTTP exchange:
   the browser sends it only as `Authorization: Bearer …` to the public token
   endpoint after the admin listener has durably reserved the call.
 - Return a distinct, short-lived, least-privilege LiveKit room credential only
@@ -158,7 +171,7 @@ These choices apply the documented proposals authorized in the build mandate and
   protocol.
 - The official client currently carries its scoped room credential during the
   WebSocket join using provider-native query/protocol fields. This is permitted
-  and documented explicitly. The voicekit token and LiveKit API key/secret
+  and documented explicitly. The voicey token and LiveKit API key/secret
   never enter a URL or browser bundle.
 - Validate LiveKit project credentials during `init`, `keys`, and `doctor`
   through `LiveKitAPI.room.list_rooms(ListRoomsRequest())`, an authenticated
@@ -186,7 +199,7 @@ These choices apply the documented proposals authorized in the build mandate and
   `AgentSession.run()`/`RunResult.expect`. The schema is test input, not a
   conversation flow or runtime abstraction.
 - Use local Ollama `gemma2:9b` for both persona-only sim-caller planning and
-  cited judging by default. A secret-free `tests/voicekit-test.jsonc` may select
+  cited judging by default. A secret-free `tests/voicey-test.jsonc` may select
   an OpenAI-compatible cloud endpoint and names only the key environment
   variable.
 - Treat an initial failure as failed even when one or more of the three reruns
@@ -198,18 +211,206 @@ These choices apply the documented proposals authorized in the build mandate and
 - Leave `--live` fail-closed until the P3 PSTN loopback harness exists. A lower
   tier is never an implicit substitute.
 
+## 2026-08-02 — Tool-capable local judge supersedes Gemma 2
+
+- Supersede the local-model portion of **2026-07-27 — Unified native testing
+  boundary**: use Ollama `qwen3:8b` for both persona-only sim-caller planning
+  and cited judging by default. The secret-free cloud override is unchanged.
+- A credentialed native LiveKit run established that
+  `AgentSession.run()`/`RunResult.expect().judge()` includes the agent's tool
+  schemas in the judge request. Ollama `gemma2:9b` rejects that request because
+  the model does not support tools, so it cannot satisfy the settled native
+  testing boundary. Ollama identifies Qwen3 8B as tool-capable and uses Qwen3
+  in its official tool-calling examples.
+- Keep native LiveKit judging intact instead of stripping tools or introducing
+  a parallel judge path. This preserves the runtime-native testing contract.
+- Shared appointment scenarios include explicit LiveKit-targeted caller turns
+  that confirm the captured name and email. The runner must not auto-confirm
+  or bypass those pinned native contact tasks. Pipecat retains its native final
+  contact-confirmation boundary; shared goals, mutations, and hard outcomes are
+  unchanged. Runtime-targeted turns are filtered before turn budgets/reporting.
+- Send Ollama's supported `think: false` request option for deterministic test
+  planning and judging. Bound each native LiveKit judgment to 60 seconds and
+  the complete native conversation to the scenario's declared duration; a
+  timeout is preserved as failed evidence and never hangs the suite.
+- Apply content and goal assertions to the last assistant message in a native
+  LiveKit run. Tool-using turns may contain a pre-tool acknowledgement and a
+  post-tool answer; judging the first message produces a false failure even
+  when the native tool output and final response satisfy the criterion.
+- Implement `send_after(event="llm_started")` on LiveKit text simulations with
+  the installed native `agent_state_changed` event and `interrupt(force=True)`
+  before submitting the next run input. Post-interruption contact confirmation
+  remains explicit: LiveKit receives a clean cancellation intent, captures and
+  confirms the email, then receives the reference; Pipecat may perform its
+  native lookup from one interrupted utterance containing reference and email.
+- Preserve caller inputs alongside native assistant events in the cited
+  transcript. LiveKit run events omit submitted user text; Pipecat Evals keeps
+  it in the turn-tagged debug trace rather than `events_seen`. Reconstruct the
+  ordered, mock-data transcript from those native sources before judging.
+- After LiveKit prebuilt contact tasks return, use deterministic `session.say`
+  prompts rather than an instruction-only LLM generation. Anthropic Sonnet 5
+  rejects the intermittent assistant-prefill context produced by that extra
+  generation. The confirmed task context remains native and subsequent caller
+  input drives the specialist LLM normally.
+- The text test tier injects a deterministic native `transfer_to_human` stub,
+  matching the existing Pipecat eval agent's fake transfer destination. It
+  proves tool selection without claiming a SIP transfer or placing a call.
+- The privacy-safe voicemail template says only that the team is returning a
+  call; “appointment” and “scheduling request” were purposes and contradicted
+  the recipe's own no-purpose rule.
+- The appointment text scenario allows 20 seconds for the provider-backed
+  calendar search/tool/reply roundtrip. A credentialed run measured 13.259
+  seconds against the original arbitrary 12-second bound. This does not change
+  the §17 synthesized-audio voice-to-voice p50/p95 latency gate.
+
+## 2026-08-03 — Native Anthropic cloud judge and post-session evaluation
+
+- Keep local Ollama `qwen3:8b` as the product default, but honor the operator's
+  cloud-only certification choice through the existing explicit override. Add
+  `service: "anthropic"` alongside the existing OpenAI-compatible service;
+  store only `api_key_env`, and call Anthropic's native Messages API rather than
+  assuming an OpenAI-compatible endpoint.
+- Use the installed Pipecat 1.6.0 `judge.eval.factory` contract to return its
+  native `AnthropicLLMService`. Use LiveKit 1.6.7's native Anthropic plugin for
+  `RunResult.expect().judge()`. The runtime workflow remains native on both
+  sides; no second evaluator DSL or tool protocol is introduced.
+- A credentialed API probe established that `claude-sonnet-5` rejects the
+  legacy `temperature` request field. The native Messages adapter therefore
+  omits it. The same probe and a direct Pipecat `EvalJudge` call returned valid
+  cloud-model evidence.
+- The installed LiveKit Anthropic plugin injects a trailing user sentinel only
+  for Claude 4.6 model prefixes, while Sonnet 5 also rejects assistant
+  prefilling. Apply the plugin's same behavior in a narrow Sonnet 5 wrapper and
+  preserve the original chat context.
+- Measure a scenario's duration around the native agent conversation only.
+  Close the agent session, then execute the collected native goal judgments
+  under their own 60-second bounds. Judge latency must never prevent the final
+  business tool call or turn a completed conversation into a scenario timeout;
+  completed results remain available for native assertions after session close.
+- Use Anthropic structured outputs for sim-caller plans and cited transcript
+  verdicts. The Messages request supplies `output_config.format` with a strict
+  JSON schema; Pipecat's native judge disables adaptive thinking and uses a
+  bounded token budget. A real Sonnet 5 structured-output call and a real
+  Pipecat `EvalJudge` call both passed on 2026-08-03.
+- A Pipecat turn that asserts only a function call must also wait for the next
+  native response event. Pipecat Evals emits the function-call event before the
+  post-tool model reply; advancing immediately lets the next caller utterance
+  interrupt that reply. This is evaluator synchronization, not a conversation
+  DSL or a replacement for native events.
+- Give every `voicey test` invocation an immutable run id below
+  `.voicey/test-runs/`. Attempt numbers are unique only inside one invocation;
+  reusing their SQLite file across commands caused correct duplicate-call-id
+  rejection and misleading connection failures.
+- The Pipecat eval worker supplies an eval-only transfer destination so the
+  production transfer function is exercised without contacting a carrier. On
+  native eval-client disconnect it persists the terminal event immediately,
+  before EvalSuite can stop the bot process; ordinary session shutdown remains
+  idempotent.
+- Keep runtime-specific caller pacing explicit. Pipecat receives compact
+  identity/reference turns and waits through post-tool replies; LiveKit keeps
+  the extra native `GetNameTask`/`GetEmailTask` confirmations. The final booking
+  response must include date, time, timezone, and reference on both runtimes.
+- Credentialed model-API-only certification on 2026-08-03 regenerated both
+  appointment projects from current recipe source and ran all seven text cases
+  through the production native paths. Pipecat and LiveKit each passed every
+  case on the first attempt with Deepgram Nova-3, Claude Sonnet 5, Cartesia
+  Sonic 3.5, native runtime judges, typed tools, and durable result checks.
+  Local Ollama was not used for this evidence. Audio, PSTN, and physical-input
+  gates remain separate and unpromoted.
+
+## 2026-08-03 — Twilio SIP password validation before mutation
+
+- A credentialed Twilio↔LiveKit provision run established that Twilio rejects
+  SIP credential passwords unless they contain at least 12 characters, one
+  lowercase letter, one uppercase letter, and one number (`21240`). Validate
+  this exact rule in `TwilioLiveKitSipConfig` before creating any LiveKit or
+  Twilio resource.
+- The first observed rejection occurred after trunks and a credential list had
+  been created but before number attachment. The provisioner correctly fenced
+  the outcome as ambiguous; the exact ledgered operation was then rolled back,
+  and both the API and LiveKit console showed zero temporary resources. A retry
+  with a compliant generated password passed provision, idempotent reuse, and
+  reverse rollback. This evidence does not promote the paid PSTN gate.
+
+## 2026-08-03 — API-only P3 recipe certification and native ownership
+
+- Honor the operator's model-API-only test choice through the existing native
+  Anthropic override. Keep local Ollama as the product default, but make no
+  Ollama request part of this certification evidence.
+- Pace multi-turn provider scenarios around native post-tool responses rather
+  than sending the next caller turn into an unfinished reply. Give each tool
+  its complete typed facts and reserve explicit confirmation for mutating
+  operations. Read-only lead qualification runs immediately once need,
+  timeline, budget range, and company size are present.
+- Enforce LiveKit restaurant waitlist ownership structurally: the intake Agent
+  can search and hand off but cannot invoke `join_waitlist`; only the native
+  `WaitlistAgent` receives that mutating tool. The runtime-specific scenario
+  asserts the handoff before consent and mutation.
+- Select the local text-tier transfer stub from the scenario's expected native
+  tool. A warm-transfer scenario therefore exercises
+  `warm_transfer_to_human`, while ordinary transfer scenarios retain the cold
+  stub. Successful stubs mirror the production result (`status: transferred`)
+  and do not claim a carrier call or human acceptance.
+- Treat an answering-machine greeting as an explicit mode switch. Each P3
+  recipe uses one short generic callback message, reveals no call purpose or
+  caller data, and ends without reverting to its normal inbound greeting.
+- Six fresh projects ran complete unfiltered suites on 2026-08-03. Restaurant
+  passed 5+5, Front Desk 6+6, and Lead Intake 6+6 across native Pipecat and
+  LiveKit; all 34 cases passed on their first attempt with Claude Sonnet 5 and
+  native Anthropic judging. Audio, JUnit artifact, PSTN, and physical-transfer
+  rows remain separate and unpromoted.
+
+## 2026-08-03 — Live account and no-call control-plane boundary
+
+- Promote only the commands that actually returned zero: Twilio's no-charge
+  test-credential API contract, Twilio live account/owned-number readiness,
+  Twilio↔LiveKit provision/reuse/rollback, Vobiz live account/owned-number
+  readiness, and Vobiz↔LiveKit provision/reuse/rollback.
+- Retain provider ownership and cleanup evidence without secrets. Twilio,
+  Vobiz, and LiveKit inspections showed zero temporary resources after reverse
+  rollback; the Vobiz run restored the exact pre-existing Voice API
+  application route.
+- Do not infer media from control-plane success. No paid PSTN call, completed
+  recording, live private briefing, microphone conversation, or physical-
+  handset test is green.
+- Pipecat Cloud and LiveKit Cloud CLIs authenticate, and AWS STS authenticates,
+  but there is no signed deployed results companion, selected immutable worker
+  image, or dedicated disposable object bucket. Fly and Railway are
+  unauthenticated, and Docker is stopped. No external deployment is promoted.
+
+## 2026-08-02 — Credentialed Vobiz SIP API envelope correction
+
+- A credentialed control-plane run supersedes the mocked credential/list
+  shapes used by the 2026-07-27 Vobiz implementation: existing SIP credentials
+  are listed from `/trunks/credentials` under an `objects` envelope, while
+  owned numbers are returned under an `items` envelope. An empty trunk list is
+  represented as `objects: null`, not an empty array.
+- Accept the live `items` envelope in the shared strict list parser and keep
+  fail-closed exact-id, exact-number, and exact-username matching. Do not fall
+  back to fuzzy adoption or rotate the write-only credential.
+- Preserve the full create/reuse/reverse-rollback gate. The correction was
+  discovered before any trunk, binding, or LiveKit dispatch resource was
+  created.
+- The next credentialed attempt established that an owned number may already
+  be attached to a Voice API application. Snapshot both `application_id` and
+  `trunk_group_id`, ledger number-route rollback ownership before mutation,
+  detach the current route, require the documented `204` trunk-assignment
+  response, and restore the exact prior application or trunk by compare-and-
+  swap. The live application-attachment restore also returns `204`. A 400 must
+  never be worked around by discarding the existing route.
+
 ## 2026-07-28 — Paid PSTN test boundary
 
 - The P3 harness resolves the earlier `--live` placeholder. For Pipecat, use
   the Fixa architectural pattern—an independent native Pipecat caller through
   a Twilio Media Stream—but build it against installed
-  `pipecat-ai==1.6.0`, the reference Anthropic model, voicekit's signed
+  `pipecat-ai==1.6.0`, the reference Anthropic model, voicey's signed
   callback boundary, and its durable intent ledger. Fixa is research input,
   not a dependency or copied runtime.
 - For LiveKit, use the agent-simulator architectural pattern: an isolated
   native RTC room, a native caller `AgentSession`, and a target outbound SIP
   participant. The referenced simulator's MCP surface is deliberately not
-  adopted; voicekit contains no MCP product path.
+  adopted; voicey contains no MCP product path.
 - Live calls are black-box assertions. Preserve caller/agent transcript,
   carrier terminal status, path, and secret-free provider/runtime ids. Do not
   claim hidden target tool or result evidence.
@@ -226,7 +427,7 @@ These choices apply the documented proposals authorized in the build mandate and
 - Use native Call Control `command_id` plus the durable intent, and bind an
   ambiguous create only through the signed callback's `client_state`. The
   current Voice API does not document a safe call-list-by-command-id
-  reconciliation query, so voicekit does not invent one.
+  reconciliation query, so voicey does not invent one.
 - Treat number orders as asynchronous and return a phone-number resource only
   after the owned-number API confirms it. A pending order remains an
   indeterminate, inspect-before-retry operation.
@@ -243,7 +444,7 @@ These choices apply the documented proposals authorized in the build mandate and
 
 ## 2026-07-27 — Runtime parity evidence boundary
 
-- Treat parity as equality of voicekit's externally observable contract, not
+- Treat parity as equality of voicey's externally observable contract, not
   identical framework internals. Conversation logic remains native
   `pipecat.flows` or native LiveKit `Agent` workflows; no translation layer or
   custom flow DSL is introduced.
@@ -273,7 +474,7 @@ These choices apply the documented proposals authorized in the build mandate and
   would terminate the agent media stream before acceptance.
 - Make `warm_transfer_to_human` a native global Pipecat Flows function with
   required `briefing` and `caller_consented=true` fields. The recipe remains
-  native Flows code; voicekit adds no workflow DSL.
+  native Flows code; voicey adds no workflow DSL.
 - Persist only a SHA-256 briefing digest. Raw briefing text exists transiently
   in escaped TwiML sent to Twilio and is excluded from the ledger, callback
   URLs, results, and logs.
@@ -353,7 +554,7 @@ These choices apply the documented proposals authorized in the build mandate and
   complete. Account mutation, paid calls, recordings, regional behavior, and
   both-path physical endpoints remain pending until the guarded runbook
   actually passes.
-- Define generic SIP as LiveKit-only and operator-managed. Voicekit owns only
+- Define generic SIP as LiveKit-only and operator-managed. Voicey owns only
   the LiveKit inbound trunk, dispatch rule, outbound trunk, ledger, and reverse
   rollback; it never invents an external provider control plane.
 - Require explicit `udp|tcp|tls` and `disable|allow|require` values and optional
@@ -399,7 +600,7 @@ These choices apply the documented proposals authorized in the build mandate and
 - Use boto3's S3-compatible client for AWS S3, Fly Tigris, R2, and MinIO. The
   local resolver selected `boto3==1.43.57`; the compatibility range is
   `>=1.40,<2`. Require HTTPS except for loopback emulators, namespace every key,
-  attach a voicekit SHA-256 digest, and run write/read/delete preflight before
+  attach a voicey SHA-256 digest, and run write/read/delete preflight before
   admission.
 - Keep object credentials entirely in the target secret store or workload
   identity. The resource ledger records only bucket/resource identifiers and
@@ -408,7 +609,7 @@ These choices apply the documented proposals authorized in the build mandate and
 ## 2026-07-28 — Results-service process and callback ownership
 
 - Keep the Fly companion free of both runtime dependencies. The
-  `voicekit[companion]` extra contains managed storage plus carrier callback
+  `voicey[companion]` extra contains managed storage plus carrier callback
   verification/download dependencies; native Pipecat and LiveKit workers
   remain separate deploy artifacts.
 - Use two bounded Postgres pools, one for repository work and one for the relay
@@ -422,7 +623,7 @@ These choices apply the documented proposals authorized in the build mandate and
   readiness is the signed relay response covering repository, journal, object
   storage, protocol, and replica admission state.
 - Install no carrier callback routes by default. An explicit
-  `VOICEKIT_CALLBACK_PROVIDERS` list installs both signed status and recording
+  `VOICEY_CALLBACK_PROVIDERS` list installs both signed status and recording
   endpoints for those carriers. Answer/media endpoints remain on the cloud
   worker.
 - Let a verified carrier status callback update only the latest durable
@@ -451,7 +652,7 @@ These choices apply the documented proposals authorized in the build mandate and
   matching ledgered resource; require `--adopt` for exact unledgered resources
   and never grant adopted resources delete ownership.
 - Checkpoint after each external mutation and never auto-delete on failure.
-  Explicit rollback deletes only voicekit-created resources in reverse order:
+  Explicit rollback deletes only voicey-created resources in reverse order:
   Tigris bucket, MPG cluster, then app.
 - Run two companion Machines with Fly service-level liveness checks, rolling
   replacement, `SIGTERM`, and a 45-second platform timeout. Promotion requires
@@ -475,7 +676,7 @@ These choices apply the documented proposals authorized in the build mandate and
 - Persist a separate owner-only, nonsecret ledger per cloud platform. Reuse
   only exact ledgered identity, require explicit adoption for existing
   resources, retain previous LiveKit version and carrier rollback facts, and
-  delete only resources explicitly marked created by voicekit.
+  delete only resources explicitly marked created by voicey.
 - Mount stable provider-answer XML on the durable companion. Use the official
   Pipecat Cloud gateway contract for Twilio, Telnyx, Plivo, and the
   Plivo-compatible Vobiz wire. Telnyx's TeXML Application remains external
@@ -502,10 +703,10 @@ These choices apply the documented proposals authorized in the build mandate and
   growth because bounded transient allocations are expected.
 - Keep the short CI soak as regression evidence only. The release row requires
   `duration_s >= 86400` and is scheduled on a self-hosted Linux runner labeled
-  `voicekit-soak`; GitHub's documented six-hour hosted-job limit cannot satisfy
+  `voicey-soak`; GitHub's documented six-hour hosted-job limit cannot satisfy
   the contract.
 - During drain, preserve only reservations already exposed to callers. Reject
-  every new browser reservation and unreserved SIP job with `VK-RUN-008` before
+  every new browser reservation and unreserved SIP job with `VY-RUN-008` before
   invoking the native runtime drain.
 
 ## 2026-07-28 — Metrics and tracing boundary
@@ -516,14 +717,14 @@ These choices apply the documented proposals authorized in the build mandate and
 - Expose Prometheus on a dedicated listener, loopback by default. This keeps
   carrier/browser routes unchanged and gives the process one identical
   lifecycle on Pipecat, LiveKit, Docker, and the managed companion.
-- Treat `voicekit_calls_total` as the call-rate source; operators use PromQL
+- Treat `voicey_calls_total` as the call-rate source; operators use PromQL
   `rate()` rather than a second periodically sampled gauge.
 - Use the stable OpenTelemetry Python 1.39 OTLP/HTTP protobuf API with a local
   `TracerProvider`, `BatchSpanProcessor`, and explicit shutdown. Do not replace
   an embedding application's global provider.
 - Initialize exporter configuration before admission and recreate it after a
   worker-process PID change. A bad endpoint/header/bind fails with
-  `VK-OBS-006`; an unavailable collector after successful startup follows the
+  `VY-OBS-006`; an unavailable collector after successful startup follows the
   SDK's asynchronous retry/drop behavior and cannot break terminal
   persistence.
 - Keep OTLP attributes to opaque ids and bounded operational metadata.
@@ -555,21 +756,21 @@ These choices apply the documented proposals authorized in the build mandate and
   30-second deployment overlap, then require release success, `/healthz`, and
   authenticated `/v1/ready`.
 - Checkpoint every mutation and do not auto-delete failed work. Explicit
-  rollback removes only voicekit-created domain, bucket, Postgres service,
+  rollback removes only voicey-created domain, bucket, Postgres service,
   application service, and project in reverse order. Adopted resources are
   never deleted.
 
 ## 2026-07-28 — Upgrade transaction and recipe baseline
 
 - Use the current `uv >=0.11,<1` lockfile-only contract. Stable upgrades run
-  `uv lock --upgrade-package voicekit --prerelease
+  `uv lock --upgrade-package voicey --prerelease
   if-necessary-or-explicit`; canaries use `--prerelease allow`. Global
   `disallow` cannot resolve required prerelease-tagged transitive contracts, so
-  stable mode instead rejects a prerelease voicekit version before sync. Both
+  stable mode instead rejects a prerelease voicey version before sync. Both
   sync and inspect drift with that same explicit prerelease mode; uv treats a
   different or omitted mode as a lock-freshness change. `pyproject.toml`
   remains user-owned.
-- Commit `voicekit.recipe-lock.json` as the exact upstream source baseline
+- Commit `voicey.recipe-lock.json` as the exact upstream source baseline
   copied by `init` or `recipes add`. This is deterministic public metadata, not
   protected state. It enables a true base/local/upstream comparison without a
   remote registry or hidden cache.

@@ -12,7 +12,7 @@ capture. Both variants consume the plain typed functions in `tools.py`.
 1. Replace `TodoCalendarGateway` in `tools.py` with your calendar API. Keep the
    typed tool functions and their return shapes stable, or update the evals with
    the contract change.
-2. Inject an E.164 human destination as `VOICEKIT_TRANSFER_NUMBER` in the
+2. Inject an E.164 human destination as `VOICEY_TRANSFER_NUMBER` in the
    runtime environment. Each runtime exposes its native transfer function only
    when that destination exists.
 3. Replace the placeholder results receiver through your deployment
@@ -27,8 +27,8 @@ conversation and CI, but it does not reserve a real calendar resource.
 ## Run
 
 ```bash
-voicekit doctor
-voicekit dev
+voicey doctor
+voicey dev
 ```
 
 Next: open the printed local playground URL and try booking, changing, then
@@ -50,19 +50,21 @@ a recipe state machine.
 ## Pipecat Evals
 
 `tests/scenarios.py` is the canonical seven-case suite used by both runtimes.
-`voicekit test` compiles it to Pipecat Evals YAML or native LiveKit
-`AgentSession.run()` assertions according to `voicekit.jsonc`. Local Ollama is
+`voicey test` compiles it to Pipecat Evals YAML or native LiveKit
+`AgentSession.run()` assertions according to `voicey.jsonc`. Local Ollama is
 the default sim caller and cited judge:
 
 ```bash
-ollama pull gemma2:9b
-voicekit test
-voicekit test --audio
-voicekit test --report junit
+ollama pull qwen3:8b
+voicey test
+voicey test --audio
+voicey test --report junit
 ```
 
 Pipecat compilation spawns a generated `-t eval` bot through the production
-session builder. LiveKit text tests use its native expect/judge API; its audio
+session builder. A tool-only Pipecat turn waits for both the native function
+event and its post-tool response before the next caller input. LiveKit text
+tests use its native expect/judge API; its audio
 tier attaches a virtual PCM microphone and speaker so Kokoro caller speech
 travels through the real STT→LLM→TTS path and Moonshine judges the spoken
 output. An initial failure is rerun three times and remains failed while its
@@ -80,7 +82,7 @@ The P1 reference-stack latency gate uses a dedicated 20-turn manifest and the
 production observer's persisted end-to-end samples:
 
 ```bash
-uv run python /path/to/voicekit/tests/verification/p1_latency_gate.py \
+uv run python /path/to/voicey/tests/verification/p1_latency_gate.py \
   --project "$PWD"
 ```
 
@@ -89,9 +91,16 @@ credentials must be injected into the process; the script never reads or logs
 secret values from scenario YAML.
 
 For a cloud judge or sim caller, create the secret-free
-`tests/voicekit-test.jsonc` config documented in `docs/testing.md` and inject
-the referenced key with `voicekit keys add openai`. Do not put a key in the
-config.
+`tests/voicey-test.jsonc` config documented in `docs/testing.md` and inject
+the referenced key with `voicey keys add anthropic` or `voicey keys add openai`.
+Native Anthropic and OpenAI-compatible overrides are supported; do not put a
+key in the config.
+
+The 2026-08-03 reference text certification used the native Anthropic override
+only—no Ollama—and regenerated projects for both runtimes. All seven cases
+passed on their first attempt through Pipecat Evals and LiveKit's native test
+API with production typed tools and durable result assertions. This does not
+replace the still-pending audio, PSTN, or physical-input gates.
 
 Next: run the text suite on every prompt/tool change and the audio suite before
 shipping.

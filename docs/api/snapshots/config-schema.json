@@ -1,5 +1,5 @@
 {
-  "contract": "voicekit.Agent serialized configuration",
+  "contract": "voicey.Agent serialized configuration",
   "schema": {
     "$defs": {
       "Behavior": {

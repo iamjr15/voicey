@@ -12,16 +12,16 @@ import httpx
 import pytest
 from livekit.protocol import sip as lk_sip
 
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.plivo import (
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.plivo import (
     PlivoLiveKitSipConfig,
     PlivoLiveKitSipProvisioner,
     PlivoManagedTrunk,
     PlivoSipBackend,
     PlivoSipHTTPBackend,
 )
-from voicekit.runtimes.livekit.sip import LiveKitSipAPI, ManagedSipResource
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.runtimes.livekit.sip import LiveKitSipAPI, ManagedSipResource
+from voicey.telephony.ledger import TelephonyLedger
 
 AUTH_ID = "MA000000000000000000"
 AUTH_TOKEN = "not-a-real-plivo-token"  # pragma: allowlist secret
@@ -101,7 +101,7 @@ class FakeLiveKit:
         self.dispatch.remove(item)
         return item
 
-    async def delete_sip_trunk(
+    async def delete_trunk(
         self,
         request: lk_sip.DeleteSIPTrunkRequest,
     ) -> lk_sip.SIPTrunkInfo:
@@ -127,7 +127,7 @@ class FakePlivo:
         self.deleted: list[str] = []
         self.restored: list[dict[str, object]] = []
         self.fail_at: str | None = None
-        self.fail_error: Exception = VoicekitError("VK-TEL-004", detail="definitive")
+        self.fail_error: Exception = VoiceyError("VY-TEL-004", detail="definitive")
 
     def snapshot_number(self, number: str) -> dict[str, object]:
         assert number == NUMBER
@@ -151,7 +151,7 @@ class FakePlivo:
     ) -> ManagedSipResource:
         self._fail("credential")
         assert name.endswith("-credential-e32111f11142")
-        assert username == "voicekituser"
+        assert username == "voiceyuser"
         assert password == "secret!"  # pragma: allowlist secret
         if self.credential is None:
             self.credential = ManagedSipResource("plivo_credential", "credential-1", True)
@@ -231,7 +231,7 @@ def _config(**values: object) -> PlivoLiveKitSipConfig:
         "number": NUMBER,
         "agent_name": "booking",
         "livekit_sip_uri": "sip:project.sip.livekit.cloud",
-        "auth_username": "voicekituser",
+        "auth_username": "voiceyuser",
         "auth_password": "secret!",  # pragma: allowlist secret
     }
     return PlivoLiveKitSipConfig(**cast("Any", {**defaults, **values}))
@@ -258,7 +258,7 @@ async def test_provisions_official_plivo_livekit_transport_and_security(tmp_path
         assert outbound.address == "outbound.sip.plivo.com"
         assert outbound.transport == lk_sip.SIP_TRANSPORT_TLS
         assert outbound.media_encryption == lk_sip.SIP_MEDIA_ENCRYPT_REQUIRE
-        assert outbound.auth_username == "voicekituser"
+        assert outbound.auth_username == "voiceyuser"
         assert json.loads(dispatch.room_config.agents[0].metadata)["tier"] == "beta"
     finally:
         ledger.close()
@@ -310,16 +310,16 @@ async def test_definitive_failure_rolls_back_but_ambiguous_failure_stops(
     )
     try:
         plivo.fail_at = "binding"
-        with pytest.raises(VoicekitError) as definitive:
+        with pytest.raises(VoiceyError) as definitive:
             await provisioner.provision(_config())
-        assert definitive.value.code == "VK-TEL-004"
+        assert definitive.value.code == "VY-TEL-004"
         assert ledger.open_provisioning(provider="plivo-livekit") == ()
         assert plivo.uri is plivo.credential is plivo.inbound is plivo.outbound is None
 
-        plivo.fail_error = VoicekitError("VK-TEL-011", detail="ambiguous")
-        with pytest.raises(VoicekitError) as ambiguous:
+        plivo.fail_error = VoiceyError("VY-TEL-011", detail="ambiguous")
+        with pytest.raises(VoiceyError) as ambiguous:
             await provisioner.provision(_config())
-        assert ambiguous.value.code == "VK-TEL-006"
+        assert ambiguous.value.code == "VY-TEL-006"
         assert ledger.open_provisioning(provider="plivo-livekit")[0].state == "ambiguous"
     finally:
         ledger.close()
@@ -396,20 +396,20 @@ def test_http_backend_create_adopt_bind_restore_and_delete() -> None:
     backend, client = _http_backend(fake)
     try:
         snapshot = backend.snapshot_number(NUMBER)
-        uri = backend.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+        uri = backend.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
         credential = backend.ensure_credential(
-            name="voicekit-credential",
-            username="voicekituser",
+            name="voicey-credential",
+            username="voiceyuser",
             password="secret!",  # pragma: allowlist secret
         )
         inbound = backend.ensure_trunk(
-            name="voicekit-in",
+            name="voicey-in",
             direction="inbound",
             primary_uri_uuid=uri.resource_id,
             secure=False,
         )
         outbound = backend.ensure_trunk(
-            name="voicekit-out",
+            name="voicey-out",
             direction="outbound",
             credential_uuid=credential.resource_id,
             secure=True,
@@ -419,11 +419,11 @@ def test_http_backend_create_adopt_bind_restore_and_delete() -> None:
         binding = backend.attach_number(trunk_id=inbound.resource.resource_id, number=NUMBER)
         assert binding.created
         assert not backend.ensure_uri(
-            name="voicekit-uri", uri="project.example;transport=tcp"
+            name="voicey-uri", uri="project.example;transport=tcp"
         ).created
         assert not backend.ensure_credential(
-            name="voicekit-credential",
-            username="voicekituser",
+            name="voicey-credential",
+            username="voiceyuser",
             password="secret!",  # pragma: allowlist secret
         ).created
         backend.restore_number(snapshot)
@@ -444,15 +444,15 @@ def test_http_backend_drift_nonconfirmation_and_ambiguous_response_fail_closed()
     fake = FakePlivoHTTP()
     backend, client = _http_backend(fake)
     try:
-        backend.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+        backend.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
         fake.uris[0]["uri"] = "human.example;transport=tcp"
-        with pytest.raises(VoicekitError, match="differs"):
-            backend.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+        with pytest.raises(VoiceyError, match="differs"):
+            backend.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
 
         fake.apply_number = False
-        with pytest.raises(VoicekitError) as unconfirmed:
+        with pytest.raises(VoiceyError) as unconfirmed:
             backend.attach_number(trunk_id="trunk-1", number=NUMBER)
-        assert unconfirmed.value.code == "VK-TEL-011"
+        assert unconfirmed.value.code == "VY-TEL-011"
     finally:
         client.close()
 
@@ -471,16 +471,16 @@ def test_http_backend_drift_nonconfirmation_and_ambiguous_response_fail_closed()
     ],
 )
 def test_config_rejects_unsafe_values(values: dict[str, object]) -> None:
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         _config(**values)
 
 
 def test_http_backend_rejects_bad_auth_and_unknown_resource() -> None:
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         PlivoSipHTTPBackend(auth_id="bad", auth_token=AUTH_TOKEN)
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         PlivoSipHTTPBackend(auth_id=AUTH_ID, auth_token="")
-    with pytest.raises(VoicekitError, match="normalized HTTPS"):
+    with pytest.raises(VoiceyError, match="normalized HTTPS"):
         PlivoSipHTTPBackend(
             auth_id=AUTH_ID,
             auth_token=AUTH_TOKEN,
@@ -491,7 +491,7 @@ def test_http_backend_rejects_bad_auth_and_unknown_resource() -> None:
         auth_token=AUTH_TOKEN,
         client=cast("httpx.Client", object()),
     )
-    with pytest.raises(VoicekitError, match="unknown"):
+    with pytest.raises(VoiceyError, match="unknown"):
         backend.delete_resource(ManagedSipResource("other", "id", True))
 
 
@@ -514,11 +514,11 @@ async def test_livekit_resource_drift_duplicates_and_unexpected_failure_are_fenc
         duplicate_inbound.CopyFrom(livekit.inbound[0])
         duplicate_inbound.sip_trunk_id = "inbound-duplicate"
         livekit.inbound.append(duplicate_inbound)
-        with pytest.raises(VoicekitError, match="duplicate managed LiveKit SIP"):
+        with pytest.raises(VoiceyError, match="duplicate managed LiveKit SIP"):
             await provisioner._ensure_livekit_inbound(config)
         livekit.inbound.pop()
         livekit.inbound[0].numbers[:] = ["+14155550199"]
-        with pytest.raises(VoicekitError, match="inbound trunk differs"):
+        with pytest.raises(VoiceyError, match="inbound trunk differs"):
             await provisioner._ensure_livekit_inbound(config)
         livekit.inbound[0].numbers[:] = [NUMBER]
 
@@ -526,11 +526,11 @@ async def test_livekit_resource_drift_duplicates_and_unexpected_failure_are_fenc
         duplicate_outbound.CopyFrom(livekit.outbound[0])
         duplicate_outbound.sip_trunk_id = "outbound-duplicate"
         livekit.outbound.append(duplicate_outbound)
-        with pytest.raises(VoicekitError, match="duplicate managed LiveKit outbound"):
+        with pytest.raises(VoiceyError, match="duplicate managed LiveKit outbound"):
             await provisioner._ensure_livekit_outbound(config, "outbound.sip.plivo.com")
         livekit.outbound.pop()
         livekit.outbound[0].address = "human-change.sip.plivo.com"
-        with pytest.raises(VoicekitError, match="outbound trunk differs"):
+        with pytest.raises(VoiceyError, match="outbound trunk differs"):
             await provisioner._ensure_livekit_outbound(config, "outbound.sip.plivo.com")
         livekit.outbound[0].address = "outbound.sip.plivo.com"
 
@@ -538,16 +538,16 @@ async def test_livekit_resource_drift_duplicates_and_unexpected_failure_are_fenc
         duplicate_dispatch.CopyFrom(livekit.dispatch[0])
         duplicate_dispatch.sip_dispatch_rule_id = "dispatch-duplicate"
         livekit.dispatch.append(duplicate_dispatch)
-        with pytest.raises(VoicekitError, match="duplicate managed LiveKit dispatch"):
+        with pytest.raises(VoiceyError, match="duplicate managed LiveKit dispatch"):
             await provisioner._ensure_dispatch(config, "inbound-1")
         livekit.dispatch.pop()
         livekit.dispatch[0].rule.dispatch_rule_individual.room_prefix = "human-"
-        with pytest.raises(VoicekitError, match="dispatch differs"):
+        with pytest.raises(VoiceyError, match="dispatch differs"):
             await provisioner._ensure_dispatch(config, "inbound-1")
 
         plivo.fail_at = "credential"
         plivo.fail_error = RuntimeError("unexpected")
-        with pytest.raises(VoicekitError, match="ambiguous"):
+        with pytest.raises(VoiceyError, match="ambiguous"):
             await provisioner.provision(config)
         assert ledger.open_provisioning(provider="plivo-livekit")[-1].state == "ambiguous"
     finally:
@@ -576,11 +576,11 @@ async def test_rollback_rejects_foreign_token_and_catalogs_cleanup_conflict(
             snapshot={},
             planned={},
         )
-        with pytest.raises(VoicekitError, match="another provider"):
+        with pytest.raises(VoiceyError, match="another provider"):
             await provisioner.rollback(foreign.operation_id)
 
         applied = await provisioner.provision(_config())
-        with pytest.raises(VoicekitError, match="rollback conflicted"):
+        with pytest.raises(VoiceyError, match="rollback conflicted"):
             await provisioner.rollback(applied.operation_id)
         assert ledger.get_provisioning(applied.operation_id).state == "conflict"
     finally:
@@ -592,7 +592,7 @@ def test_config_secret_fingerprint_and_property_revalidation_are_safe() -> None:
     assert config.credential_name.endswith("-e32111f11142")
     assert "secret!" not in config.config_fingerprint
     object.__setattr__(config, "livekit_sip_uri", "invalid")
-    with pytest.raises(VoicekitError, match="LiveKit SIP URI is invalid"):
+    with pytest.raises(VoiceyError, match="LiveKit SIP URI is invalid"):
         _ = config.livekit_sip_host
 
 
@@ -600,46 +600,46 @@ def test_http_backend_detects_uri_credential_and_trunk_drift_or_duplicates() -> 
     fake = FakePlivoHTTP()
     backend, client = _http_backend(fake)
     try:
-        uri = backend.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+        uri = backend.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
         fake.uris.append(dict(fake.uris[0]))
-        with pytest.raises(VoicekitError, match="duplicate managed Plivo SIP URIs"):
-            backend.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+        with pytest.raises(VoiceyError, match="duplicate managed Plivo SIP URIs"):
+            backend.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
         fake.uris.pop()
         fake.uris[0]["uri"] = "human.example;transport=tcp"
-        with pytest.raises(VoicekitError, match="URI differs"):
-            backend.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+        with pytest.raises(VoiceyError, match="URI differs"):
+            backend.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
         fake.uris[0]["uri"] = "project.example;transport=tcp"
 
         credential = backend.ensure_credential(
-            name="voicekit-credential-hash",
-            username="voicekituser",
+            name="voicey-credential-hash",
+            username="voiceyuser",
             password="secret!",  # pragma: allowlist secret
         )
         fake.credentials.append(dict(fake.credentials[0]))
-        with pytest.raises(VoicekitError, match="duplicate managed Plivo credentials"):
+        with pytest.raises(VoiceyError, match="duplicate managed Plivo credentials"):
             backend.ensure_credential(
-                name="voicekit-credential-hash",
-                username="voicekituser",
+                name="voicey-credential-hash",
+                username="voiceyuser",
                 password="secret!",  # pragma: allowlist secret
             )
         fake.credentials.pop()
         fake.credentials[0]["username"] = "humanuser"
-        with pytest.raises(VoicekitError, match="credential differs"):
+        with pytest.raises(VoiceyError, match="credential differs"):
             backend.ensure_credential(
-                name="voicekit-credential-hash",
-                username="voicekituser",
+                name="voicey-credential-hash",
+                username="voiceyuser",
                 password="secret!",  # pragma: allowlist secret
             )
-        fake.credentials[0]["username"] = "voicekituser"
+        fake.credentials[0]["username"] = "voiceyuser"
 
         inbound = backend.ensure_trunk(
-            name="voicekit-in",
+            name="voicey-in",
             direction="inbound",
             primary_uri_uuid=uri.resource_id,
             secure=False,
         )
         adopted = backend.ensure_trunk(
-            name="voicekit-in",
+            name="voicey-in",
             direction="inbound",
             primary_uri_uuid=uri.resource_id,
             secure=False,
@@ -647,23 +647,23 @@ def test_http_backend_detects_uri_credential_and_trunk_drift_or_duplicates() -> 
         assert adopted.resource.resource_id == inbound.resource.resource_id
         assert not adopted.resource.created
         fake.trunks.append(dict(fake.trunks[0]))
-        with pytest.raises(VoicekitError, match="duplicate managed Plivo trunks"):
+        with pytest.raises(VoiceyError, match="duplicate managed Plivo trunks"):
             backend.ensure_trunk(
-                name="voicekit-in",
+                name="voicey-in",
                 direction="inbound",
                 primary_uri_uuid=uri.resource_id,
                 secure=False,
             )
         fake.trunks.pop()
         fake.trunks[0]["secure"] = True
-        with pytest.raises(VoicekitError, match="inbound trunk differs"):
+        with pytest.raises(VoiceyError, match="inbound trunk differs"):
             backend.ensure_trunk(
-                name="voicekit-in",
+                name="voicey-in",
                 direction="inbound",
                 primary_uri_uuid=uri.resource_id,
                 secure=False,
             )
-        with pytest.raises(VoicekitError, match="direction"):
+        with pytest.raises(VoiceyError, match="direction"):
             backend.ensure_trunk(name="bad", direction="sideways", secure=False)
 
         assert credential.resource_id == "credential-1"
@@ -678,7 +678,7 @@ def test_http_backend_binding_restore_and_malformed_responses_fail_closed() -> N
         fake.number["app_id"] = "trunk-1"
         assert not backend.attach_number(trunk_id="trunk-1", number=NUMBER).created
         fake.apply_number = False
-        with pytest.raises(VoicekitError, match="rollback did not compare equal"):
+        with pytest.raises(VoiceyError, match="rollback did not compare equal"):
             backend.restore_number({"number": NUMBER, "app_id": "old-app"})
     finally:
         client.close()
@@ -702,8 +702,8 @@ def test_http_backend_binding_restore_and_malformed_responses_fail_closed() -> N
             client=malformed_client,
         )
         try:
-            with pytest.raises(VoicekitError, match=message):
-                malformed.ensure_uri(name="voicekit-uri", uri="project.example;transport=tcp")
+            with pytest.raises(VoiceyError, match=message):
+                malformed.ensure_uri(name="voicey-uri", uri="project.example;transport=tcp")
         finally:
             malformed_client.close()
 
@@ -722,7 +722,7 @@ def test_http_backend_network_and_invalid_trunk_domain_are_uncertain() -> None:
         client=network_client,
     )
     try:
-        with pytest.raises(VoicekitError, match="definitive result"):
+        with pytest.raises(VoiceyError, match="definitive result"):
             backend.snapshot_number(NUMBER)
     finally:
         network_client.close()
@@ -732,7 +732,7 @@ def test_http_backend_network_and_invalid_trunk_domain_are_uncertain() -> None:
     try:
         fake.trunks.append(
             {
-                "name": "voicekit-in",
+                "name": "voicey-in",
                 "trunk_id": "trunk-1",
                 "trunk_direction": "inbound",
                 "primary_uri_uuid": "uri-1",
@@ -740,9 +740,9 @@ def test_http_backend_network_and_invalid_trunk_domain_are_uncertain() -> None:
                 "trunk_domain": "not a domain",
             }
         )
-        with pytest.raises(VoicekitError, match="invalid SIP domain"):
+        with pytest.raises(VoiceyError, match="invalid SIP domain"):
             backend.ensure_trunk(
-                name="voicekit-in",
+                name="voicey-in",
                 direction="inbound",
                 primary_uri_uuid="uri-1",
                 secure=False,

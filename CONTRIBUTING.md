@@ -1,6 +1,6 @@
 # Contributing
 
-voicekit is spec-first. Read `CLAUDE.md`, `docs/build-plan.md`, and `docs/product-spec.md` before changing a public contract.
+voicey is spec-first. Read `CLAUDE.md`, `docs/build-plan.md`, and `docs/product-spec.md` before changing a public contract.
 
 Every change must:
 

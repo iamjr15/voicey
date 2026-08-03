@@ -1,13 +1,13 @@
 # Tools
 
-Voicekit tools are plain typed Python functions or authenticated HTTP
+Voicey tools are plain typed Python functions or authenticated HTTP
 endpoints. They are registered into each runtime's native tool mechanism; this
 module does not define conversation flow, routing, or a separate tool protocol.
 
 ## Typed Python tools
 
 ```python
-from voicekit import tool
+from voicey import tool
 
 
 @tool(say_while_running="Let me check that for you.", mutating=False)
@@ -20,7 +20,7 @@ The decorator keeps the original callable intact and derives its name,
 description, parameter schema, and return schema from the signature and
 docstring. Every parameter and the return value must have a JSON-representable
 type annotation. Variadic parameters and undeclared types fail at import time
-with `VK-TOL-002`.
+with `VY-TOL-002`.
 
 Both synchronous and asynchronous functions are supported. Synchronous tools
 run in a worker thread with the active call and `results` context copied into
@@ -37,7 +37,7 @@ but it does not make the operation idempotent or authorize blind retries.
 ## HTTP tools
 
 ```python
-from voicekit import tool
+from voicey import tool
 
 get_customer = tool.http(
     name="get_customer",
@@ -80,7 +80,7 @@ Runtime adapters use `ToolExecutor` rather than invoking a registered tool
 directly:
 
 ```python
-from voicekit.tools import ToolExecutor
+from voicey.tools import ToolExecutor
 
 execution = await ToolExecutor().execute(available_slots, {"date": "2026-08-03"})
 llm_value = execution.for_llm()
@@ -113,8 +113,8 @@ surface.
 Bind both contexts around runtime tool dispatch:
 
 ```python
-from voicekit import results
-from voicekit.tools import (
+from voicey import results
+from voicey.tools import (
     RepositoryToolObservationSink,
     ToolExecutor,
     tool_execution_context,
@@ -129,7 +129,7 @@ with results.result_context(buffer), tool_execution_context(call_id, sink):
 
 Every completed invocation records its stable invocation id, arguments,
 structured result, duration, and status in the protected call record. Failure
-to persist that final observation raises `VK-TOL-005` so the runtime can stop
+to persist that final observation raises `VY-TOL-005` so the runtime can stop
 accepting calls instead of silently losing audit data. Secret-shaped values
 are scrubbed by protected storage.
 

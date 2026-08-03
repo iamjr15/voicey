@@ -9,7 +9,7 @@
         "flags": [
           "--version"
         ],
-        "help": "Print the installed voicekit version.",
+        "help": "Print the installed voicey version.",
         "hidden": false,
         "is_flag": true,
         "kind": "option",
@@ -37,7 +37,7 @@
         "type": "boolean"
       }
     ],
-    "path": "voicekit",
+    "path": "voicey",
     "subcommands": [
       {
         "help": "Place one paid test call through the configured carrier intent ledger.",
@@ -86,12 +86,12 @@
             "type": "boolean"
           }
         ],
-        "path": "voicekit call"
+        "path": "voicey call"
       },
       {
         "help": "Inspect calls and redeliver immutable result events.",
         "params": [],
-        "path": "voicekit calls",
+        "path": "voicey calls",
         "subcommands": [
           {
             "help": "List protected local call records or undelivered events.",
@@ -149,7 +149,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit calls list"
+            "path": "voicey calls list"
           },
           {
             "help": "Reset delivery state while preserving immutable bytes and event id.",
@@ -181,7 +181,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit calls redeliver"
+            "path": "voicey calls redeliver"
           },
           {
             "help": "Show one complete protected call timeline/transcript/tool record.",
@@ -213,14 +213,14 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit calls show"
+            "path": "voicey calls show"
           }
         ]
       },
       {
         "help": "Generate and operate a supported deployment target.",
         "params": [],
-        "path": "voicekit deploy",
+        "path": "voicey deploy",
         "subcommands": [
           {
             "help": "Generate, validate, and optionally smoke the canonical Docker target.",
@@ -300,7 +300,7 @@
                 "flags": [
                   "--engine-wheel"
                 ],
-                "help": "Local unpublished voicekit wheel.",
+                "help": "Local unpublished voicey wheel.",
                 "hidden": false,
                 "is_flag": false,
                 "kind": "option",
@@ -328,7 +328,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit deploy docker"
+            "path": "voicey deploy docker"
           },
           {
             "help": "Provision, resume, rotate, validate, or roll back the Fly companion.",
@@ -493,7 +493,7 @@
                 "flags": [
                   "--rollback-created"
                 ],
-                "help": "Permanently destroy only resources ledgered as created by voicekit.",
+                "help": "Permanently destroy only resources ledgered as created by voicey.",
                 "hidden": false,
                 "is_flag": true,
                 "kind": "option",
@@ -527,7 +527,7 @@
                 "flags": [
                   "--engine-wheel"
                 ],
-                "help": "Local unpublished voicekit wheel.",
+                "help": "Local unpublished voicey wheel.",
                 "hidden": false,
                 "is_flag": false,
                 "kind": "option",
@@ -572,7 +572,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit deploy fly"
+            "path": "voicey deploy fly"
           },
           {
             "help": "Deploy, smoke, resume, adopt, or roll back a LiveKit Cloud agent.",
@@ -737,7 +737,7 @@
                 "flags": [
                   "--engine-wheel"
                 ],
-                "help": "Local unpublished voicekit wheel.",
+                "help": "Local unpublished voicey wheel.",
                 "hidden": false,
                 "is_flag": false,
                 "kind": "option",
@@ -782,7 +782,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit deploy livekit-cloud"
+            "path": "voicey deploy livekit-cloud"
           },
           {
             "help": "Prepare, deploy, cut over, smoke, resume, or roll back Pipecat Cloud.",
@@ -1067,7 +1067,7 @@
                 "flags": [
                   "--rollback-created"
                 ],
-                "help": "Restore cutover and delete only a voicekit-created cloud agent.",
+                "help": "Restore cutover and delete only a voicey-created cloud agent.",
                 "hidden": false,
                 "is_flag": true,
                 "kind": "option",
@@ -1084,7 +1084,7 @@
                 "flags": [
                   "--engine-wheel"
                 ],
-                "help": "Local unpublished voicekit wheel.",
+                "help": "Local unpublished voicey wheel.",
                 "hidden": false,
                 "is_flag": false,
                 "kind": "option",
@@ -1129,7 +1129,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit deploy pipecat-cloud"
+            "path": "voicey deploy pipecat-cloud"
           },
           {
             "help": "Provision, resume, rotate, validate, or roll back the Railway companion.",
@@ -1311,7 +1311,7 @@
                 "flags": [
                   "--rollback-created"
                 ],
-                "help": "Delete only Railway resources ledgered as created by voicekit.",
+                "help": "Delete only Railway resources ledgered as created by voicey.",
                 "hidden": false,
                 "is_flag": true,
                 "kind": "option",
@@ -1345,7 +1345,7 @@
                 "flags": [
                   "--engine-wheel"
                 ],
-                "help": "Local unpublished voicekit wheel.",
+                "help": "Local unpublished voicey wheel.",
                 "hidden": false,
                 "is_flag": false,
                 "kind": "option",
@@ -1390,7 +1390,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit deploy railway"
+            "path": "voicey deploy railway"
           }
         ]
       },
@@ -1484,7 +1484,7 @@
             "type": "boolean"
           }
         ],
-        "path": "voicekit dev"
+        "path": "voicey dev"
       },
       {
         "help": "Run every local, provider, carrier, delivery, and capacity preflight.",
@@ -1560,7 +1560,7 @@
             "type": "boolean"
           }
         ],
-        "path": "voicekit doctor"
+        "path": "voicey doctor"
       },
       {
         "help": "Create a working native-workflow project with live-validated keys.",
@@ -1765,12 +1765,12 @@
             "type": "boolean"
           }
         ],
-        "path": "voicekit init"
+        "path": "voicey init"
       },
       {
         "help": "Collect, mask, and live-validate provider credentials.",
         "params": [],
-        "path": "voicekit keys",
+        "path": "voicey keys",
         "subcommands": [
           {
             "help": "Paste/rotate provider credentials, validate, then write owner-only `.env`.",
@@ -1802,7 +1802,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit keys add"
+            "path": "voicey keys add"
           },
           {
             "help": "Show masked selected keys with a fresh authenticated validation.",
@@ -1825,7 +1825,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit keys list"
+            "path": "voicey keys list"
           },
           {
             "help": "Re-run authenticated read checks for every selected provider.",
@@ -1848,14 +1848,14 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit keys validate"
+            "path": "voicey keys validate"
           }
         ]
       },
       {
         "help": "List, buy, release, point, or restore phone numbers.",
         "params": [],
-        "path": "voicekit numbers",
+        "path": "voicey numbers",
         "subcommands": [
           {
             "help": "Buy the first matching voice number after an explicit money confirmation.",
@@ -1904,7 +1904,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit numbers buy"
+            "path": "voicey numbers buy"
           },
           {
             "help": "List voice-capable numbers owned by the configured carrier.",
@@ -1927,7 +1927,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit numbers list"
+            "path": "voicey numbers list"
           },
           {
             "help": "Point one production number and persist its complete rollback snapshot first.",
@@ -1976,7 +1976,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit numbers point"
+            "path": "voicey numbers point"
           },
           {
             "help": "Release a carrier number after an explicit confirmation.",
@@ -2008,7 +2008,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit numbers release"
+            "path": "voicey numbers release"
           },
           {
             "help": "Compare-and-swap restore one previously captured carrier route.",
@@ -2040,14 +2040,14 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit numbers restore"
+            "path": "voicey numbers restore"
           }
         ]
       },
       {
         "help": "List and copy versioned native-workflow recipes.",
         "params": [],
-        "path": "voicekit recipes",
+        "path": "voicey recipes",
         "subcommands": [
           {
             "help": "Copy the runtime-matching native recipe without overwriting project code.",
@@ -2062,7 +2062,7 @@
                 "type": "str"
               }
             ],
-            "path": "voicekit recipes add"
+            "path": "voicey recipes add"
           },
           {
             "help": "List packaged recipes and explicit availability facts.",
@@ -2085,7 +2085,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit recipes list"
+            "path": "voicey recipes list"
           },
           {
             "help": "Report recipe source drift without overwriting local changes.",
@@ -2108,7 +2108,7 @@
                 "type": "boolean"
               }
             ],
-            "path": "voicekit recipes update-check"
+            "path": "voicey recipes update-check"
           }
         ]
       },
@@ -2186,7 +2186,7 @@
             "type": "str"
           }
         ],
-        "path": "voicekit test"
+        "path": "voicey test"
       },
       {
         "help": "Upgrade only the engine lock entry, then report recipe drift.",
@@ -2244,9 +2244,9 @@
             "type": "boolean"
           }
         ],
-        "path": "voicekit upgrade"
+        "path": "voicey upgrade"
       }
     ]
   },
-  "contract": "voicekit command-line interface"
+  "contract": "voicey command-line interface"
 }

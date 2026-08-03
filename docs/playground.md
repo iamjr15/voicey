@@ -1,6 +1,6 @@
 # Browser playground
 
-`voicekit dev` serves the selected Pipecat or LiveKit engine used by phone
+`voicey dev` serves the selected Pipecat or LiveKit engine used by phone
 calls and places a protected browser console beside it. The console is a
 diagnostic surface, not a second conversation implementation: flows and tools
 remain native runtime code.
@@ -10,7 +10,7 @@ remain native runtime code.
 From an initialized project:
 
 ```bash
-voicekit dev
+voicey dev
 ```
 
 The default addresses are:
@@ -29,7 +29,7 @@ a browser.
 Phone development preserves the boundary:
 
 ```bash
-voicekit dev --phone --tunnel auto
+voicey dev --phone --tunnel auto
 ```
 
 Only the public listener is forwarded. The CLI probes the public WebSocket
@@ -55,7 +55,7 @@ API keys never enter the page.
 Before returning a browser token, the admin listener reserves runtime capacity
 and creates the durable call row. It then mints a short-lived token carrying
 issuer, audience, agent, session, durable call, nonce, issued-at, and expiry
-claims. The page sends this **voicekit token** as
+claims. The page sends this **voicey token** as
 `Authorization: Bearer …`; it never appears in a query string or fragment.
 
 For Pipecat, the first authenticated offer consumes the token and binds the
@@ -63,9 +63,9 @@ pre-reserved call to the peer; PATCH signaling must match that binding. For
 LiveKit, public `POST /api/livekit/token` consumes it and returns a distinct,
 short-lived room credential. The pinned official client uses that credential
 with LiveKit's native signaling protocol, which may include provider-native
-query fields. A failed authenticated exchange consumes the voicekit token and
+query fields. A failed authenticated exchange consumes the voicey token and
 terminalizes the reservation as `call.failed`. Expiry, replay, tampering,
-cross-agent/audience use, and peer changes fail with `VK-WEB-001`.
+cross-agent/audience use, and peer changes fail with `VY-WEB-001`.
 
 Issuance has per-client, active-session, and global limits. Signaling has a
 bounded rate. Origins must be the local admin origin or an explicit
@@ -75,7 +75,7 @@ origin.
 
 The public application has no admin session-issuance, call-record, result, or
 recording route. Its LiveKit-only room-token exchange accepts only a previously
-issued one-use voicekit bearer. Local admin requests require the exact listener
+issued one-use voicey bearer. Local admin requests require the exact listener
 Host and reject foreign Origin values. An integrator that exposes the admin
 application outside loopback must supply an authentication hook; startup fails
 closed otherwise.
@@ -95,7 +95,7 @@ The watch controller reports `ready`, `reloading`, `restart_pending`, or
 - flow and tool Python changes evict project modules and restart the Pipecat
   runner only after all active calls finish;
 - runtime, agent name, phone identity, results identity, and enabled-channel
-  changes require a full `voicekit dev` restart and fail as `VK-WEB-005`.
+  changes require a full `voicey dev` restart and fail as `VY-WEB-005`.
 
 No active call changes revision mid-session.
 
@@ -116,19 +116,19 @@ npm audit --audit-level=high
 ```
 
 The hatch hook runs the locked npm install and build for wheels, then embeds
-the output under `voicekit/_frontend`. Runtime access uses
+the output under `voicey/_frontend`. Runtime access uses
 `importlib.resources.as_file`, so zipped installations are supported.
-`VOICEKIT_SKIP_FRONTEND_BUILD=1` is accepted only when a complete prebuilt
+`VOICEY_SKIP_FRONTEND_BUILD=1` is accepted only when a complete prebuilt
 entrypoint already exists; release builds must not use it to mask a missing
 Node.js toolchain.
 
 ## Troubleshooting
 
-- `VK-WEB-001`: return to the playground and request a fresh session.
-- `VK-WEB-002`: correct the browser origin, public URL, or trusted proxy list.
-- `VK-WEB-003`: end an active browser session or wait for the retry interval.
-- `VK-WEB-004`: use the loopback admin URL or configure integrator auth.
-- `VK-WEB-005`: run `voicekit doctor`, rebuild assets, or restart after an
+- `VY-WEB-001`: return to the playground and request a fresh session.
+- `VY-WEB-002`: correct the browser origin, public URL, or trusted proxy list.
+- `VY-WEB-003`: end an active browser session or wait for the retry interval.
+- `VY-WEB-004`: use the loopback admin URL or configure integrator auth.
+- `VY-WEB-005`: run `voicey doctor`, rebuild assets, or restart after an
   identity-level configuration change.
 
 After changing configuration, start another session and confirm the displayed

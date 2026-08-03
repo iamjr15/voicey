@@ -4,25 +4,22 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 
 | Gate | Status | Exact runbook command | Requirement |
 |---|---|---|---|
-| P1 Twilio carrier/API certification | ready-to-run, pending credentials/PSTN | Commands below | Twilio test/live credentials, funded number, public target, PSTN |
+| P1 Twilio carrier/API certification | account/API green; route/PSTN pending | Commands below | Public target, paid destination, route acknowledgement, physical endpoint |
 | P1 cloudflared public WebSocket edge | ready-to-run, pending edge DNS/network | Command below | `cloudflared`, outbound Cloudflare access, generated quick-tunnel DNS |
 | P1 physical-handset outbound check | ready-to-run, pending credentials/human | Paid PSTN command below | Physical handset, answering person, provisioned carrier numbers |
 | P1 inbound audio/transcript loopback | ready-to-run, pending credentials/human | Commands below | Running appointment recipe, physical handset, and provisioned number |
 | P1 full guided-wizard usability | ready-to-run, pending human/credentials | Command below | Interactive terminal, a human, provider keys |
 | P1 doctor on deliberately broken project | ready-to-run, pending human observation | Commands below | Interactive terminal; disposable fixture only |
 | P1 playground real microphone/provider call | ready-to-run, pending human/credentials | Command below | Valid reference-provider keys, browser microphone grant, a person speaking |
-| P1 appointment text Evals | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia keys and local Ollama `gemma2:9b` |
-| P1 appointment audio Evals | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys plus one-time Kokoro/Moonshine downloads |
+| P1 appointment audio Evals | ready-to-run, pending model downloads/audio execution | Commands below | Reference-provider keys, Anthropic API judge config, and one-time Kokoro/Moonshine downloads |
 | P1 reference audio latency | ready-to-run, pending credentials | Command below | Deepgram, Anthropic, and Cartesia keys; p50 ≤ 800 ms and p95 ≤ 1500 ms |
 | P1 Docker public deployment + paid smoke | ready-to-run, pending public ingress/credentials/PSTN | Commands below | Public HTTPS ingress, live Twilio credentials, owned number, paid destination |
-| P2 Twilio–LiveKit automated provisioning | ready-to-run, pending credentials/account mutation | Commands below | LiveKit project, owned Twilio number, Elastic SIP domain, explicit mutation acknowledgement |
 | P2 Twilio–LiveKit PSTN certification | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded LiveKit/Twilio accounts, deployed agent, two physical endpoints |
 | P2 LiveKit playground real microphone/provider call | ready-to-run, pending credentials/human | Command below | LiveKit project, reference-provider keys, browser microphone grant, a person speaking |
 | P2 appointment LiveKit conversation | ready-to-run, pending credentials/human | Command and checklist below | LiveKit project, reference-provider keys, browser microphone grant, a person exercising all handoffs |
-| P2 unified appointment text suite, both runtimes | ready-to-run, pending credentials/local judge | Commands below | Deepgram, Anthropic, Cartesia, local Ollama; both generated projects |
-| P2 unified appointment audio suite, both runtimes | ready-to-run, pending credentials/model downloads | Commands below | Reference-provider keys, Ollama, Kokoro/Moonshine downloads; both generated projects |
+| P2 unified appointment audio suite, both runtimes | ready-to-run, pending model downloads/audio execution | Commands below | Reference-provider keys, Anthropic API judge config, Kokoro/Moonshine downloads, and both generated projects |
 | P2 Telnyx certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Telnyx/LiveKit accounts, both carrier paths, public target, PSTN |
-| P3 Vobiz certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Vobiz/LiveKit accounts, Vobiz SIP credential, public Pipecat target, PSTN |
+| P3 Vobiz certification, both paths | account/control-plane green; PSTN/human pending | Commands and checklist below | Public Pipecat target, paid destination, recording callback, physical endpoints |
 | P3 Plivo Beta certification, both paths | ready-to-run, pending credentials/PSTN/human | Commands and checklist below | Funded Plivo/LiveKit accounts, public Pipecat target, Zentrunk credentials, PSTN |
 | P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
 | P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
@@ -44,20 +41,24 @@ Local tests exercise the exact S3 client contract without external
 credentials. To certify the selected private bucket, grant the test identity
 read/write/delete access only below a disposable prefix and run:
 
+The AWS CLI is authenticated as of 2026-08-03. No dedicated private disposable
+bucket/prefix was selected, so no object mutation was attempted and this gate
+remains pending.
+
 ```bash
-export VOICEKIT_LIVE_OBJECT_ACK='I_ACKNOWLEDGE_OBJECT_STORE_MUTATION'
-export VOICEKIT_OBJECT_BUCKET='private-voicekit-artifacts'
-export VOICEKIT_OBJECT_PREFIX='voicekit-certification'
-export VOICEKIT_OBJECT_ENDPOINT='https://fly.storage.tigris.dev'
+export VOICEY_LIVE_OBJECT_ACK='I_ACKNOWLEDGE_OBJECT_STORE_MUTATION'
+export VOICEY_OBJECT_BUCKET='private-voicey-artifacts'
+export VOICEY_OBJECT_PREFIX='voicey-certification'
+export VOICEY_OBJECT_ENDPOINT='https://fly.storage.tigris.dev'
 export AWS_REGION='auto'
 export AWS_ACCESS_KEY_ID='...'
 export AWS_SECRET_ACCESS_KEY='...'
 uv run pytest -q --no-cov -m live tests/live/test_s3_artifacts_live.py
 ```
 
-For AWS S3, omit `VOICEKIT_OBJECT_ENDPOINT` and use the bucket's real region.
+For AWS S3, omit `VOICEY_OBJECT_ENDPOINT` and use the bucket's real region.
 For a loopback MinIO test only, set
-`VOICEKIT_OBJECT_FORCE_PATH_STYLE=true`. A pass means the bucket was reachable,
+`VOICEY_OBJECT_FORCE_PATH_STYLE=true`. A pass means the bucket was reachable,
 one checksummed probe was read back byte-for-byte, and that probe was deleted.
 It does not promote the Fly companion or either cloud deployment.
 
@@ -65,35 +66,35 @@ It does not promote the Fly companion or either cloud deployment.
 
 Local tests prove command selection, explicit adoption, owner-only checkpoints,
 secret rotation continuity, reverse rollback ownership, generated topology,
-platform/signed smoke behavior, and the service's real Postgres preflight. This
-machine has no `fly`/`flyctl` executable or authenticated Fly account, so no
-external resource or paid service is represented as green.
+platform/signed smoke behavior, and the service's real Postgres preflight. The
+Fly CLI is installed but `fly auth whoami` is unauthenticated as of 2026-08-03,
+so no external resource or paid service is represented as green.
 
-Install and authenticate the Fly CLI, choose a disposable web-only voicekit
+Install and authenticate the Fly CLI, choose a disposable web-only voicey
 agent project, and run the complete gate from this repository:
 
 ```bash
-export VOICEKIT_REPO_ROOT="$PWD"
-export VOICEKIT_AGENT_PROJECT='/absolute/path/to/web-only-agent-project'
-export VOICEKIT_FLY_APP='voicekit-results-cert'
-export VOICEKIT_FLY_ORG='exact-org-slug'
-export VOICEKIT_FLY_REGION='iad'
-export VOICEKIT_FLY_PG='voicekit-results-cert-pg'
-export VOICEKIT_FLY_BUCKET='voicekit-results-cert-objects'
+export VOICEY_REPO_ROOT="$PWD"
+export VOICEY_AGENT_PROJECT='/absolute/path/to/web-only-agent-project'
+export VOICEY_FLY_APP='voicey-results-cert'
+export VOICEY_FLY_ORG='exact-org-slug'
+export VOICEY_FLY_REGION='iad'
+export VOICEY_FLY_PG='voicey-results-cert-pg'
+export VOICEY_FLY_BUCKET='voicey-results-cert-objects'
 fly auth whoami
 uv build --out-dir dist
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy fly \
-    --app "$VOICEKIT_FLY_APP" \
-    --org "$VOICEKIT_FLY_ORG" \
-    --region "$VOICEKIT_FLY_REGION" \
-    --postgres-name "$VOICEKIT_FLY_PG" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy fly \
+    --app "$VOICEY_FLY_APP" \
+    --org "$VOICEY_FLY_ORG" \
+    --region "$VOICEY_FLY_REGION" \
+    --postgres-name "$VOICEY_FLY_PG" \
     --postgres-plan Basic \
     --postgres-volume-gb 10 \
-    --bucket "$VOICEKIT_FLY_BUCKET" \
+    --bucket "$VOICEY_FLY_BUCKET" \
     --engine-wheel \
-      "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+      "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
     --yes \
     --json
 )
@@ -111,18 +112,18 @@ is created. Then exercise current/previous credential cutover:
 
 ```bash
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy fly \
-    --app "$VOICEKIT_FLY_APP" \
-    --org "$VOICEKIT_FLY_ORG" \
-    --region "$VOICEKIT_FLY_REGION" \
-    --postgres-name "$VOICEKIT_FLY_PG" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy fly \
+    --app "$VOICEY_FLY_APP" \
+    --org "$VOICEY_FLY_ORG" \
+    --region "$VOICEY_FLY_REGION" \
+    --postgres-name "$VOICEY_FLY_PG" \
     --postgres-plan Basic \
     --postgres-volume-gb 10 \
-    --bucket "$VOICEKIT_FLY_BUCKET" \
+    --bucket "$VOICEY_FLY_BUCKET" \
     --rotate-credentials \
     --engine-wheel \
-      "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+      "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
     --yes
 )
 ```
@@ -140,18 +141,21 @@ worker-secret filtering, signed relay preflight, ownership/adoption drift
 fences, hosted carrier answers, resumable deploys, created-only/version
 rollback, platform session/room smoke, paid phone-smoke orchestration, and
 durable begin/terminal invariants. It does not prove either paid cloud control
-plane. This machine has `pipecat-cli==0.1.15` and `lk==2.16.2`, but no
-authenticated Pipecat Cloud organization or configured LiveKit Cloud project.
+plane. This machine has `pipecat-cli==0.1.15` and `lk==2.16.2`; both CLIs can
+read their authenticated organizations/projects as of 2026-08-03. Deployment
+still cannot start without a signed results companion, a selected immutable
+registry image, and the paid smoke destination. Docker is installed but its
+daemon is stopped. No platform resource or call is represented as green.
 
 First complete the Fly companion gate above and retain its public base and
-generated `VOICEKIT_RELAY_CREDENTIAL` in the agent project's ignored,
+generated `VOICEY_RELAY_CREDENTIAL` in the agent project's ignored,
 owner-only `.env`. From this repository, build the unpublished engine wheel:
 
 ```bash
-export VOICEKIT_REPO_ROOT="$PWD"
-export VOICEKIT_AGENT_PROJECT='/absolute/path/to/agent-project'
-export VOICEKIT_RELAY_URL='https://voicekit-results-cert.fly.dev'
-export VOICEKIT_ENGINE_WHEEL="$PWD/dist/voicekit-0.0.0.dev0-py3-none-any.whl"
+export VOICEY_REPO_ROOT="$PWD"
+export VOICEY_AGENT_PROJECT='/absolute/path/to/agent-project'
+export VOICEY_RELAY_URL='https://voicey-results-cert.fly.dev'
+export VOICEY_ENGINE_WHEEL="$PWD/dist/voicey-0.0.0.dev0-py3-none-any.whl"
 uv build --out-dir dist
 ```
 
@@ -160,54 +164,54 @@ authenticate, verify the current region list, then prepare/build/push without
 platform mutation:
 
 ```bash
-export VOICEKIT_PCC_AGENT='voicekit-cloud-cert'
-export VOICEKIT_PCC_ORG='exact-pipecat-org'
-export VOICEKIT_PCC_REGION='us-west'
-export VOICEKIT_PCC_SECRET_SET='voicekit-cloud-cert-secrets' # pragma: allowlist secret
-export VOICEKIT_PCC_IMAGE='registry.example.com/voicekit/cloud-cert:git-sha'
+export VOICEY_PCC_AGENT='voicey-cloud-cert'
+export VOICEY_PCC_ORG='exact-pipecat-org'
+export VOICEY_PCC_REGION='us-west'
+export VOICEY_PCC_SECRET_SET='voicey-cloud-cert-secrets' # pragma: allowlist secret
+export VOICEY_PCC_IMAGE='registry.example.com/voicey/cloud-cert:git-sha'
 pipecat cloud auth login
 pipecat cloud auth whoami
 pipecat cloud regions list
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
-    --agent "$VOICEKIT_PCC_AGENT" \
-    --org "$VOICEKIT_PCC_ORG" \
-    --region "$VOICEKIT_PCC_REGION" \
-    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
-    --image "$VOICEKIT_PCC_IMAGE" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy pipecat-cloud \
+    --agent "$VOICEY_PCC_AGENT" \
+    --org "$VOICEY_PCC_ORG" \
+    --region "$VOICEY_PCC_REGION" \
+    --secret-set "$VOICEY_PCC_SECRET_SET" \
+    --image "$VOICEY_PCC_IMAGE" \
     --min-agents 1 \
     --max-agents 4 \
     --profile agent-1x \
-    --relay-url "$VOICEKIT_RELAY_URL" \
-    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --relay-url "$VOICEY_RELAY_URL" \
+    --engine-wheel "$VOICEY_ENGINE_WHEEL" \
     --prepare-only
   docker build \
-    -t "$VOICEKIT_PCC_IMAGE" \
-    .voicekit/deploy/pipecat-cloud/context
-  docker push "$VOICEKIT_PCC_IMAGE"
+    -t "$VOICEY_PCC_IMAGE" \
+    .voicey/deploy/pipecat-cloud/context
+  docker push "$VOICEY_PCC_IMAGE"
 )
 ```
 
 Use a disposable Twilio phone project for the full automatic cutover and paid
-smoke, with its owned `phone_number` in `voicekit.jsonc`:
+smoke, with its owned `phone_number` in `voicey.jsonc`:
 
 ```bash
-export VOICEKIT_CLOUD_SMOKE_TO='+14155550199'
+export VOICEY_CLOUD_SMOKE_TO='+14155550199'
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
-    --agent "$VOICEKIT_PCC_AGENT" \
-    --org "$VOICEKIT_PCC_ORG" \
-    --region "$VOICEKIT_PCC_REGION" \
-    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
-    --image "$VOICEKIT_PCC_IMAGE" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy pipecat-cloud \
+    --agent "$VOICEY_PCC_AGENT" \
+    --org "$VOICEY_PCC_ORG" \
+    --region "$VOICEY_PCC_REGION" \
+    --secret-set "$VOICEY_PCC_SECRET_SET" \
+    --image "$VOICEY_PCC_IMAGE" \
     --min-agents 1 \
     --max-agents 4 \
     --profile agent-1x \
-    --relay-url "$VOICEKIT_RELAY_URL" \
-    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
-    --smoke-to "$VOICEKIT_CLOUD_SMOKE_TO" \
+    --relay-url "$VOICEY_RELAY_URL" \
+    --engine-wheel "$VOICEY_ENGINE_WHEEL" \
+    --smoke-to "$VOICEY_CLOUD_SMOKE_TO" \
     --yes \
     --json
 )
@@ -222,21 +226,21 @@ Application to the exact companion URL printed by the command and add
 `--telnyx-texml-ready`.
 
 After evidence capture, restore the carrier route and delete only the
-voicekit-created disposable agent:
+voicey-created disposable agent:
 
 ```bash
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
-    --agent "$VOICEKIT_PCC_AGENT" \
-    --org "$VOICEKIT_PCC_ORG" \
-    --region "$VOICEKIT_PCC_REGION" \
-    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
-    --image "$VOICEKIT_PCC_IMAGE" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy pipecat-cloud \
+    --agent "$VOICEY_PCC_AGENT" \
+    --org "$VOICEY_PCC_ORG" \
+    --region "$VOICEY_PCC_REGION" \
+    --secret-set "$VOICEY_PCC_SECRET_SET" \
+    --image "$VOICEY_PCC_IMAGE" \
     --min-agents 1 \
     --max-agents 4 \
     --profile agent-1x \
-    --relay-url "$VOICEKIT_RELAY_URL" \
+    --relay-url "$VOICEY_RELAY_URL" \
     --rollback-created \
     --yes \
     --json
@@ -248,21 +252,21 @@ provisioning already complete. Authenticate, verify the exact project, and set
 the outbound trunk used only for the paid smoke:
 
 ```bash
-export VOICEKIT_LK_AGENT='voicekit-cloud-cert'
-export VOICEKIT_LK_PROJECT='exact-livekit-project'
-export VOICEKIT_LK_REGION='us-west'
-export VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID='ST_...'
+export VOICEY_LK_AGENT='voicey-cloud-cert'
+export VOICEY_LK_PROJECT='exact-livekit-project'
+export VOICEY_LK_REGION='us-west'
+export VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID='ST_...'
 lk cloud auth
 lk project list --json
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy livekit-cloud \
-    --agent "$VOICEKIT_LK_AGENT" \
-    --project "$VOICEKIT_LK_PROJECT" \
-    --region "$VOICEKIT_LK_REGION" \
-    --relay-url "$VOICEKIT_RELAY_URL" \
-    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
-    --smoke-to "$VOICEKIT_CLOUD_SMOKE_TO" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy livekit-cloud \
+    --agent "$VOICEY_LK_AGENT" \
+    --project "$VOICEY_LK_PROJECT" \
+    --region "$VOICEY_LK_REGION" \
+    --relay-url "$VOICEY_RELAY_URL" \
+    --engine-wheel "$VOICEY_ENGINE_WHEEL" \
+    --smoke-to "$VOICEY_CLOUD_SMOKE_TO" \
     --yes \
     --json
 )
@@ -276,12 +280,12 @@ Then run:
 
 ```bash
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy livekit-cloud \
-    --agent "$VOICEKIT_LK_AGENT" \
-    --project "$VOICEKIT_LK_PROJECT" \
-    --region "$VOICEKIT_LK_REGION" \
-    --relay-url "$VOICEKIT_RELAY_URL" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy livekit-cloud \
+    --agent "$VOICEY_LK_AGENT" \
+    --project "$VOICEY_LK_PROJECT" \
+    --region "$VOICEY_LK_REGION" \
+    --relay-url "$VOICEY_RELAY_URL" \
     --rollback \
     --yes \
     --json
@@ -289,7 +293,7 @@ Then run:
 ```
 
 Verify that a second version rolls back to the exact checkpointed previous
-version; a disposable first version created by voicekit is deleted instead.
+version; a disposable first version created by voicey is deleted instead.
 Neither command may delete an adopted agent. Both cloud rows remain
 pending-live until these commands and one real browser-media conversation per
 web runtime pass.
@@ -307,10 +311,10 @@ ngrok, reference-provider, and judge credentials, then run the one-case
 fixture:
 
 ```bash
-export VOICEKIT_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
-export VOICEKIT_LIVE_PSTN_MAX_CALLS=4
-export VOICEKIT_LIVE_TARGET_NUMBER='+14155550123'
-export VOICEKIT_LIVE_TWILIO_FROM='+14155550124'
+export VOICEY_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
+export VOICEY_LIVE_PSTN_MAX_CALLS=4
+export VOICEY_LIVE_TARGET_NUMBER='+14155550123'
+export VOICEY_LIVE_TWILIO_FROM='+14155550124'
 export TWILIO_ACCOUNT_SID='AC…'
 export TWILIO_AUTH_TOKEN='…'
 export NGROK_AUTHTOKEN='…'
@@ -319,17 +323,17 @@ export ANTHROPIC_API_KEY='…'
 export CARTESIA_API_KEY='…'
 export OPENAI_API_KEY='…'
 (cd tests/fixtures/live-pstn-pipecat && \
-  ../../../.venv/bin/voicekit test --live --report junit)
+  ../../../.venv/bin/voicey test --live --report junit)
 ```
 
 For the LiveKit path, configure an outbound SIP trunk that can reach the
 target destination and run:
 
 ```bash
-export VOICEKIT_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
-export VOICEKIT_LIVE_PSTN_MAX_CALLS=4
-export VOICEKIT_LIVE_TARGET_NUMBER='+14155550123'
-export VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID='ST_…'
+export VOICEY_LIVE_PSTN_ACK='I_ACKNOWLEDGE_PAID_PSTN'
+export VOICEY_LIVE_PSTN_MAX_CALLS=4
+export VOICEY_LIVE_TARGET_NUMBER='+14155550123'
+export VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID='ST_…'
 export LIVEKIT_URL='wss://project.livekit.cloud'
 export LIVEKIT_API_KEY='…'
 export LIVEKIT_API_SECRET='…'
@@ -338,20 +342,20 @@ export ANTHROPIC_API_KEY='…'
 export CARTESIA_API_KEY='…'
 export OPENAI_API_KEY='…'
 (cd tests/fixtures/live-pstn-livekit && \
-  ../../../.venv/bin/voicekit test --live --report junit)
+  ../../../.venv/bin/voicey test --live --report junit)
 ```
 
 Each result must be a first-attempt pass, carrier status `completed`, contain
 both caller and target-agent transcript lines, and write
-`.voicekit/test-results.xml` with `evidence.provider`,
+`.voicey/test-results.xml` with `evidence.provider`,
 `evidence.provider_call_id`, `evidence.runtime_call_id`,
 `evidence.path`, and `evidence.terminal_status`. Inspect the carrier account to
 confirm no more than four calls were placed by either job.
 
 Nightly automation is `.github/workflows/live-pstn.yml`. Configure the
 protected `paid-pstn` environment with the named secrets, set repository
-variable `VOICEKIT_LIVE_PSTN_ENABLED=true`, and set repository variable
-`VOICEKIT_LIVE_PSTN_ACK=I_ACKNOWLEDGE_PAID_PSTN`. The workflow uses
+variable `VOICEY_LIVE_PSTN_ENABLED=true`, and set repository variable
+`VOICEY_LIVE_PSTN_ACK=I_ACKNOWLEDGE_PAID_PSTN`. The workflow uses
 non-cancelling concurrency so an overlapping schedule cannot abandon a paid
 call. The process environment has none of the required carrier, LiveKit,
 Anthropic, OpenAI judge, target, or caller variables. The ignored predecessor
@@ -365,24 +369,24 @@ Normal CI validates the public scenario API, deterministic profiles, cited
 judge contract, four-attempt stability reporting, JSON/JUnit output, installed
 Pipecat scenario/manifest parsing, LiveKit native assertion plans, and the
 LiveKit PCM bridge. It compiles all seven appointment cases for both runtimes.
-Those local checks do not prove the reference-provider conversations.
+On 2026-08-03, fresh generated projects ran all seven text cases on both
+runtimes with Deepgram Nova-3, Claude Sonnet 5, Cartesia Sonic 3.5, and native
+Anthropic judges. Each runtime passed every case on its first attempt. Ollama
+was not used. The text provider gate is green; only the real PCM audio tier in
+this section remains pending.
 
-Export `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`, and `CARTESIA_API_KEY`, then
-install and start the documented local judge:
-
-```bash
-ollama pull gemma2:9b
-ollama serve
-```
+For that remaining gate, export `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`, and
+`CARTESIA_API_KEY` and use the Anthropic `tests/voicey-test.jsonc` configuration
+shown verbatim in `docs/testing.md`.
 
 In another terminal from the repository root, create both disposable projects:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_TEST_PARENT="$(mktemp -d)"
-VOICEKIT_TEST_PIPECAT="$VOICEKIT_TEST_PARENT/appointment-pipecat"
-VOICEKIT_TEST_LIVEKIT="$VOICEKIT_TEST_PARENT/appointment-livekit"
-uv run voicekit init "$VOICEKIT_TEST_PIPECAT" \
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_TEST_PARENT="$(mktemp -d)"
+VOICEY_TEST_PIPECAT="$VOICEY_TEST_PARENT/appointment-pipecat"
+VOICEY_TEST_LIVEKIT="$VOICEY_TEST_PARENT/appointment-livekit"
+uv run voicey init "$VOICEY_TEST_PIPECAT" \
   --name appointment-pipecat \
   --recipe appointment-booking \
   --channels web \
@@ -390,7 +394,7 @@ uv run voicekit init "$VOICEKIT_TEST_PIPECAT" \
   --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
   --no-draft-prompts \
   --yes
-uv run voicekit init "$VOICEKIT_TEST_LIVEKIT" \
+uv run voicey init "$VOICEY_TEST_LIVEKIT" \
   --name appointment-livekit \
   --recipe appointment-booking \
   --channels web \
@@ -400,28 +404,26 @@ uv run voicekit init "$VOICEKIT_TEST_LIVEKIT" \
   --yes
 ```
 
-Run text, audio, and JUnit output on each native runtime:
+To reproduce the completed text evidence, run `voicey test --report json` in
+each project. Run the remaining audio gate and retain JUnit output with:
 
 ```bash
-(cd "$VOICEKIT_TEST_PIPECAT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --audio && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --report junit)
-(cd "$VOICEKIT_TEST_LIVEKIT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --audio && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --report junit)
+(cd "$VOICEY_TEST_PIPECAT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --audio && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --audio --report junit)
+(cd "$VOICEY_TEST_LIVEKIT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --audio && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --audio --report junit)
 ```
 
-Each command must return zero, each runtime must report all seven cases at
-100% stability, and both JUnit files must contain zero failures. The first
-audio run may download Kokoro and Moonshine. As of 2026-07-27 this environment
-has none of the three reference-provider variables and has no `ollama`
-executable, so no provider-backed result is represented as green.
+Each audio command must return zero, each runtime must report all seven cases
+at 100% stability, and both JUnit files must contain zero failures. The first
+audio run may download Kokoro and Moonshine. No audio command has completed
+green yet, so the audio row remains in the gap table.
 
 ## P2 LiveKit playground microphone/provider gate
 
-The local suite proves one-use voicekit token exchange, durable reservation,
+The local suite proves one-use voicey token exchange, durable reservation,
 room-token scope, replay rejection, exchange-failure terminalization, native
 client state/audio/transcript wiring, the three-process supervisor, and native
 scratch import. Desktop and 390×844 browser automation completed the exchange
@@ -432,10 +434,10 @@ With valid reference-provider and LiveKit project credentials exported, create
 and run a disposable project:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_LIVEKIT_PARENT="$(mktemp -d)"
-VOICEKIT_LIVEKIT_PROJECT="$VOICEKIT_LIVEKIT_PARENT/livekit-browser"
-uv run voicekit init "$VOICEKIT_LIVEKIT_PROJECT" \
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_LIVEKIT_PARENT="$(mktemp -d)"
+VOICEY_LIVEKIT_PROJECT="$VOICEY_LIVEKIT_PARENT/livekit-browser"
+uv run voicey init "$VOICEY_LIVEKIT_PROJECT" \
   --name livekit-browser \
   --recipe scratch \
   --description "Greet the caller and answer concise product questions." \
@@ -444,9 +446,9 @@ uv run voicekit init "$VOICEKIT_LIVEKIT_PROJECT" \
   --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
   --no-draft-prompts \
   --yes
-(cd "$VOICEKIT_LIVEKIT_PROJECT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" dev --port 7860)
+(cd "$VOICEY_LIVEKIT_PROJECT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" doctor && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" dev --port 7860)
 ```
 
 Required process variables are `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`,
@@ -454,7 +456,7 @@ Required process variables are `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`,
 `LIVEKIT_API_SECRET`. Open `http://127.0.0.1:7861`, grant microphone access,
 speak at least two turns, end the session, and confirm remote audio, streaming
 and durable transcript, latency/event panels, and exactly one terminal event.
-In browser network inspection, confirm the voicekit bearer appears only in the
+In browser network inspection, confirm the voicey bearer appears only in the
 `Authorization` header of `/api/livekit/token`; the separate scoped provider
 room credential may appear only inside the official LiveKit client's native
 signaling exchange. This gate remains pending until the credentialed media call
@@ -471,10 +473,10 @@ LiveKit project, reference-provider credentials, microphone access, and a human.
 With those values exported, create and run the actual recipe:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_RECIPE_PARENT="$(mktemp -d)"
-VOICEKIT_RECIPE_PROJECT="$VOICEKIT_RECIPE_PARENT/livekit-appointments"
-uv run voicekit init "$VOICEKIT_RECIPE_PROJECT" \
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_RECIPE_PARENT="$(mktemp -d)"
+VOICEY_RECIPE_PROJECT="$VOICEY_RECIPE_PARENT/livekit-appointments"
+uv run voicey init "$VOICEY_RECIPE_PROJECT" \
   --name livekit-appointments \
   --recipe appointment-booking \
   --channels web \
@@ -482,9 +484,9 @@ uv run voicekit init "$VOICEKIT_RECIPE_PROJECT" \
   --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
   --no-draft-prompts \
   --yes
-(cd "$VOICEKIT_RECIPE_PROJECT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" dev --port 7860)
+(cd "$VOICEY_RECIPE_PROJECT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" doctor && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" dev --port 7860)
 ```
 
 Open `http://127.0.0.1:7861`, grant microphone access, and verify:
@@ -497,12 +499,13 @@ Open `http://127.0.0.1:7861`, grant microphone access, and verify:
    confirmation.
 3. A changed intent returns to intake without losing shared calendar tools.
 4. A calendar failure states that no change occurred and offers one safe retry
-   followed by human escalation when `VOICEKIT_TRANSFER_NUMBER` is configured.
+   followed by human escalation when `VOICEY_TRANSFER_NUMBER` is configured.
 5. Ending the session produces exactly one terminal event with the expected
    appointment outcome and native tool observations.
 
-The environment still lacks LiveKit and Anthropic credentials, so this command
-has not been represented as green.
+LiveKit and Anthropic credentials are available. This command is still not
+green because no human granted browser microphone access and completed the
+spoken workflow.
 
 ## P2 Twilio–LiveKit SIP certification
 
@@ -525,30 +528,39 @@ domain, the configured LiveKit agent name, and randomly generated SIP
 credentials. The test provisions twice, verifies reuse, then rolls back:
 
 ```bash
-VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+VOICEY_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
   uv run pytest -m live --no-cov \
   tests/live/test_twilio_livekit_live.py::test_live_twilio_livekit_provision_reuse_and_rollback
 ```
 
 Required variables: `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
 `LIVEKIT_API_SECRET`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-`VOICEKIT_TWILIO_LIVE_FROM`, `VOICEKIT_LIVEKIT_AGENT_NAME`,
-`VOICEKIT_LIVEKIT_SIP_URI`, `VOICEKIT_TWILIO_SIP_DOMAIN`,
-`VOICEKIT_TWILIO_SIP_USERNAME`, and `VOICEKIT_TWILIO_SIP_PASSWORD`.
+`VOICEY_TWILIO_LIVE_FROM`, `VOICEY_LIVEKIT_AGENT_NAME`,
+`VOICEY_LIVEKIT_SIP_URI`, `VOICEY_TWILIO_SIP_DOMAIN`,
+`VOICEY_TWILIO_SIP_USERNAME`, and `VOICEY_TWILIO_SIP_PASSWORD`.
+
+This no-call gate passed on 2026-08-03 against the live Twilio and LiveKit
+control planes. The first generated password exposed Twilio error `21240`; the
+product now rejects passwords before mutation unless they have at least 12
+characters plus lowercase, uppercase, and a digit. A compliant rerun passed
+provision, exact reuse, and reverse rollback. Provider API reads and both
+consoles showed zero temporary trunks, credential lists, dispatch rules, or
+number bindings afterward. This does not promote a call, recording, or handset
+gate.
 
 For the paid outbound gate, retain the provisioned outbound trunk, set its id
 as `LIVEKIT_SIP_OUTBOUND_TRUNK`, identify the certification room and
 destination, then explicitly acknowledge charges:
 
 ```bash
-VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+VOICEY_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
   uv run pytest -m live --no-cov \
   tests/live/test_twilio_livekit_live.py::test_live_twilio_livekit_paid_outbound_and_sip_status_mapping
 ```
 
 After either live call completes, copy LiveKit's documented
 `sip.twilio.callSid` participant attribute into
-`VOICEKIT_TWILIO_LIVE_CALL_SID` and verify that Core Recordings exposes exactly
+`VOICEY_TWILIO_LIVE_CALL_SID` and verify that Core Recordings exposes exactly
 one completed `Trunking` recording:
 
 ```bash
@@ -566,7 +578,7 @@ destination. Run one inbound call and one outbound call. During the calls:
 3. hang up once from the caller and once from the agent, then confirm
    `caller_hangup` and `agent_hangup`;
 4. complete one cold transfer and one native warm transfer;
-5. verify Twilio created a dual-channel recording and voicekit emitted the
+5. verify Twilio created a dual-channel recording and voicey emitted the
    stable recording reference plus `call.recording.ready`;
 6. verify exactly one terminal event and one acknowledged or visibly
    dead-lettered delivery for every call;
@@ -575,14 +587,15 @@ destination. Run one inbound call and one outbound call. During the calls:
 Inspect the durable evidence after each call:
 
 ```bash
-voicekit calls list
-voicekit calls show <call-id>
+voicey calls list
+voicey calls show <call-id>
 ```
 
-This gate is not green until both guarded pytest commands and the physical
-checklist genuinely pass. This workspace has neither the account variables nor
-the required PSTN endpoints, so the tests skip and the handset checklist
-remains pending.
+The no-call provisioning command is green. The paid outbound command, completed
+recording-correlation command, and physical checklist are not green until they
+genuinely pass. The account variables exist, but no deployed certification
+agent, approved paid destination/answering endpoint, completed call SID, or
+physical handset evidence is available.
 
 ## P2 Telnyx dual-path certification
 
@@ -601,36 +614,36 @@ uv run pytest --no-cov \
 
 The safe read-only account/owned-number check needs `TELNYX_API_KEY`,
 `TELNYX_PUBLIC_KEY`, `TELNYX_CONNECTION_ID`, and
-`VOICEKIT_TELNYX_LIVE_FROM`:
+`VOICEY_TELNYX_LIVE_FROM`:
 
 ```bash
 uv run pytest -m live --no-cov \
   tests/live/test_telnyx_live.py::test_telnyx_live_account_and_owned_number_are_ready
 ```
 
-With the Pipecat agent running at `VOICEKIT_LIVE_PUBLIC_BASE`, this guarded
+With the Pipecat agent running at `VOICEY_LIVE_PUBLIC_BASE`, this guarded
 command temporarily points the number to the configured Voice API connection,
 checks the FULL-durability route record, and restores the exact snapshot:
 
 ```bash
-VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+VOICEY_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
   uv run pytest -m live --no-cov \
   tests/live/test_telnyx_live.py::test_telnyx_live_route_point_and_crash_safe_restore
 ```
 
 The paid Call Control gate additionally needs
-`VOICEKIT_TELNYX_LIVE_TO`, `VOICEKIT_TELNYX_TRANSFER_TO`, a person answering
+`VOICEY_TELNYX_LIVE_TO`, `VOICEY_TELNYX_TRANSFER_TO`, a person answering
 the endpoint, and destination permissions. It starts dual-channel recording,
 sends `12#`, cold-transfers, and guarantees a final hangup:
 
 ```bash
-VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+VOICEY_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
   uv run pytest -m live --no-cov \
   tests/live/test_telnyx_live.py::test_telnyx_live_paid_pstn_dtmf_recording_and_cold_transfer
 ```
 
 After the verified runtime captures `call.recording.saved`, export its `mp3`
-or `wav` URL as `VOICEKIT_TELNYX_LIVE_RECORDING_URL` and prove that engine-owned
+or `wav` URL as `VOICEY_TELNYX_LIVE_RECORDING_URL` and prove that engine-owned
 artifact ingestion succeeds:
 
 ```bash
@@ -639,22 +652,22 @@ uv run pytest -m live --no-cov \
 ```
 
 For the no-call LiveKit path, also export `LIVEKIT_URL`,
-`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `VOICEKIT_LIVEKIT_AGENT_NAME`,
-`VOICEKIT_LIVEKIT_SIP_URI`, `VOICEKIT_TELNYX_SIP_USERNAME`, and
-`VOICEKIT_TELNYX_SIP_PASSWORD`. The test provisions both control planes
+`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `VOICEY_LIVEKIT_AGENT_NAME`,
+`VOICEY_LIVEKIT_SIP_URI`, `VOICEY_TELNYX_SIP_USERNAME`, and
+`VOICEY_TELNYX_SIP_PASSWORD`. The test provisions both control planes
 twice, proves reuse, then rolls back:
 
 ```bash
-VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+VOICEY_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
   uv run pytest -m live --no-cov \
   tests/live/test_telnyx_livekit_live.py::test_live_telnyx_livekit_provision_reuse_and_rollback
 ```
 
 Retain a provisioned outbound trunk as `LIVEKIT_SIP_OUTBOUND_TRUNK`, set
-`VOICEKIT_LIVEKIT_CERT_ROOM`, and run the paid LiveKit SIP call:
+`VOICEY_LIVEKIT_CERT_ROOM`, and run the paid LiveKit SIP call:
 
 ```bash
-VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+VOICEY_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
   uv run pytest -m live --no-cov \
   tests/live/test_telnyx_livekit_live.py::test_live_telnyx_livekit_paid_outbound_and_sip_status_mapping
 ```
@@ -675,9 +688,9 @@ path:
 7. interrupt one temporary route/provisioning run and prove the saved snapshot
    restores without overwriting concurrent carrier changes.
 
-This workspace has no Telnyx or LiveKit variables. All six live tests therefore
-skip, and no account, route, paid-call, recording, or handset result is marked
-green.
+This workspace has no Telnyx credentials or provisioned Telnyx route. LiveKit
+is authenticated, but all six carrier tests still skip or remain unrun, and no
+Telnyx account, route, paid-call, recording, or handset result is marked green.
 
 ## P1 cloudflared public WebSocket edge
 
@@ -687,7 +700,7 @@ the exact challenge through the public `wss://` route, and tears down both
 processes:
 
 ```bash
-VOICEKIT_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL \
+VOICEY_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL \
   uv run pytest -m live --no-cov \
   tests/live/test_tunnel_live.py::test_cloudflared_quick_tunnel_websocket_round_trip
 ```
@@ -699,16 +712,18 @@ failed and cleaned up every child process, so this edge gate remains pending.
 
 ## P1 Twilio credential and PSTN gates
 
-- **Twilio no-charge test-credential Calls API:** ready-to-run, pending
-  `TWILIO_TEST_ACCOUNT_SID` and `TWILIO_TEST_AUTH_TOKEN`.
+- **Twilio no-charge test-credential Calls API:** green on 2026-08-03. The test
+  credentials accepted the outbound request contract without placing or
+  charging for a real PSTN call.
 
   ```bash
   uv run pytest -m live --no-cov \
     tests/live/test_twilio_live.py::test_twilio_test_credentials_accept_outbound_contract_without_charge
   ```
 
-- **Twilio live account/owned-number readiness:** ready-to-run, pending live
-  credentials and `VOICEKIT_TWILIO_LIVE_FROM`.
+- **Twilio live account/owned-number readiness:** green on 2026-08-03. The live
+  account authenticated and the configured from-number was owned by it; the
+  test is read-only and placed no call.
 
   ```bash
   uv run pytest -m live --no-cov \
@@ -716,11 +731,11 @@ failed and cleaned up every child process, so this edge gate remains pending.
   ```
 
 - **Twilio route mutation + crash-safe restore:** ready-to-run, pending a
-  reachable `VOICEKIT_LIVE_PUBLIC_BASE`, owned number, live credentials, and
-  explicit `VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION`.
+  reachable `VOICEY_LIVE_PUBLIC_BASE`, owned number, live credentials, and
+  explicit `VOICEY_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION`.
 
   ```bash
-  VOICEKIT_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
+  VOICEY_LIVE_ROUTE_CONFIRM=I_ACKNOWLEDGE_ROUTE_MUTATION \
     uv run pytest -m live --no-cov \
     tests/live/test_twilio_live.py::test_twilio_live_route_point_and_crash_safe_restore
   ```
@@ -728,23 +743,23 @@ failed and cleaned up every child process, so this edge gate remains pending.
 - **Twilio paid PSTN/physical-handset, outbound DTMF, dual-channel recording,
   and cold transfer:** ready-to-run, pending the running public Pipecat target,
   live from/to/transfer numbers, credentials, a person answering the handset,
-  and explicit `VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES`.
+  and explicit `VOICEY_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES`.
 
   ```bash
-  VOICEKIT_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
+  VOICEY_LIVE_CONFIRM=I_ACKNOWLEDGE_PSTN_CHARGES \
     uv run pytest -m live --no-cov \
     tests/live/test_twilio_live.py::test_twilio_live_paid_pstn_dtmf_recording_and_cold_transfer
   ```
 
 The inbound Pipecat runtime path and appointment recipe now exist. Run a
-credentialed recipe project through `voicekit dev --phone`, call its owned
+credentialed recipe project through `voicey dev --phone`, call its owned
 number from a physical handset, book and then change an appointment, and inspect
 the durable transcript:
 
 ```bash
-VOICEKIT_TRANSFER_NUMBER=+14155550199 voicekit dev --phone
-voicekit calls list
-voicekit calls show <call-id>
+VOICEY_TRANSFER_NUMBER=+14155550199 voicey dev --phone
+voicey calls list
+voicey calls show <call-id>
 ```
 
 This remains pending until a person completes the inbound call; the local Evals
@@ -759,8 +774,8 @@ wording, initial selection, and confusing transitions is a usability claim.
 Create a disposable target and complete the flow without answer flags:
 
 ```bash
-VOICEKIT_MANUAL_PROJECT="$(mktemp -d)/human-wizard"
-uv run voicekit init "$VOICEKIT_MANUAL_PROJECT"
+VOICEY_MANUAL_PROJECT="$(mktemp -d)/human-wizard"
+uv run voicey init "$VOICEY_MANUAL_PROJECT"
 ```
 
 Verify every choice starts unselected, scratch is last, channel multi-select
@@ -769,17 +784,17 @@ requires an explicit selection, each pasted key is validated, and the final
 then run:
 
 ```bash
-uv run voicekit init "$VOICEKIT_MANUAL_PROJECT" --resume
+uv run voicey init "$VOICEY_MANUAL_PROJECT" --resume
 ```
 
 The broken-machine doctor gate uses a disposable project rather than damaging
 the host. From the repository root:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_BROKEN_PROJECT="$(mktemp -d)"
-uv run python tests/manual/prepare_broken_doctor.py "$VOICEKIT_BROKEN_PROJECT"
-(cd "$VOICEKIT_BROKEN_PROJECT" && "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor)
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_BROKEN_PROJECT="$(mktemp -d)"
+uv run python tests/manual/prepare_broken_doctor.py "$VOICEY_BROKEN_PROJECT"
+(cd "$VOICEY_BROKEN_PROJECT" && "$VOICEY_REPO_ROOT/.venv/bin/voicey" doctor)
 ```
 
 The run is expected to exit non-zero and visibly diagnose missing provider and
@@ -788,7 +803,7 @@ signed receiver, and route/account checks it cannot safely perform. Then run
 the safe subset and verify that secrets are not printed:
 
 ```bash
-(cd "$VOICEKIT_BROKEN_PROJECT" && "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" doctor --fix)
+(cd "$VOICEY_BROKEN_PROJECT" && "$VOICEY_REPO_ROOT/.venv/bin/voicey" doctor --fix)
 ```
 
 These remain `pending human` until a person records the observed outcome.
@@ -804,10 +819,10 @@ speech. With the three reference provider credentials already present in the
 environment, run from the repository root:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_PLAYGROUND_PARENT="$(mktemp -d)"
-VOICEKIT_PLAYGROUND_PROJECT="$VOICEKIT_PLAYGROUND_PARENT/browser-call"
-uv run voicekit init "$VOICEKIT_PLAYGROUND_PROJECT" \
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_PLAYGROUND_PARENT="$(mktemp -d)"
+VOICEY_PLAYGROUND_PROJECT="$VOICEY_PLAYGROUND_PARENT/browser-call"
+uv run voicey init "$VOICEY_PLAYGROUND_PROJECT" \
   --name browser-call \
   --recipe scratch \
   --description "Greet the caller and help them schedule an appointment." \
@@ -816,8 +831,8 @@ uv run voicekit init "$VOICEKIT_PLAYGROUND_PROJECT" \
   --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
   --no-draft-prompts \
   --yes
-(cd "$VOICEKIT_PLAYGROUND_PROJECT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" dev --port 7860)
+(cd "$VOICEY_PLAYGROUND_PROJECT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" dev --port 7860)
 ```
 
 Open `http://127.0.0.1:7861`, grant microphone access, speak at least two turns,
@@ -829,17 +844,21 @@ green.
 ## P1 appointment recipe Evals
 
 The complete native Pipecat text and audio manifests are packaged with every
-appointment project. This environment currently has no `ANTHROPIC_API_KEY` and
-no `ollama` executable, so neither credentialed suite is claimed green.
+appointment project. On 2026-08-03 a fresh generated Pipecat project ran the
+full seven-case text suite through the production Pipecat Eval transport with
+Deepgram Nova-3, Claude Sonnet 5, Cartesia Sonic 3.5, native Anthropic judging,
+typed tools, and durable result assertions. Every case passed on its first
+attempt. Ollama was not used. The text gate is green; audio and reference
+latency remain pending below.
 
 After injecting the reference-provider credentials into the process, create a
 disposable recipe project from the repository root:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_EVAL_PARENT="$(mktemp -d)"
-VOICEKIT_EVAL_PROJECT="$VOICEKIT_EVAL_PARENT/appointment-evals"
-uv run voicekit init "$VOICEKIT_EVAL_PROJECT" \
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_EVAL_PARENT="$(mktemp -d)"
+VOICEY_EVAL_PROJECT="$VOICEY_EVAL_PARENT/appointment-evals"
+uv run voicey init "$VOICEY_EVAL_PROJECT" \
   --name appointment-evals \
   --recipe appointment-booking \
   --channels web \
@@ -847,22 +866,22 @@ uv run voicekit init "$VOICEKIT_EVAL_PROJECT" \
   --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
   --no-draft-prompts \
   --yes
-ollama pull gemma2:9b
 ```
 
-Run the fast behavior suite:
+Create the Anthropic `tests/voicey-test.jsonc` configuration shown in
+`docs/testing.md`. To reproduce the completed text evidence, run:
 
 ```bash
-(cd "$VOICEKIT_EVAL_PROJECT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/pipecat" eval suite evals/text-suite.yaml)
+(cd "$VOICEY_EVAL_PROJECT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --report json)
 ```
 
 Then run the real STT→LLM→TTS audio path and retain recordings for manual
 review:
 
 ```bash
-(cd "$VOICEKIT_EVAL_PROJECT" && \
-  "$VOICEKIT_REPO_ROOT/.venv/bin/pipecat" eval suite evals/audio-suite.yaml -a)
+(cd "$VOICEY_EVAL_PROJECT" && \
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --audio --report json)
 ```
 
 Run the dedicated 20-turn reference-stack latency gate. It reads the production
@@ -870,18 +889,17 @@ observer's persisted end-to-end samples, requires 20 distinct measured turns,
 and enforces both percentile budgets:
 
 ```bash
-"$VOICEKIT_REPO_ROOT/.venv/bin/python" \
-  "$VOICEKIT_REPO_ROOT/tests/verification/p1_latency_gate.py" \
-  --project "$VOICEKIT_EVAL_PROJECT"
+"$VOICEY_REPO_ROOT/.venv/bin/python" \
+  "$VOICEY_REPO_ROOT/tests/verification/p1_latency_gate.py" \
+  --project "$VOICEY_EVAL_PROJECT"
 ```
 
 The suite commands use Pipecat's installed runner and return 1 on any failed
 scenario. The first audio run may download Kokoro/Moonshine model data. The
 latency wrapper returns 2 when credentials are missing and 1 for a suite,
-sample-count, model, or percentile failure. These gates remain pending until
-the exact commands truly return 0. The local untracked backup has Deepgram and
-Cartesia values but no Anthropic value, so the latency command was not run and
-is not green.
+sample-count, model, or percentile failure. The audio and latency gates remain
+pending until their exact commands truly return 0; credentials alone do not
+promote either gate.
 
 ## P1 Docker public deployment and paid smoke
 
@@ -894,15 +912,15 @@ Build the same unpublished engine wheel and generate artifacts in the target
 agent project:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
+VOICEY_REPO_ROOT="$PWD"
 uv build --wheel --out-dir dist
 cd /path/to/agent-project
-"$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy docker \
+"$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy docker \
   --engine-wheel \
-  "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+  "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
   --skip-smoke
-VOICEKIT_PUBLIC_BASE=https://voice.example.com \
-  docker compose -f compose.voicekit.yaml up -d --build
+VOICEY_PUBLIC_BASE=https://voice.example.com \
+  docker compose -f compose.voicey.yaml up -d --build
 curl --fail https://voice.example.com/health
 ```
 
@@ -912,23 +930,24 @@ environment, point the owned number and place the explicitly confirmed paid
 smoke:
 
 ```bash
-"$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" numbers point +14155550123 \
+"$VOICEY_REPO_ROOT/.venv/bin/voicey" numbers point +14155550123 \
   --url https://voice.example.com \
   --yes
-"$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy docker \
+"$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy docker \
   --smoke https://voice.example.com \
   --to +15551234567 \
   --engine-wheel \
-  "$VOICEKIT_REPO_ROOT/dist/voicekit-0.0.0.dev0-py3-none-any.whl" \
+  "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
   --yes
 ```
 
 Verify answer latency, greeting, speech in both directions, and acknowledged
 results-webhook delivery, then stop the old generation and observe a
 `container_drained` log with exit code zero. If the smoke fails, immediately
-run the `voicekit numbers restore <rollback-token> --yes` command printed by
-the cutover. This gate remains pending because no public target or live Twilio
-credentials are available in the current environment.
+run the `voicey numbers restore <rollback-token> --yes` command printed by
+the cutover. This gate remains pending because no public target is deployed and
+the local Docker daemon is stopped. Live Twilio credentials are available, but
+credentials alone do not satisfy the paid smoke.
 
 ## P3 Vobiz certification on Pipecat and LiveKit
 
@@ -937,7 +956,16 @@ V3/V2 callback signatures and nonce replay, PCMU/8 kHz serialization, one-use
 media admission, provider-authoritative terminalization, route/intent fencing,
 recording ingestion, the documented LiveKit UDP topology, deterministic
 resource reuse, drift rejection, reverse rollback, and ambiguous writes. Those
-tests do not prove the current account control plane or a PSTN conversation.
+offline tests do not prove the current account control plane or a PSTN
+conversation.
+
+On 2026-08-03 the live account/owned-number readiness test passed, followed by
+the Vobiz↔LiveKit no-call provision → exact reuse → reverse rollback test. The
+test safely detached the existing Voice API application, assigned the temporary
+SIP route, verified both providers, then restored the exact prior application.
+Vobiz and LiveKit API/dashboard inspection showed zero temporary trunks,
+dispatch rules, or number bindings after rollback. No PSTN call, recording, or
+physical audio was claimed.
 
 Export the Vobiz account, owned-number, public deployment, and paid-call
 values:
@@ -945,17 +973,17 @@ values:
 ```bash
 export VOBIZ_AUTH_ID='MA_...'
 export VOBIZ_AUTH_TOKEN='...'
-export VOICEKIT_VOBIZ_LIVE_FROM='+9180...'
-export VOICEKIT_VOBIZ_LIVE_TO='+91...'
-export VOICEKIT_VOBIZ_TRANSFER_TO='+91...'
-export VOICEKIT_LIVE_PUBLIC_BASE='https://voice.example.com'
-export VOICEKIT_VOBIZ_LIVE_RECORDING_URL='https://provider-recording-url-from-a-verified-callback'
-export VOICEKIT_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
-export VOICEKIT_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
+export VOICEY_VOBIZ_LIVE_FROM='+9180...'
+export VOICEY_VOBIZ_LIVE_TO='+91...'
+export VOICEY_VOBIZ_TRANSFER_TO='+91...'
+export VOICEY_LIVE_PUBLIC_BASE='https://voice.example.com'
+export VOICEY_VOBIZ_LIVE_RECORDING_URL='https://provider-recording-url-from-a-verified-callback'
+export VOICEY_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
+export VOICEY_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
 ```
 
-Run the Pipecat/Voice API account, route restore, paid AMD/DTMF/recording/cold
-transfer, and artifact-ingestion gates:
+Reproduce the account result, then run the remaining Pipecat/Voice API route
+restore, paid AMD/DTMF/recording/cold-transfer, and artifact-ingestion gates:
 
 ```bash
 uv run pytest -q --no-cov -m live tests/live/test_vobiz_live.py
@@ -973,16 +1001,17 @@ existing values plus a deployed native agent and certification room:
 export LIVEKIT_URL='wss://project.livekit.cloud'
 export LIVEKIT_API_KEY='...'
 export LIVEKIT_API_SECRET='...'
-export VOICEKIT_LIVEKIT_AGENT_NAME='appointment-booking'
-export VOICEKIT_LIVEKIT_SIP_URI='sip:project-id.sip.livekit.cloud'
-export VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID='...'
-export VOICEKIT_VOBIZ_SIP_USERNAME='...'
-export VOICEKIT_VOBIZ_SIP_PASSWORD='...'
+export VOICEY_LIVEKIT_AGENT_NAME='appointment-booking'
+export VOICEY_LIVEKIT_SIP_URI='sip:project-id.sip.livekit.cloud'
+export VOICEY_VOBIZ_SIP_CREDENTIAL_ID='...'
+export VOICEY_VOBIZ_SIP_USERNAME='...'
+export VOICEY_VOBIZ_SIP_PASSWORD='...'
 export LIVEKIT_SIP_OUTBOUND_TRUNK='ST_...'
-export VOICEKIT_LIVEKIT_CERT_ROOM='voicekit-vobiz-cert'
+export VOICEY_LIVEKIT_CERT_ROOM='voicey-vobiz-cert'
 ```
 
-Run provision→idempotent reuse→reverse rollback and a paid outbound SIP call:
+Reproduce the completed provision→idempotent reuse→reverse rollback result and
+run the remaining paid outbound SIP call:
 
 ```bash
 uv run pytest -q --no-cov -m live tests/live/test_vobiz_livekit_live.py
@@ -997,7 +1026,7 @@ Then perform the physical both-path checklist:
 2. Place the guarded Pipecat outbound call; verify async AMD, the configured
    digit sequence, cold transfer to the second physical endpoint, recording
    callback, authenticated engine artifact, and route restoration after
-   stopping `voicekit dev --phone`.
+   stopping `voicey dev --phone`.
 3. Re-provision the LiveKit route twice; confirm the second operation creates
    zero resources. Call inbound and outbound through Vobiz SIP, verify both
    speech directions and terminal mapping, then roll back and confirm the
@@ -1008,9 +1037,10 @@ Then perform the physical both-path checklist:
    ids, timestamps, and the zero-exit test output without retaining secrets or
    raw caller PII.
 
-This row stays pending until both commands return zero and the physical
-checklist is recorded. A passing offline suite or provider dashboard screenshot
-is not a substitute.
+The account and no-call LiveKit control-plane cases are green. This row stays
+pending until the Pipecat route/paid/recording cases, LiveKit paid call, and the
+physical checklist genuinely pass. A control-plane pass is not a substitute
+for media or PSTN evidence.
 
 ## P3 Plivo Beta certification on Pipecat and LiveKit
 
@@ -1028,13 +1058,13 @@ values:
 ```bash
 export PLIVO_AUTH_ID='MA...'
 export PLIVO_AUTH_TOKEN='...'
-export VOICEKIT_PLIVO_LIVE_FROM='+1415...'
-export VOICEKIT_PLIVO_LIVE_TO='+1415...'
-export VOICEKIT_PLIVO_TRANSFER_TO='+1415...'
-export VOICEKIT_LIVE_PUBLIC_BASE='https://voice.example.com'
-export VOICEKIT_PLIVO_LIVE_RECORDING_URL='https://provider-url-from-a-verified-callback'
-export VOICEKIT_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
-export VOICEKIT_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
+export VOICEY_PLIVO_LIVE_FROM='+1415...'
+export VOICEY_PLIVO_LIVE_TO='+1415...'
+export VOICEY_PLIVO_TRANSFER_TO='+1415...'
+export VOICEY_LIVE_PUBLIC_BASE='https://voice.example.com'
+export VOICEY_PLIVO_LIVE_RECORDING_URL='https://provider-url-from-a-verified-callback'
+export VOICEY_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
+export VOICEY_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
 ```
 
 Run the account/ownership, temporary-route rollback, paid AMD/DTMF/cold
@@ -1055,12 +1085,12 @@ agent, and certification room:
 export LIVEKIT_URL='wss://project.livekit.cloud'
 export LIVEKIT_API_KEY='...'
 export LIVEKIT_API_SECRET='...'
-export VOICEKIT_LIVEKIT_AGENT_NAME='appointment-booking'
-export VOICEKIT_LIVEKIT_SIP_URI='sip:project-id.sip.livekit.cloud'
-export VOICEKIT_PLIVO_SIP_USERNAME='voicekituser'
-export VOICEKIT_PLIVO_SIP_PASSWORD='strong-special-value' # pragma: allowlist secret
+export VOICEY_LIVEKIT_AGENT_NAME='appointment-booking'
+export VOICEY_LIVEKIT_SIP_URI='sip:project-id.sip.livekit.cloud'
+export VOICEY_PLIVO_SIP_USERNAME='voiceyuser'
+export VOICEY_PLIVO_SIP_PASSWORD='strong-special-value' # pragma: allowlist secret
 export LIVEKIT_SIP_OUTBOUND_TRUNK='ST_...'
-export VOICEKIT_LIVEKIT_CERT_ROOM='voicekit-plivo-cert'
+export VOICEY_LIVEKIT_CERT_ROOM='voicey-plivo-cert'
 ```
 
 Run provision→reuse→reverse rollback and the paid outbound SIP call:
@@ -1105,19 +1135,19 @@ Export the LiveKit project and the exact external trunk values:
 export LIVEKIT_URL='wss://project.livekit.cloud'
 export LIVEKIT_API_KEY='...'
 export LIVEKIT_API_SECRET='...'
-export VOICEKIT_LIVEKIT_AGENT_NAME='appointment-booking'
-export VOICEKIT_SIP_LIVE_FROM='+1415...'
-export VOICEKIT_SIP_LIVE_TO='+1415...'
-export VOICEKIT_SIP_ADDRESS='trunk.provider.example:5061'
-export VOICEKIT_SIP_USERNAME='voicekit'
-export VOICEKIT_SIP_PASSWORD='...'
-export VOICEKIT_SIP_TRANSPORT='tls'
-export VOICEKIT_SIP_MEDIA_ENCRYPTION='require'
-export VOICEKIT_SIP_ALLOWED_ADDRESSES='203.0.113.0/24'
+export VOICEY_LIVEKIT_AGENT_NAME='appointment-booking'
+export VOICEY_SIP_LIVE_FROM='+1415...'
+export VOICEY_SIP_LIVE_TO='+1415...'
+export VOICEY_SIP_ADDRESS='trunk.provider.example:5061'
+export VOICEY_SIP_USERNAME='voicey'
+export VOICEY_SIP_PASSWORD='...'
+export VOICEY_SIP_TRANSPORT='tls'
+export VOICEY_SIP_MEDIA_ENCRYPTION='require'
+export VOICEY_SIP_ALLOWED_ADDRESSES='203.0.113.0/24'
 export LIVEKIT_SIP_OUTBOUND_TRUNK='ST_...'
-export VOICEKIT_LIVEKIT_CERT_ROOM='voicekit-generic-sip-cert'
-export VOICEKIT_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
-export VOICEKIT_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
+export VOICEY_LIVEKIT_CERT_ROOM='voicey-generic-sip-cert'
+export VOICEY_LIVE_ROUTE_CONFIRM='I_ACKNOWLEDGE_ROUTE_MUTATION'
+export VOICEY_LIVE_CONFIRM='I_ACKNOWLEDGE_PSTN_CHARGES'
 ```
 
 Run the guarded LiveKit provision/reuse/rollback and paid loopback:
@@ -1129,7 +1159,7 @@ uv run pytest -q --no-cov -m live tests/live/test_generic_sip_live.py
 Operator checklist:
 
 1. Point the external trunk's inbound destination at the LiveKit SIP endpoint
-   and configure its reverse route to `VOICEKIT_SIP_ADDRESS`.
+   and configure its reverse route to `VOICEY_SIP_ADDRESS`.
 2. Confirm username/password, source CIDRs, signaling transport, and media
    policy match exactly on both systems. Never use TLS with disabled media
    encryption.
@@ -1137,9 +1167,9 @@ Operator checklist:
    interruption, DTMF, both hangup directions, one terminal event, and the
    expected caller ID.
 4. Run provisioning twice and verify zero new resources on the second pass.
-   Roll back and confirm every voicekit-created LiveKit resource is removed.
+   Roll back and confirm every voicey-created LiveKit resource is removed.
 5. Restore the external route manually and retain its audit evidence because
-   voicekit does not own that control plane.
+   voicey does not own that control plane.
 
 This row remains pending until the command and every external-route check pass.
 It does not turn generic SIP into a Certified carrier.
@@ -1147,41 +1177,50 @@ It does not turn generic SIP into a Certified carrier.
 ## P3 first-party recipe provider conversations
 
 All three P3 recipe sources, deterministic integrations, native entrypoints,
-and 17 shared scenarios compile locally on both runtimes. Real STT→LLM→TTS
-execution needs the locked reference-provider credentials and local Ollama.
-From the repository root, run each recipe/runtime pair in a disposable project:
+and 17 shared scenarios compile locally on both runtimes. On 2026-08-03 six
+fresh projects ran every text scenario through the production native runtime
+path with Claude Sonnet 5 and native Anthropic judging: restaurant reservations
+5+5, front desk 6+6, and lead intake 6+6. All 34 cases passed on their first
+attempt. The runs covered typed tools and durable result assertions, LiveKit's
+native restaurant waitlist handoff, voicemail privacy, deterministic warm-
+transfer selection in the text tier, consented lead capture, corrections, and
+failure boundaries. No Ollama request was used. The provider text gate is
+green.
+
+The remaining provider-audio/JUnit evidence uses the explicit Anthropic judge
+configuration shown in `docs/testing.md`. From the repository root, create each
+recipe/runtime pair in a disposable project:
 
 ```bash
-VOICEKIT_REPO_ROOT="$PWD"
-VOICEKIT_RECIPE_PARENT="$(mktemp -d)"
-for VOICEKIT_RECIPE in restaurant-reservations front-desk lead-intake; do
-  for VOICEKIT_RUNTIME in pipecat livekit; do
-    VOICEKIT_PROJECT="$VOICEKIT_RECIPE_PARENT/$VOICEKIT_RECIPE-$VOICEKIT_RUNTIME"
-    uv run voicekit init "$VOICEKIT_PROJECT" \
-      --name "$VOICEKIT_RECIPE-$VOICEKIT_RUNTIME" \
-      --recipe "$VOICEKIT_RECIPE" \
+VOICEY_REPO_ROOT="$PWD"
+VOICEY_RECIPE_PARENT="$(mktemp -d)"
+for VOICEY_RECIPE in restaurant-reservations front-desk lead-intake; do
+  for VOICEY_RUNTIME in pipecat livekit; do
+    VOICEY_PROJECT="$VOICEY_RECIPE_PARENT/$VOICEY_RECIPE-$VOICEY_RUNTIME"
+    uv run voicey init "$VOICEY_PROJECT" \
+      --name "$VOICEY_RECIPE-$VOICEY_RUNTIME" \
+      --recipe "$VOICEY_RECIPE" \
       --channels web \
-      --runtime "$VOICEKIT_RUNTIME" \
+      --runtime "$VOICEY_RUNTIME" \
       --models stt=deepgram/nova-3,llm=anthropic/claude-sonnet-5,tts=cartesia/sonic-3.5 \
       --no-draft-prompts \
       --yes
     (
-      cd "$VOICEKIT_PROJECT"
-      "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test
-      "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --audio
-      "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" test --report junit
+      cd "$VOICEY_PROJECT"
+      "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --audio
+      "$VOICEY_REPO_ROOT/.venv/bin/voicey" test --report junit
     )
   done
 done
 ```
 
-For `front-desk`, repeat the live phone conversation after P3 warm-transfer
-provisioning and verify that the human hears the private briefing before the
-caller joins. For restaurant reservations, verify an unavailable large party
-becomes waitlisted rather than confirmed. For lead intake, decline retention
-consent and confirm no lead is persisted. These gates remain pending until all
-commands return zero and those behaviors are observed; local compilation is not
-promoted as provider-conversation evidence.
+Each generated `tests/voicey-test.jsonc` must select the native Anthropic API
+override; no remaining command requires Ollama. For `front-desk`, repeat the
+live phone conversation after P3 warm-transfer provisioning and verify that the
+human hears the private briefing before the caller joins. The audio/JUnit and
+physical warm-transfer gates remain pending until their commands and human
+observations pass; the already completed model-API text suites are not rerun or
+misrepresented as physical media evidence.
 
 ## P3.6 Pipecat/Twilio warm-transfer live certification
 
@@ -1199,8 +1238,8 @@ an owned number, a public Pipecat host, and two people/endpoints. In a generated
 `front-desk` Pipecat project with its provider keys in `.env`, run:
 
 ```bash
-export VOICEKIT_TRANSFER_NUMBER='+1415...human-destination'
-voicekit dev --phone --tunnel url \
+export VOICEY_TRANSFER_NUMBER='+1415...human-destination'
+voicey dev --phone --tunnel url \
   --url 'https://public-pipecat.example.com' \
   --no-open
 ```
@@ -1228,7 +1267,7 @@ Then execute this physical checklist without stopping the host:
 8. Kill the host during a third pre-accept attempt, restart the same command,
    and confirm the known orphan B leg is completed without redial. An
    `ambiguous` bridge must remain visible for operator review.
-9. Inspect `.voicekit/telephony.sqlite3`, application logs, and the terminal
+9. Inspect `.voicey/telephony.sqlite3`, application logs, and the terminal
    payload. Retain transfer/call/conference ids and timestamps, but confirm the
    raw private briefing appears in none of those artifacts.
 
@@ -1245,33 +1284,33 @@ real migration/object/fencing preflight against disposable PostgreSQL 17. This
 machine is not authenticated to a billed Railway workspace, so no external
 resource is represented as green.
 
-Choose a disposable voicekit phone-agent project and empty Railway project
+Choose a disposable voicey phone-agent project and empty Railway project
 identity. Authenticate, build the unpublished engine wheel, and run:
 
 ```bash
-export VOICEKIT_REPO_ROOT="$PWD"
-export VOICEKIT_AGENT_PROJECT='/absolute/path/to/disposable-agent-project'
-export VOICEKIT_ENGINE_WHEEL="$PWD/dist/voicekit-0.0.0.dev0-py3-none-any.whl"
-export VOICEKIT_RAILWAY_PROJECT='voicekit-results-cert'
-export VOICEKIT_RAILWAY_WORKSPACE='exact-workspace-id-or-name'
-export VOICEKIT_RAILWAY_ENVIRONMENT='production'
-export VOICEKIT_RAILWAY_SERVICE='voicekit-results-cert'
-export VOICEKIT_RAILWAY_BUCKET='voicekit-results-cert-objects'
-export VOICEKIT_RAILWAY_SERVICE_REGION='us-east'
-export VOICEKIT_RAILWAY_BUCKET_REGION='iad'
+export VOICEY_REPO_ROOT="$PWD"
+export VOICEY_AGENT_PROJECT='/absolute/path/to/disposable-agent-project'
+export VOICEY_ENGINE_WHEEL="$PWD/dist/voicey-0.0.0.dev0-py3-none-any.whl"
+export VOICEY_RAILWAY_PROJECT='voicey-results-cert'
+export VOICEY_RAILWAY_WORKSPACE='exact-workspace-id-or-name'
+export VOICEY_RAILWAY_ENVIRONMENT='production'
+export VOICEY_RAILWAY_SERVICE='voicey-results-cert'
+export VOICEY_RAILWAY_BUCKET='voicey-results-cert-objects'
+export VOICEY_RAILWAY_SERVICE_REGION='us-east'
+export VOICEY_RAILWAY_BUCKET_REGION='iad'
 railway whoami
 uv build --wheel --out-dir dist
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy railway \
-    --project "$VOICEKIT_RAILWAY_PROJECT" \
-    --workspace "$VOICEKIT_RAILWAY_WORKSPACE" \
-    --environment "$VOICEKIT_RAILWAY_ENVIRONMENT" \
-    --service "$VOICEKIT_RAILWAY_SERVICE" \
-    --bucket "$VOICEKIT_RAILWAY_BUCKET" \
-    --service-region "$VOICEKIT_RAILWAY_SERVICE_REGION" \
-    --bucket-region "$VOICEKIT_RAILWAY_BUCKET_REGION" \
-    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy railway \
+    --project "$VOICEY_RAILWAY_PROJECT" \
+    --workspace "$VOICEY_RAILWAY_WORKSPACE" \
+    --environment "$VOICEY_RAILWAY_ENVIRONMENT" \
+    --service "$VOICEY_RAILWAY_SERVICE" \
+    --bucket "$VOICEY_RAILWAY_BUCKET" \
+    --service-region "$VOICEY_RAILWAY_SERVICE_REGION" \
+    --bucket-region "$VOICEY_RAILWAY_BUCKET_REGION" \
+    --engine-wheel "$VOICEY_ENGINE_WHEEL" \
     --yes \
     --json
 )
@@ -1293,17 +1332,17 @@ the current/previous relay and results pairs:
 
 ```bash
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy railway \
-    --project "$VOICEKIT_RAILWAY_PROJECT" \
-    --workspace "$VOICEKIT_RAILWAY_WORKSPACE" \
-    --environment "$VOICEKIT_RAILWAY_ENVIRONMENT" \
-    --service "$VOICEKIT_RAILWAY_SERVICE" \
-    --bucket "$VOICEKIT_RAILWAY_BUCKET" \
-    --service-region "$VOICEKIT_RAILWAY_SERVICE_REGION" \
-    --bucket-region "$VOICEKIT_RAILWAY_BUCKET_REGION" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy railway \
+    --project "$VOICEY_RAILWAY_PROJECT" \
+    --workspace "$VOICEY_RAILWAY_WORKSPACE" \
+    --environment "$VOICEY_RAILWAY_ENVIRONMENT" \
+    --service "$VOICEY_RAILWAY_SERVICE" \
+    --bucket "$VOICEY_RAILWAY_BUCKET" \
+    --service-region "$VOICEY_RAILWAY_SERVICE_REGION" \
+    --bucket-region "$VOICEY_RAILWAY_BUCKET_REGION" \
     --rotate-credentials \
-    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
+    --engine-wheel "$VOICEY_ENGINE_WHEEL" \
     --yes \
     --json
 )
@@ -1313,27 +1352,27 @@ Deploy a paired Pipecat Cloud worker from the same project and place its paid
 smoke through the Railway relay:
 
 ```bash
-export VOICEKIT_RELAY_URL='https://exact-generated-domain.up.railway.app'
-export VOICEKIT_PCC_AGENT='voicekit-railway-cert'
-export VOICEKIT_PCC_ORG='exact-pipecat-org'
-export VOICEKIT_PCC_REGION='us-west'
-export VOICEKIT_PCC_SECRET_SET='voicekit-railway-cert-secrets' # pragma: allowlist secret
-export VOICEKIT_PCC_IMAGE='registry.example.com/voicekit/railway-cert:git-sha'
-export VOICEKIT_CLOUD_SMOKE_TO='+14155550199'
+export VOICEY_RELAY_URL='https://exact-generated-domain.up.railway.app'
+export VOICEY_PCC_AGENT='voicey-railway-cert'
+export VOICEY_PCC_ORG='exact-pipecat-org'
+export VOICEY_PCC_REGION='us-west'
+export VOICEY_PCC_SECRET_SET='voicey-railway-cert-secrets' # pragma: allowlist secret
+export VOICEY_PCC_IMAGE='registry.example.com/voicey/railway-cert:git-sha'
+export VOICEY_CLOUD_SMOKE_TO='+14155550199'
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy pipecat-cloud \
-    --agent "$VOICEKIT_PCC_AGENT" \
-    --org "$VOICEKIT_PCC_ORG" \
-    --region "$VOICEKIT_PCC_REGION" \
-    --secret-set "$VOICEKIT_PCC_SECRET_SET" \
-    --image "$VOICEKIT_PCC_IMAGE" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy pipecat-cloud \
+    --agent "$VOICEY_PCC_AGENT" \
+    --org "$VOICEY_PCC_ORG" \
+    --region "$VOICEY_PCC_REGION" \
+    --secret-set "$VOICEY_PCC_SECRET_SET" \
+    --image "$VOICEY_PCC_IMAGE" \
     --min-agents 1 \
     --max-agents 4 \
     --profile agent-1x \
-    --relay-url "$VOICEKIT_RELAY_URL" \
-    --engine-wheel "$VOICEKIT_ENGINE_WHEEL" \
-    --smoke-to "$VOICEKIT_CLOUD_SMOKE_TO" \
+    --relay-url "$VOICEY_RELAY_URL" \
+    --engine-wheel "$VOICEY_ENGINE_WHEEL" \
+    --smoke-to "$VOICEY_CLOUD_SMOKE_TO" \
     --yes \
     --json
 )
@@ -1353,19 +1392,19 @@ replacement, and the stale generation cannot append or terminalize. Retain
 redacted project/service/database/bucket/domain/deployment/replica/call/event/
 delivery ids and timestamps.
 
-After evidence capture, delete only this disposable, voicekit-created set:
+After evidence capture, delete only this disposable, voicey-created set:
 
 ```bash
 (
-  cd "$VOICEKIT_AGENT_PROJECT"
-  "$VOICEKIT_REPO_ROOT/.venv/bin/voicekit" deploy railway \
-    --project "$VOICEKIT_RAILWAY_PROJECT" \
-    --workspace "$VOICEKIT_RAILWAY_WORKSPACE" \
-    --environment "$VOICEKIT_RAILWAY_ENVIRONMENT" \
-    --service "$VOICEKIT_RAILWAY_SERVICE" \
-    --bucket "$VOICEKIT_RAILWAY_BUCKET" \
-    --service-region "$VOICEKIT_RAILWAY_SERVICE_REGION" \
-    --bucket-region "$VOICEKIT_RAILWAY_BUCKET_REGION" \
+  cd "$VOICEY_AGENT_PROJECT"
+  "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy railway \
+    --project "$VOICEY_RAILWAY_PROJECT" \
+    --workspace "$VOICEY_RAILWAY_WORKSPACE" \
+    --environment "$VOICEY_RAILWAY_ENVIRONMENT" \
+    --service "$VOICEY_RAILWAY_SERVICE" \
+    --bucket "$VOICEY_RAILWAY_BUCKET" \
+    --service-region "$VOICEY_RAILWAY_SERVICE_REGION" \
+    --bucket-region "$VOICEY_RAILWAY_BUCKET_REGION" \
     --rollback-created \
     --yes \
     --json
@@ -1391,11 +1430,11 @@ uv run python tests/verification/p4_soak.py \
   --max-concurrent 8 \
   --call-hold-s 1 \
   --runtime both \
-  --report .voicekit/verification/p4-soak-report.json
+  --report .voicey/verification/p4-soak-report.json
 ```
 
 The scheduled workflow `.github/workflows/soak.yml` targets a self-hosted Linux
-runner labeled `voicekit-soak`. GitHub-hosted jobs have a six-hour execution
+runner labeled `voicey-soak`. GitHub-hosted jobs have a six-hour execution
 limit, while self-hosted jobs may run for five days, so a hosted `ubuntu-latest`
 job cannot honestly implement this gate. See the official
 [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits).

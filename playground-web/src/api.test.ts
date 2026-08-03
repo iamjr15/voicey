@@ -70,7 +70,7 @@ describe("playground API", () => {
     expect((await getSessionSnapshot(session.poll_url)).session.session_id).toBe("web_1");
   });
 
-  it("exchanges a one-use Voicekit token in an authorization header", async () => {
+  it("exchanges a one-use Voicey token in an authorization header", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       expect(String(input)).toBe("http://127.0.0.1:7861/api/livekit/token");
       expect(String(input)).not.toContain("header.payload.signature");
@@ -108,7 +108,7 @@ describe("playground API", () => {
         new Response(
           JSON.stringify({
             error: {
-              code: "VK-WEB-003",
+              code: "VY-WEB-003",
               detail: "retry after 10s.",
               fix: "Wait before starting another session.",
             },
@@ -120,7 +120,7 @@ describe("playground API", () => {
 
     await expect(issueSession()).rejects.toEqual(
       expect.objectContaining<Partial<PlaygroundApiError>>({
-        code: "VK-WEB-003",
+        code: "VY-WEB-003",
         message: "retry after 10s.",
         fix: "Wait before starting another session.",
       }),
@@ -135,7 +135,7 @@ describe("playground API", () => {
 
     await expect(getBootstrap()).rejects.toEqual(
       expect.objectContaining<Partial<PlaygroundApiError>>({
-        code: "VK-WEB-005",
+        code: "VY-WEB-005",
         message: "request failed with HTTP 502",
       }),
     );

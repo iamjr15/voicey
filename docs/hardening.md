@@ -24,20 +24,20 @@ disappear.
 Run the local gate against both repository backends:
 
 ```bash
-export VOICEKIT_TEST_POSTGRES_DSN='postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit' # pragma: allowlist secret
+export VOICEY_TEST_POSTGRES_DSN='postgresql://voicey:voicey-test@127.0.0.1:5432/voicey' # pragma: allowlist secret
 uv run python tests/verification/run_p4_hardening_gate.py
 ```
 
-Reports are written atomically under `.voicekit/verification/`.
+Reports are written atomically under `.voicey/verification/`.
 
 ## Drain contract
 
 - Pipecat and LiveKit close new admission atomically.
 - A browser reservation issued before drain remains valid; a reservation or
-  unreserved SIP job arriving after drain is rejected with `VK-RUN-008`.
+  unreserved SIP job arriving after drain is rejected with `VY-RUN-008`.
 - Docker stops both listeners only after the host drain and final delivery pass.
 - LiveKit Cloud uses the installed `AgentServer.drain(timeout=...)` contract
-  after closing the Voicekit admission gate.
+  after closing the Voicey admission gate.
 - Results companion readiness closes before its grace window and final
   maintenance pass.
 - Fly, Pipecat Cloud, LiveKit Cloud, Railway, and Docker still require their

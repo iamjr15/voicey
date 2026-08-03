@@ -6,9 +6,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.obs import LatencySample, NewCall, TimelineEvent, ToolCallObservation, TranscriptTurn
-from voicekit.relay import (
+from voicey.errors import VoiceyError
+from voicey.obs import LatencySample, NewCall, TimelineEvent, ToolCallObservation, TranscriptTurn
+from voicey.relay import (
     RelayClient,
     RelayCredential,
     RelayKeyring,
@@ -16,16 +16,16 @@ from voicekit.relay import (
     SQLiteRelayJournal,
     create_relay_app,
 )
-from voicekit.relay.auth import FenceSigner, RelayRequestSigner, RelayRequestVerifier
-from voicekit.relay.models import RelayUpdateRequest
-from voicekit.storage import (
+from voicey.relay.auth import FenceSigner, RelayRequestSigner, RelayRequestVerifier
+from voicey.relay.models import RelayUpdateRequest
+from voicey.storage import (
     RecordingReady,
     ResultDeliveryConfig,
     ResultSnapshot,
     SQLiteRepository,
     TerminalRequest,
 )
-from voicekit.storage.models import CallLease
+from voicey.storage.models import CallLease
 
 CONFIG_HASH = f"sha256:{'e' * 64}"
 
@@ -182,7 +182,7 @@ async def test_relay_rejects_nonce_replay_before_route_execution(tmp_path: Path)
 
     assert first.status_code == 200
     assert replay.status_code == 401
-    assert replay.json()["error"]["code"] == "VK-REL-003"
+    assert replay.json()["error"]["code"] == "VY-REL-003"
 
 
 @pytest.mark.asyncio
@@ -210,7 +210,7 @@ async def test_relay_rotation_accepts_previous_key_and_unknown_key_fails_closed(
             client=previous_http,
         ) as previous_client:
             assert previous_client is not None
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await RelayClient(
                 "https://relay.test",
                 unknown,
@@ -220,7 +220,7 @@ async def test_relay_rotation_accepts_previous_key_and_unknown_key_fails_closed(
         await previous_http.aclose()
         await unknown_http.aclose()
 
-    assert caught.value.code == "VK-REL-003"
+    assert caught.value.code == "VY-REL-003"
 
 
 @pytest.mark.asyncio
@@ -260,7 +260,7 @@ async def test_relay_rejects_sequence_gap_and_idempotency_conflict(tmp_path: Pat
         await http.aclose()
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "VK-REL-005"
+    assert response.json()["error"]["code"] == "VY-REL-005"
 
 
 @pytest.mark.asyncio
@@ -317,7 +317,7 @@ async def test_relay_rejects_idempotency_key_reuse_with_different_bytes(
 
     assert first.status_code == 200
     assert conflicting.status_code == 409
-    assert conflicting.json()["error"]["code"] == "VK-REL-005"
+    assert conflicting.json()["error"]["code"] == "VY-REL-005"
 
 
 @pytest.mark.asyncio
@@ -424,7 +424,7 @@ async def test_relay_rejects_tampered_signature_and_fence(tmp_path: Path) -> Non
         ) as http:
             signer = RelayRequestSigner(credential)
             bad_headers = signer.headers("GET", "/v1/ready", b"")
-            bad_headers["x-voicekit-relay-signature"] = "tampered"
+            bad_headers["x-voicey-relay-signature"] = "tampered"
             signature_response = await http.get("/v1/ready", headers=bad_headers)
 
             async with RelayClient(
@@ -454,9 +454,9 @@ async def test_relay_rejects_tampered_signature_and_fence(tmp_path: Path) -> Non
             )
 
     assert signature_response.status_code == 401
-    assert signature_response.json()["error"]["code"] == "VK-REL-003"
+    assert signature_response.json()["error"]["code"] == "VY-REL-003"
     assert fence_response.status_code == 401
-    assert fence_response.json()["error"]["code"] == "VK-REL-004"
+    assert fence_response.json()["error"]["code"] == "VY-REL-004"
 
 
 @pytest.mark.asyncio
@@ -490,14 +490,14 @@ async def test_relay_rejects_old_generation_after_server_takeover(tmp_path: Path
                 lease_ttl=timedelta(seconds=30),
                 now=datetime.now(UTC),
             )
-            with pytest.raises(VoicekitError) as caught:
+            with pytest.raises(VoiceyError) as caught:
                 await client.append_timeline(
                     lease.call_id,
                     TimelineEvent(event_type="stale.write"),
                 )
         await http.aclose()
 
-    assert caught.value.code == "VK-REL-004"
+    assert caught.value.code == "VY-REL-004"
 
 
 @pytest.mark.asyncio
@@ -506,7 +506,7 @@ async def test_relay_client_requires_ready_ack_before_begin() -> None:
         "https://relay.example.test",
         RelayCredential.issue("current-key"),
     )
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await client.begin_call(
             _call(),
             owner_id="worker-a",
@@ -515,7 +515,7 @@ async def test_relay_client_requires_ready_ack_before_begin() -> None:
         )
     await client.close()
 
-    assert caught.value.code == "VK-REL-002"
+    assert caught.value.code == "VY-REL-002"
 
 
 @pytest.mark.asyncio
@@ -537,14 +537,14 @@ async def test_open_relay_client_rejects_updates_without_a_call_fence(
             base_url="https://relay.test",
         )
         async with RelayClient("https://relay.test", credential, client=http) as client:
-            with pytest.raises(VoicekitError) as caught:
+            with pytest.raises(VoiceyError) as caught:
                 await client.append_timeline(
                     "missing-call",
                     TimelineEvent(event_type="missing"),
                 )
         await http.aclose()
 
-    assert caught.value.code == "VK-REL-004"
+    assert caught.value.code == "VY-REL-004"
 
 
 @pytest.mark.asyncio
@@ -569,7 +569,7 @@ async def test_signed_relay_body_still_requires_strict_wire_schema(tmp_path: Pat
             response = await client.post(path, content=body, headers=headers)
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "VK-REL-001"
+    assert response.json()["error"]["code"] == "VY-REL-001"
 
 
 def test_relay_credentials_are_strong_rotatable_and_secret_safe() -> None:
@@ -578,7 +578,7 @@ def test_relay_credentials_are_strong_rotatable_and_secret_safe() -> None:
 
     assert parsed == credential
     assert credential.reveal() not in repr(credential)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayCredential.parse("not-a-relay-credential")
 
 
@@ -593,44 +593,44 @@ def test_relay_auth_configuration_and_token_failures_are_catalogued() -> None:
         expires_at=now + timedelta(seconds=30),
     )
 
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayCredential(key_id="x", secret=b"short")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayCredential.parse("vkr_current-key_A")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayKeyring(current=credential, previous=credential)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayRequestVerifier(keyring, tolerance=timedelta(0))
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         FenceSigner(keyring, token_ttl=timedelta(seconds=1))
 
     verifier = RelayRequestVerifier(keyring)
     malformed = RelayRequestSigner(credential).headers("GET", "/v1/ready", b"")
-    malformed["x-voicekit-relay-timestamp"] = "not-an-integer"
-    with pytest.raises(VoicekitError):
+    malformed["x-voicey-relay-timestamp"] = "not-an-integer"
+    with pytest.raises(VoiceyError):
         verifier.verify(malformed, method="GET", path="/v1/ready", body=b"")
     expired = RelayRequestSigner(credential, clock=lambda: 0).headers(
         "GET",
         "/v1/ready",
         b"",
     )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         verifier.verify(expired, method="GET", path="/v1/ready", body=b"")
 
     fences = FenceSigner(keyring, clock=lambda: now)
     token = fences.issue(lease)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         fences.verify("bad-token", call_id=lease.call_id)
     key_id, _payload, _signature = token.split(".")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         fences.verify(f"{key_id}.bad.bad", call_id=lease.call_id)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         fences.verify(token, call_id="another-call")
     expired_fences = FenceSigner(
         keyring,
         clock=lambda: now + timedelta(hours=2),
     )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         expired_fences.verify(token, call_id=lease.call_id)
 
 
@@ -639,7 +639,7 @@ async def test_relay_journal_rejects_invalid_direct_state_transitions(
     tmp_path: Path,
 ) -> None:
     journal = SQLiteRelayJournal(tmp_path / "relay.sqlite3")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await journal.ready()
     await journal.open()
     assert await journal.open() is journal
@@ -654,7 +654,7 @@ async def test_relay_journal_rejects_invalid_direct_state_transitions(
         )
         is None
     )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await journal.reserve_request(
             idempotency_key="op_request_123456789012",
             request_hash="hash-b",
@@ -662,13 +662,13 @@ async def test_relay_journal_rejects_invalid_direct_state_transitions(
             call_id="call-a",
             now=now,
         )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await journal.complete_request(
             idempotency_key="missing_request_123456",
             request_hash="hash",
             response_body=b"{}",
         )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await journal.complete_update(
             call_id="missing",
             sequence=1,
@@ -676,7 +676,7 @@ async def test_relay_journal_rejects_invalid_direct_state_transitions(
             request_hash="hash",
             response_body=b"{}",
         )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         await journal.reserve_request(
             idempotency_key="naive_time_1234567890",
             request_hash="hash",
@@ -691,9 +691,9 @@ async def test_relay_journal_rejects_invalid_direct_state_transitions(
 @pytest.mark.asyncio
 async def test_relay_client_transport_and_response_failures_are_catalogued() -> None:
     credential = RelayCredential.issue("current-key")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayClient("http://relay.example.test", credential)
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RelayClient("https://relay.example.test?bad=1", credential)
 
     async def invalid_ready(_request: httpx.Request) -> httpx.Response:
@@ -703,7 +703,7 @@ async def test_relay_client_transport_and_response_failures_are_catalogued() -> 
         transport=httpx.MockTransport(invalid_ready),
         base_url="https://relay.test",
     )
-    with pytest.raises(VoicekitError) as invalid:
+    with pytest.raises(VoiceyError) as invalid:
         await RelayClient(
             "https://relay.test",
             credential,
@@ -718,7 +718,7 @@ async def test_relay_client_transport_and_response_failures_are_catalogued() -> 
         transport=httpx.MockTransport(broken_transport),
         base_url="https://relay.test",
     )
-    with pytest.raises(VoicekitError) as unavailable:
+    with pytest.raises(VoiceyError) as unavailable:
         await RelayClient(
             "https://relay.test",
             credential,
@@ -727,23 +727,23 @@ async def test_relay_client_transport_and_response_failures_are_catalogued() -> 
         ).open()
     await broken_http.aclose()
 
-    assert invalid.value.code == "VK-REL-002"
-    assert unavailable.value.code == "VK-REL-002"
+    assert invalid.value.code == "VY-REL-002"
+    assert unavailable.value.code == "VY-REL-002"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("response", "expected_code"),
     [
-        (httpx.Response(400, text="not-json"), "VK-REL-006"),
+        (httpx.Response(400, text="not-json"), "VY-REL-006"),
         (
             httpx.Response(
                 400,
                 json={"error": {"code": "NOT-CATALOGUED", "detail": "bad"}},
             ),
-            "VK-REL-006",
+            "VY-REL-006",
         ),
-        (httpx.Response(503, json={"unexpected": True}), "VK-REL-002"),
+        (httpx.Response(503, json={"unexpected": True}), "VY-REL-002"),
     ],
 )
 async def test_relay_http_error_fallback_never_trusts_unknown_error_codes(
@@ -757,7 +757,7 @@ async def test_relay_http_error_fallback_never_trusts_unknown_error_codes(
         transport=httpx.MockTransport(handler),
         base_url="https://relay.test",
     )
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await RelayClient(
             "https://relay.test",
             RelayCredential.issue("current-key"),

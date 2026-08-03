@@ -12,7 +12,7 @@ import { App } from "./App";
 
 const root = document.getElementById("root");
 if (root === null) {
-  throw new Error("voicekit playground root is missing");
+  throw new Error("voicey playground root is missing");
 }
 
 createRoot(root).render(

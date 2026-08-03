@@ -1,6 +1,6 @@
 # Documentation
 
-Voicekit is the production toolchain around native Pipecat and LiveKit voice
+Voicey is the production toolchain around native Pipecat and LiveKit voice
 agents. Start with the runtime you intend to operate:
 
 - [Pipecat five-minute quickstart](quickstart-pipecat.md)
@@ -63,7 +63,7 @@ require a funded account or physical endpoint.
 - [Error catalog](errors.md)
 - [External verification gaps](GAPS.md)
 - [Security policy](../SECURITY.md)
-- [Human-only rename procedure](../RENAME.md)
+- [Voicey naming record](../RENAME.md)
 
 Next: choose a runtime quickstart. Do not begin with carrier or deployment
 provisioning; the local browser path proves configuration, native workflow,

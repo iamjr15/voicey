@@ -14,26 +14,26 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from voicekit import Agent, Limits, Models, Phone, Results, Web
-from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.deploy import runtime as runtime_module
-from voicekit.deploy.docker import (
+from voicey import Agent, Limits, Models, Phone, Results, Web
+from voicey.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.deploy import runtime as runtime_module
+from voicey.deploy.docker import (
     DockerDeploymentGenerator,
     DockerSmokeVerifier,
 )
-from voicekit.deploy.persistence import (
+from voicey.deploy.persistence import (
     PersistencePreflightReport,
     RollingGenerationReport,
     docker_persistence_preflight,
     rolling_generation_invariant,
 )
-from voicekit.deploy.runtime import ContainerSettings
-from voicekit.errors import VoicekitError
+from voicey.deploy.runtime import ContainerSettings
+from voicey.errors import VoiceyError
 
 
 def _wheel(path: Path) -> Path:
-    wheel = path / "voicekit-0.0.0.dev0-py3-none-any.whl"
+    wheel = path / "voicey-0.0.0.dev0-py3-none-any.whl"
     wheel.write_bytes(b"wheel")
     return wheel
 
@@ -45,7 +45,7 @@ def _docker_project(path: Path) -> Path:
         "llm": "anthropic/claude-sonnet-5",
         "tts": "cartesia/sonic-3.5",
     }
-    ManifestStore(path / "voicekit.jsonc").save(
+    ManifestStore(path / "voicey.jsonc").save(
         ProjectManifest(
             project_name="docker-test",
             runtime="pipecat",
@@ -56,7 +56,7 @@ def _docker_project(path: Path) -> Path:
     )
     (path / "pyproject.toml").write_text(
         '[project]\nname = "docker-test"\nversion = "0.0.0"\n'
-        'dependencies = ["voicekit[pipecat]", "httpx>=0.28"]\n',
+        'dependencies = ["voicey[pipecat]", "httpx>=0.28"]\n',
         encoding="utf-8",
     )
     return path
@@ -79,7 +79,7 @@ def test_generator_emits_idempotent_secret_free_hardened_artifacts(tmp_path: Pat
     ignored = first.dockerignore.read_text(encoding="utf-8")
     combined = dockerfile + compose + ignored
     assert "USER 10001:10001" in dockerfile
-    assert 'CMD ["python", "-m", "voicekit.deploy.runtime"]' in dockerfile
+    assert 'CMD ["python", "-m", "voicey.deploy.runtime"]' in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "init: true" in compose
     assert "read_only: true" in compose
@@ -99,20 +99,20 @@ def test_generator_rejects_conflicts_bad_wheels_and_unpublished_default(
     project = _docker_project(tmp_path / "project")
     generator = DockerDeploymentGenerator(project)
 
-    with pytest.raises(VoicekitError) as missing:
+    with pytest.raises(VoiceyError) as missing:
         generator.generate()
-    assert missing.value.code == "VK-DEP-003"
+    assert missing.value.code == "VY-DEP-003"
 
     bad = tmp_path / "other.whl"
-    bad.write_bytes(b"not voicekit")
-    with pytest.raises(VoicekitError) as invalid:
+    bad.write_bytes(b"not voicey")
+    with pytest.raises(VoiceyError) as invalid:
         generator.generate(engine_wheel=bad)
-    assert invalid.value.code == "VK-DEP-003"
+    assert invalid.value.code == "VY-DEP-003"
 
-    (project / "Dockerfile.voicekit").write_text("owned\n", encoding="utf-8")
-    with pytest.raises(VoicekitError) as conflict:
+    (project / "Dockerfile.voicey").write_text("owned\n", encoding="utf-8")
+    with pytest.raises(VoiceyError) as conflict:
         generator.generate(engine_wheel=_wheel(tmp_path))
-    assert conflict.value.code == "VK-DEP-001"
+    assert conflict.value.code == "VY-DEP-001"
 
 
 def test_generator_validation_maps_missing_docker_and_compose_failure(
@@ -120,17 +120,17 @@ def test_generator_validation_maps_missing_docker_and_compose_failure(
     tmp_path: Path,
 ) -> None:
     project = _docker_project(tmp_path / "project")
-    (project / ".env").write_text("VOICEKIT_PUBLIC_BASE=https://voice.example\n")
+    (project / ".env").write_text("VOICEY_PUBLIC_BASE=https://voice.example\n")
     generator = DockerDeploymentGenerator(project)
     artifacts = generator.generate(engine_wheel=_wheel(tmp_path))
 
     def missing_docker(_name: str) -> None:
         return None
 
-    monkeypatch.setattr("voicekit.deploy.docker.shutil.which", missing_docker)
-    with pytest.raises(VoicekitError) as missing:
+    monkeypatch.setattr("voicey.deploy.docker.shutil.which", missing_docker)
+    with pytest.raises(VoiceyError) as missing:
         generator.validate(artifacts)
-    assert missing.value.code == "VK-DEP-005"
+    assert missing.value.code == "VY-DEP-005"
 
     class Completed:
         returncode = 1
@@ -143,12 +143,12 @@ def test_generator_validation_maps_missing_docker_and_compose_failure(
     def failed_compose(*_args: object, **_kwargs: object) -> Completed:
         return Completed()
 
-    monkeypatch.setattr("voicekit.deploy.docker.shutil.which", docker_path)
+    monkeypatch.setattr("voicey.deploy.docker.shutil.which", docker_path)
     monkeypatch.setattr(
-        "voicekit.deploy.docker.subprocess.run",
+        "voicey.deploy.docker.subprocess.run",
         failed_compose,
     )
-    with pytest.raises(VoicekitError, match="invalid compose"):
+    with pytest.raises(VoiceyError, match="invalid compose"):
         generator.validate(artifacts)
 
 
@@ -197,7 +197,7 @@ async def test_persistence_preflight_rejects_invalid_storage_matrix(
     local_only: bool,
     replicas: int,
 ) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await docker_persistence_preflight(
             tmp_path / "data",
             deploy_target=target,
@@ -205,7 +205,7 @@ async def test_persistence_preflight_rejects_invalid_storage_matrix(
             sqlite_local_only=local_only,
             replica_count=replicas,
         )
-    assert caught.value.code == "VK-DEP-002"
+    assert caught.value.code == "VY-DEP-002"
 
 
 async def test_persistence_preflight_rejects_remote_mount_and_symlink(tmp_path: Path) -> None:
@@ -215,7 +215,7 @@ async def test_persistence_preflight_rejects_remote_mount_and_symlink(tmp_path: 
         f"1 0 0:1 / {tmp_path} rw,relatime - nfs4 server:/data rw\n",
         encoding="utf-8",
     )
-    with pytest.raises(VoicekitError, match="remote filesystem"):
+    with pytest.raises(VoiceyError, match="remote filesystem"):
         await docker_persistence_preflight(
             data,
             deploy_target="docker",
@@ -229,7 +229,7 @@ async def test_persistence_preflight_rejects_remote_mount_and_symlink(tmp_path: 
     target.mkdir()
     link = tmp_path / "link"
     link.symlink_to(target, target_is_directory=True)
-    with pytest.raises(VoicekitError, match="symbolic link"):
+    with pytest.raises(VoiceyError, match="symbolic link"):
         await docker_persistence_preflight(
             link,
             deploy_target="docker",
@@ -262,27 +262,27 @@ async def test_smoke_verifier_requires_ready_contract_and_secure_remote_url() ->
         return httpx.Response(200, json={"ok": False})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(not_ready)) as client:
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await DockerSmokeVerifier(client).verify("http://localhost:7860")
-    assert caught.value.code == "VK-DEP-004"
-    with pytest.raises(VoicekitError):
+    assert caught.value.code == "VY-DEP-004"
+    with pytest.raises(VoiceyError):
         await DockerSmokeVerifier().verify("http://voice.example")
 
 
 def test_container_settings_validate_environment_only_topology(tmp_path: Path) -> None:
     values = {
-        "VOICEKIT_PUBLIC_BASE": "https://voice.example/base",
-        "VOICEKIT_DATA_DIR": "/app/data",
-        "VOICEKIT_PORT": "7860",
-        "VOICEKIT_ADMIN_PORT": "7861",
-        "VOICEKIT_ADMIN_ORIGIN": "http://agent:7861",
-        "VOICEKIT_DEPLOY_TARGET": "docker",
-        "VOICEKIT_STORAGE_BACKEND": "sqlite",
-        "VOICEKIT_SQLITE_LOCAL_ONLY": "1",
-        "VOICEKIT_REPLICA_COUNT": "1",
-        "VOICEKIT_TRUSTED_PROXY_IPS": "127.0.0.1,::1",
-        "VOICEKIT_TRUSTED_PROXY_CIDRS": "127.0.0.0/8,::1/128",
-        "VOICEKIT_INTEGRATOR_SECRET": "integrator",  # pragma: allowlist secret
+        "VOICEY_PUBLIC_BASE": "https://voice.example/base",
+        "VOICEY_DATA_DIR": "/app/data",
+        "VOICEY_PORT": "7860",
+        "VOICEY_ADMIN_PORT": "7861",
+        "VOICEY_ADMIN_ORIGIN": "http://agent:7861",
+        "VOICEY_DEPLOY_TARGET": "docker",
+        "VOICEY_STORAGE_BACKEND": "sqlite",
+        "VOICEY_SQLITE_LOCAL_ONLY": "1",
+        "VOICEY_REPLICA_COUNT": "1",
+        "VOICEY_TRUSTED_PROXY_IPS": "127.0.0.1,::1",
+        "VOICEY_TRUSTED_PROXY_CIDRS": "127.0.0.0/8,::1/128",
+        "VOICEY_INTEGRATOR_SECRET": "integrator",  # pragma: allowlist secret
     }
     settings = ContainerSettings.from_environment(values, project_root=tmp_path)
 
@@ -297,12 +297,12 @@ def test_container_settings_validate_environment_only_topology(tmp_path: Path) -
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("VOICEKIT_PUBLIC_BASE", "http://voice.example"),
-        ("VOICEKIT_DATA_DIR", "relative"),
-        ("VOICEKIT_PORT", "invalid"),
-        ("VOICEKIT_ADMIN_ORIGIN", "https://agent/path"),
-        ("VOICEKIT_TRUSTED_PROXY_IPS", "not-an-ip"),
-        ("VOICEKIT_TRUSTED_PROXY_CIDRS", "not-a-network"),
+        ("VOICEY_PUBLIC_BASE", "http://voice.example"),
+        ("VOICEY_DATA_DIR", "relative"),
+        ("VOICEY_PORT", "invalid"),
+        ("VOICEY_ADMIN_ORIGIN", "https://agent/path"),
+        ("VOICEY_TRUSTED_PROXY_IPS", "not-an-ip"),
+        ("VOICEY_TRUSTED_PROXY_CIDRS", "not-a-network"),
     ],
 )
 def test_container_settings_reject_each_invalid_shape(
@@ -311,23 +311,23 @@ def test_container_settings_reject_each_invalid_shape(
     value: str,
 ) -> None:
     values = {
-        "VOICEKIT_PUBLIC_BASE": "https://voice.example",
-        "VOICEKIT_DATA_DIR": "/app/data",
-        "VOICEKIT_DEPLOY_TARGET": "docker",
-        "VOICEKIT_STORAGE_BACKEND": "sqlite",
-        "VOICEKIT_SQLITE_LOCAL_ONLY": "1",
-        "VOICEKIT_REPLICA_COUNT": "1",
+        "VOICEY_PUBLIC_BASE": "https://voice.example",
+        "VOICEY_DATA_DIR": "/app/data",
+        "VOICEY_DEPLOY_TARGET": "docker",
+        "VOICEY_STORAGE_BACKEND": "sqlite",
+        "VOICEY_SQLITE_LOCAL_ONLY": "1",
+        "VOICEY_REPLICA_COUNT": "1",
     }
     values[name] = value
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         ContainerSettings.from_environment(values, project_root=tmp_path)
-    assert caught.value.code == "VK-DEP-003"
+    assert caught.value.code == "VY-DEP-003"
 
 
 def test_runtime_helpers_scope_import_path_environment_and_agent(tmp_path: Path) -> None:
     module = tmp_path / "runtime_agent.py"
     module.write_text(
-        "from voicekit import Agent, Models, Results, Web\n"
+        "from voicey import Agent, Models, Results, Web\n"
         "agent = Agent(name='runtime-test', runtime='pipecat', "
         "models=Models(stt='deepgram/nova-3', llm='anthropic/claude-sonnet-5', "
         "tts='cartesia/sonic-3.5'), persona='test', flow='flow:entry', tools='tools', "
@@ -350,12 +350,12 @@ def test_runtime_helpers_scope_import_path_environment_and_agent(tmp_path: Path)
 def test_runtime_trust_helpers_reject_bad_values() -> None:
     assert runtime_module._trusted_ips("") == frozenset()
     assert runtime_module._trusted_cidrs("") == ()
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         runtime_module._trusted_ips("invalid")
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         runtime_module._trusted_cidrs("invalid")
     assert not runtime_module._is_origin("https://example.com/path")
-    with pytest.raises(VoicekitError, match="has no origin"):
+    with pytest.raises(VoiceyError, match="has no origin"):
         runtime_module._origin("relative")
 
 
@@ -373,20 +373,20 @@ def test_runtime_agent_loader_rejects_missing_and_invalid_exports(tmp_path: Path
     (tmp_path / "invalid_agent_export.py").write_text("agent = object()\n", encoding="utf-8")
 
     with runtime_module._project_import_path(tmp_path):
-        with pytest.raises(VoicekitError, match="export an Agent"):
+        with pytest.raises(VoiceyError, match="export an Agent"):
             runtime_module._load_agent("missing_agent_export")
-        with pytest.raises(VoicekitError, match="is not a voicekit Agent"):
+        with pytest.raises(VoiceyError, match="is not a voicey Agent"):
             runtime_module._load_agent("invalid_agent_export")
 
 
 async def test_wait_started_maps_early_exit_and_timeout() -> None:
     exited = asyncio.create_task(asyncio.sleep(0))
     await asyncio.sleep(0)
-    with pytest.raises(VoicekitError, match="exited early"):
+    with pytest.raises(VoiceyError, match="exited early"):
         await runtime_module._wait_started(cast("Any", SimpleNamespace(started=False)), exited)
 
     pending = asyncio.create_task(asyncio.sleep(60))
-    with pytest.raises(VoicekitError, match="did not become ready"):
+    with pytest.raises(VoiceyError, match="did not become ready"):
         await runtime_module._wait_started(
             cast("Any", SimpleNamespace(started=False)),
             pending,
@@ -428,7 +428,7 @@ async def test_runtime_signal_handlers_set_event_and_restore(
     }
 
 
-def test_runtime_main_maps_voicekit_startup_error(
+def test_runtime_main_maps_voicey_startup_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[object] = []
@@ -437,7 +437,7 @@ def test_runtime_main_maps_voicekit_startup_error(
         events.append(format)
 
     async def fail() -> None:
-        raise VoicekitError("VK-DEP-003", detail="fixture failure")
+        raise VoiceyError("VY-DEP-003", detail="fixture failure")
 
     class Logger:
         def error(self, event: str, **values: object) -> None:
@@ -454,7 +454,7 @@ def test_runtime_main_maps_voicekit_startup_error(
         "json",
         (
             "container_start_failed",
-            {"error_code": "VK-DEP-003", "detail": "fixture failure"},
+            {"error_code": "VY-DEP-003", "detail": "fixture failure"},
         ),
     ]
 
@@ -493,7 +493,7 @@ def _runtime_agent(*, phone: Phone | None = None, web: bool = True) -> Agent:
         web=(Web(enabled=True, allowed_origins=["https://app.example"]) if web else Web()),
         results=Results(
             webhook="https://receiver.example/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
         limits=Limits(max_duration_s=10, silence_hangup_s=5),
     )
@@ -563,12 +563,12 @@ async def test_run_container_orders_preflight_invariant_load_and_serve(
 
     await runtime_module.run_container(
         environment={
-            "VOICEKIT_PUBLIC_BASE": "https://voice.example",
-            "VOICEKIT_DEPLOY_TARGET": "docker",
-            "VOICEKIT_STORAGE_BACKEND": "sqlite",
-            "VOICEKIT_SQLITE_LOCAL_ONLY": "1",
-            "VOICEKIT_REPLICA_COUNT": "1",
-            "VOICEKIT_DATA_DIR": str(report.data_dir),
+            "VOICEY_PUBLIC_BASE": "https://voice.example",
+            "VOICEY_DEPLOY_TARGET": "docker",
+            "VOICEY_STORAGE_BACKEND": "sqlite",
+            "VOICEY_SQLITE_LOCAL_ONLY": "1",
+            "VOICEY_REPLICA_COUNT": "1",
+            "VOICEY_DATA_DIR": str(report.data_dir),
         },
         project_root=project,
     )
@@ -577,23 +577,21 @@ async def test_run_container_orders_preflight_invariant_load_and_serve(
 
 async def test_run_container_rejects_livekit_before_runtime_load(tmp_path: Path) -> None:
     project = _docker_project(tmp_path / "project")
-    manifest = ManifestStore(project / "voicekit.jsonc").load()
-    ManifestStore(project / "voicekit.jsonc").save(
-        manifest.model_copy(update={"runtime": "livekit"})
-    )
-    with pytest.raises(VoicekitError) as caught:
+    manifest = ManifestStore(project / "voicey.jsonc").load()
+    ManifestStore(project / "voicey.jsonc").save(manifest.model_copy(update={"runtime": "livekit"}))
+    with pytest.raises(VoiceyError) as caught:
         await runtime_module.run_container(
             environment={
-                "VOICEKIT_PUBLIC_BASE": "https://voice.example",
-                "VOICEKIT_DEPLOY_TARGET": "docker",
-                "VOICEKIT_STORAGE_BACKEND": "sqlite",
-                "VOICEKIT_SQLITE_LOCAL_ONLY": "1",
-                "VOICEKIT_REPLICA_COUNT": "1",
-                "VOICEKIT_DATA_DIR": str(tmp_path / "data"),
+                "VOICEY_PUBLIC_BASE": "https://voice.example",
+                "VOICEY_DEPLOY_TARGET": "docker",
+                "VOICEY_STORAGE_BACKEND": "sqlite",
+                "VOICEY_SQLITE_LOCAL_ONLY": "1",
+                "VOICEY_REPLICA_COUNT": "1",
+                "VOICEY_DATA_DIR": str(tmp_path / "data"),
             },
             project_root=project,
         )
-    assert caught.value.code == "VK-DEP-003"
+    assert caught.value.code == "VY-DEP-003"
 
 
 async def test_runtime_serve_builds_secure_web_boundary_and_closes_delivery(
@@ -608,7 +606,7 @@ async def test_runtime_serve_builds_secure_web_boundary_and_closes_delivery(
     monkeypatch.setattr(runtime_module, "_supervise", supervise)
     settings = _container_settings(tmp_path)
     environment = {
-        "VOICEKIT_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
+        "VOICEY_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
     }
 
     await runtime_module._serve(
@@ -636,7 +634,7 @@ async def test_runtime_serve_phone_builds_supported_carriers_and_requires_creden
     monkeypatch.setattr(runtime_module, "_supervise", supervise)
     settings = _container_settings(tmp_path, integrator=False)
     environment = {
-        "VOICEKIT_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
+        "VOICEY_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
         "TWILIO_ACCOUNT_SID": "AC" + ("1" * 32),
         "TWILIO_AUTH_TOKEN": "fixture",  # pragma: allowlist secret
     }
@@ -653,7 +651,7 @@ async def test_runtime_serve_phone_builds_supported_carriers_and_requires_creden
     assert cast("Any", observed["host"]).twilio is not None
 
     telnyx_environment = {
-        "VOICEKIT_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
+        "VOICEY_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
         "TELNYX_API_KEY": "fixture",  # pragma: allowlist secret
         "TELNYX_PUBLIC_KEY": "00" * 32,
         "TELNYX_CONNECTION_ID": "connection-fixture",
@@ -673,7 +671,7 @@ async def test_runtime_serve_phone_builds_supported_carriers_and_requires_creden
     assert telnyx_host.telnyx is not None
 
     vobiz_environment = {
-        "VOICEKIT_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
+        "VOICEY_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
         "VOBIZ_AUTH_ID": "MA_VOBIZTEST",
         "VOBIZ_AUTH_TOKEN": "fixture",  # pragma: allowlist secret
     }
@@ -692,7 +690,7 @@ async def test_runtime_serve_phone_builds_supported_carriers_and_requires_creden
     assert vobiz_host.telnyx is None
     assert vobiz_host.vobiz is not None
 
-    with pytest.raises(VoicekitError) as carrier:
+    with pytest.raises(VoiceyError) as carrier:
         await runtime_module._serve(
             settings=settings,
             agent=_runtime_agent(
@@ -702,7 +700,7 @@ async def test_runtime_serve_phone_builds_supported_carriers_and_requires_creden
             preflight=_preflight(tmp_path),
             environment=environment,
         )
-    assert carrier.value.code == "VK-DEP-003"
+    assert carrier.value.code == "VY-DEP-003"
 
 
 async def test_runtime_serve_requires_web_integrator_and_result_secret(
@@ -713,20 +711,20 @@ async def test_runtime_serve_requires_web_integrator_and_result_secret(
         return
 
     monkeypatch.setattr(runtime_module, "_supervise", supervise)
-    with pytest.raises(VoicekitError, match="VOICEKIT_WEBHOOK_SECRET"):
+    with pytest.raises(VoiceyError, match="VOICEY_WEBHOOK_SECRET"):
         await runtime_module._serve(
             settings=_container_settings(tmp_path),
             agent=_runtime_agent(),
             preflight=_preflight(tmp_path),
             environment={},
         )
-    with pytest.raises(VoicekitError, match="INTEGRATOR"):
+    with pytest.raises(VoiceyError, match="INTEGRATOR"):
         await runtime_module._serve(
             settings=_container_settings(tmp_path, integrator=False),
             agent=_runtime_agent(),
             preflight=_preflight(tmp_path),
             environment={
-                "VOICEKIT_WEBHOOK_SECRET": (
+                "VOICEY_WEBHOOK_SECRET": (
                     "whsec_Zml4dHVyZS1zZWNyZXQ="  # pragma: allowlist secret
                 )
             },

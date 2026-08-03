@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from voicekit.errors import ERROR_CATALOG
+from voicey.errors import ERROR_CATALOG
 
 ROOT = Path(__file__).parents[2]
 DOCS = ROOT / "docs"
@@ -63,8 +63,8 @@ def test_launch_blocking_docs_inventory_and_quickstarts() -> None:
 
     for runtime in ("pipecat", "livekit"):
         text = (DOCS / f"quickstart-{runtime}.md").read_text(encoding="utf-8")
-        assert text.count("<!-- voicekit-doc-test:start -->") == 1
-        assert text.count("<!-- voicekit-doc-test:end -->") == 1
+        assert text.count("<!-- voicey-doc-test:start -->") == 1
+        assert text.count("<!-- voicey-doc-test:end -->") == 1
         assert f"--runtime {runtime}" in text
         assert "five-minute" in text.lower() or "five minutes" in text.lower()
 
@@ -124,38 +124,39 @@ def test_error_catalog_and_troubleshooting_are_keyed_by_every_code() -> None:
         assert f"## {code}" in detailed
         assert f"`{code}`" in generated
     for family in (
-        "VK-CFG-*",
-        "VK-CLI-*",
-        "VK-TEL-*",
-        "VK-RUN-*",
-        "VK-RES-*",
-        "VK-OBS-*",
-        "VK-TST-*",
-        "VK-DEP-*",
-        "VK-REL-*",
-        "VK-UPG-*",
-        "VK-SEC-*",
+        "VY-CFG-*",
+        "VY-CLI-*",
+        "VY-TEL-*",
+        "VY-RUN-*",
+        "VY-RES-*",
+        "VY-OBS-*",
+        "VY-TST-*",
+        "VY-DEP-*",
+        "VY-REL-*",
+        "VY-UPG-*",
+        "VY-SEC-*",
     ):
         assert family in troubleshooting
 
 
-def test_rename_plan_covers_every_public_naming_surface() -> None:
+def test_naming_record_covers_every_public_naming_surface() -> None:
     text = (ROOT / "RENAME.md").read_text(encoding="utf-8")
     for required in (
-        "src/voicekit/",
-        "project.name",
-        "console script",
-        "entry-point groups",
-        "voicekit.jsonc",
-        "environment-variable prefixes",
-        "schema snapshots",
-        "API reference",
-        'rg -i "voicekit"',
-        "package",
-        "executable",
-        "repository",
-        "domain",
-        "human-only",
+        "# Voicey naming record",
+        "finalized on 2026-07-31",
+        "`voicey@0.0.1`",
+        "`iamjr15`",
+        "PyPI distribution name",
+        "Python distribution/import namespace",
+        "CLI executable",
+        "entry-point",
+        "config filenames",
+        "environment prefix",
+        "telemetry/protocol identifiers",
+        "public error types/codes",
+        "Repository hosting",
+        "domain registration",
+        "`npm/voicey/`",
     ):
         assert required in text
 

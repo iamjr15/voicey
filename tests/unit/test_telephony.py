@@ -6,8 +6,8 @@ from typing import Any, cast
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.telephony import (
+from voicey.errors import VoiceyError
+from voicey.telephony import (
     LiveKitTarget,
     PipecatTarget,
     RollbackToken,
@@ -15,7 +15,7 @@ from voicekit.telephony import (
     adapter_names,
     load_adapter,
 )
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.telephony.ledger import TelephonyLedger
 
 ACCOUNT_SID = "AC" + "1" * 32
 
@@ -47,10 +47,10 @@ def test_pipecat_target_builds_https_and_wss_routes_without_query_data() -> None
     ],
 )
 def test_invalid_pipecat_target_is_cataloged(arguments: dict[str, object]) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         PipecatTarget(**arguments)  # type: ignore[arg-type]
 
-    assert caught.value.code == "VK-TEL-002"
+    assert caught.value.code == "VY-TEL-002"
 
 
 def test_telephony_ledger_reopens_routes_and_intents_with_private_permissions(
@@ -96,9 +96,9 @@ def test_telephony_ledger_cas_and_callback_conflicts_are_visible(tmp_path: Path)
         applied={},
     )
     ledger.transition_route(route.token, expected=("prepared",), state="applied")
-    with pytest.raises(VoicekitError) as stale:
+    with pytest.raises(VoiceyError) as stale:
         ledger.transition_route(route.token, expected=("prepared",), state="restored")
-    assert stale.value.code == "VK-TEL-006"
+    assert stale.value.code == "VY-TEL-006"
 
     ledger.prepare_intent(
         intent_id="intent_conflict",
@@ -113,14 +113,14 @@ def test_telephony_ledger_cas_and_callback_conflicts_are_visible(tmp_path: Path)
         provider_status="ringing",
         terminal=False,
     )
-    with pytest.raises(VoicekitError) as conflict:
+    with pytest.raises(VoiceyError) as conflict:
         ledger.bind_callback(
             "intent_conflict",
             provider_call_id="CA" + "4" * 32,
             provider_status="ringing",
             terminal=False,
         )
-    assert conflict.value.code == "VK-TEL-007"
+    assert conflict.value.code == "VY-TEL-007"
     assert ledger.get_intent("intent_conflict").state == "conflict"
 
 
@@ -134,7 +134,7 @@ def test_duplicate_outbound_intent_is_never_overwritten(tmp_path: Path) -> None:
         target={},
     )
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         ledger.prepare_intent(
             intent_id="intent_duplicate",
             provider="twilio",
@@ -143,7 +143,7 @@ def test_duplicate_outbound_intent_is_never_overwritten(tmp_path: Path) -> None:
             target={},
         )
 
-    assert caught.value.code == "VK-TEL-007"
+    assert caught.value.code == "VY-TEL-007"
     assert ledger.get_intent("intent_duplicate").from_number == "+14155550100"
 
 
@@ -173,13 +173,13 @@ def test_warm_transfer_ledger_is_private_cas_fenced_and_reopenable(tmp_path: Pat
         last_status="participant-join",
     )
 
-    with pytest.raises(VoicekitError) as stale:
+    with pytest.raises(VoiceyError) as stale:
         ledger.transition_warm_transfer(
             record.transfer_id,
             expected=("prepared",),
             state="failed",
         )
-    assert stale.value.code == "VK-TEL-012"
+    assert stale.value.code == "VY-TEL-012"
     assert ledger.open_warm_transfers(provider="twilio")[0].briefing_digest == "c" * 64
     ledger.close()
 
@@ -213,18 +213,18 @@ def test_warm_transfer_ledger_rejects_duplicate_and_callback_identity_conflict(
         human_call_id="CA" + "2" * 32,
     )
 
-    with pytest.raises(VoicekitError) as duplicate:
+    with pytest.raises(VoiceyError) as duplicate:
         ledger.prepare_warm_transfer(**cast("dict[str, Any]", arguments))
-    with pytest.raises(VoicekitError) as conflict:
+    with pytest.raises(VoiceyError) as conflict:
         ledger.touch_warm_transfer(
             record.transfer_id,
             expected_human_call_id="CA" + "3" * 32,
         )
 
-    assert duplicate.value.code == "VK-TEL-012"
-    assert conflict.value.code == "VK-TEL-012"
+    assert duplicate.value.code == "VY-TEL-012"
+    assert conflict.value.code == "VY-TEL-012"
     assert ledger.get_warm_transfer(record.transfer_id).state == "conflict"
-    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+    with pytest.raises(VoiceyError, match="VY-TEL-012"):
         ledger.get_warm_transfer("warm_" + "f" * 32)
     ledger.close()
 
@@ -233,11 +233,11 @@ def test_ledger_unknown_records_naive_time_and_newer_schema_fail_closed(
     tmp_path: Path,
 ) -> None:
     ledger = TelephonyLedger(tmp_path / "telephony.sqlite3")
-    with pytest.raises(VoicekitError) as route:
+    with pytest.raises(VoiceyError) as route:
         ledger.get_route("route_missing")
-    with pytest.raises(VoicekitError) as intent:
+    with pytest.raises(VoiceyError) as intent:
         ledger.get_intent("intent_missing")
-    with pytest.raises(VoicekitError) as naive:
+    with pytest.raises(VoiceyError) as naive:
         ledger.prepare_intent(
             intent_id="intent_naive",
             provider="twilio",
@@ -246,9 +246,9 @@ def test_ledger_unknown_records_naive_time_and_newer_schema_fail_closed(
             target={},
             now=datetime(2026, 7, 26),
         )
-    assert route.value.code == "VK-TEL-006"
-    assert intent.value.code == "VK-TEL-007"
-    assert naive.value.code == "VK-TEL-005"
+    assert route.value.code == "VY-TEL-006"
+    assert intent.value.code == "VY-TEL-007"
+    assert naive.value.code == "VY-TEL-005"
     assert ledger.unresolved_intents(provider="twilio") == ()
     ledger.close()
 
@@ -256,9 +256,9 @@ def test_ledger_unknown_records_naive_time_and_newer_schema_fail_closed(
     connection = sqlite3.connect(newer)
     connection.execute("PRAGMA user_version=99")
     connection.close()
-    with pytest.raises(VoicekitError) as schema:
+    with pytest.raises(VoiceyError) as schema:
         TelephonyLedger(newer)
-    assert schema.value.code == "VK-TEL-005"
+    assert schema.value.code == "VY-TEL-005"
 
 
 def test_entry_point_registry_loads_twilio_without_importing_other_carriers(
@@ -287,9 +287,9 @@ def test_entry_point_registry_loads_twilio_without_importing_other_carriers(
     assert not adapter.capabilities.native_outbound_idempotency
     assert adapter.list_numbers() == []
 
-    with pytest.raises(VoicekitError) as missing:
+    with pytest.raises(VoiceyError) as missing:
         load_adapter("not-installed")
-    assert missing.value.code == "VK-TEL-001"
+    assert missing.value.code == "VY-TEL-001"
 
 
 def test_livekit_target_is_present_but_not_claimed_by_p1_twilio_capability() -> None:

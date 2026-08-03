@@ -6,7 +6,7 @@ import json
 from enum import Enum
 from pathlib import Path
 
-from voicekit.release.snapshots import (
+from voicey.release.snapshots import (
     PUBLIC_SNAPSHOT_PATHS,
     _json_default,
     build_public_snapshots,
@@ -22,9 +22,9 @@ def test_committed_public_snapshots_are_current() -> None:
     assert changed_snapshots(ROOT) == ()
     snapshots = build_public_snapshots()
     assert tuple(snapshots) == PUBLIC_SNAPSHOT_PATHS
-    assert snapshots[PUBLIC_SNAPSHOT_PATHS[0]]["contract"].startswith("voicekit.Agent")
-    assert snapshots[PUBLIC_SNAPSHOT_PATHS[1]]["contract"] == "voicekit result webhook"
-    assert snapshots[PUBLIC_SNAPSHOT_PATHS[2]]["commands"]["path"] == "voicekit"
+    assert snapshots[PUBLIC_SNAPSHOT_PATHS[0]]["contract"].startswith("voicey.Agent")
+    assert snapshots[PUBLIC_SNAPSHOT_PATHS[1]]["contract"] == "voicey result webhook"
+    assert snapshots[PUBLIC_SNAPSHOT_PATHS[2]]["commands"]["path"] == "voicey"
 
 
 def test_snapshot_writer_only_updates_drift(tmp_path: Path) -> None:
@@ -36,12 +36,12 @@ def test_snapshot_writer_only_updates_drift(tmp_path: Path) -> None:
 
     assert changed_snapshots(tmp_path) == (PUBLIC_SNAPSHOT_PATHS[0],)
     assert write_public_snapshots(tmp_path) == (PUBLIC_SNAPSHOT_PATHS[0],)
-    assert json.loads(target.read_text(encoding="utf-8"))["contract"].startswith("voicekit.Agent")
+    assert json.loads(target.read_text(encoding="utf-8"))["contract"].startswith("voicey.Agent")
 
 
 def test_public_surface_change_requires_changelog_and_docs() -> None:
     snapshot = PUBLIC_SNAPSHOT_PATHS[0]
-    assert public_surface_docs_errors({Path("src/voicekit/config/models.py")}) == ()
+    assert public_surface_docs_errors({Path("src/voicey/config/models.py")}) == ()
     errors = public_surface_docs_errors({snapshot})
     assert len(errors) == 2
     assert public_surface_docs_errors({snapshot, Path("CHANGELOG.md")}) == (

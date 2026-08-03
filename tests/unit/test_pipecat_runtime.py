@@ -25,30 +25,30 @@ from pipecat.services.settings import ServiceSettings
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.turns.user_mute import AlwaysUserMuteStrategy
 
-from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Voice, Web, tool
-from voicekit.errors import VoicekitError
-from voicekit.obs.latency import LatencySample
-from voicekit.obs.records import TimelineEvent, ToolCallObservation, TranscriptTurn
-from voicekit.results import CallResultBuffer
-from voicekit.runtimes.livekit.mapping import LIVEKIT_CONFIG_MAPPINGS
-from voicekit.runtimes.pipecat import session as session_module
-from voicekit.runtimes.pipecat.admission import AdmissionController
-from voicekit.runtimes.pipecat.host import LongLivedRunner
-from voicekit.runtimes.pipecat.lifecycle import (
+from voicey import Agent, Behavior, Limits, Models, Phone, Results, Voice, Web, tool
+from voicey.errors import VoiceyError
+from voicey.obs.latency import LatencySample
+from voicey.obs.records import TimelineEvent, ToolCallObservation, TranscriptTurn
+from voicey.results import CallResultBuffer
+from voicey.runtimes.livekit.mapping import LIVEKIT_CONFIG_MAPPINGS
+from voicey.runtimes.pipecat import session as session_module
+from voicey.runtimes.pipecat.admission import AdmissionController
+from voicey.runtimes.pipecat.host import LongLivedRunner
+from voicey.runtimes.pipecat.lifecycle import (
     PipecatCall,
     PipecatCallLifecycle,
     PipecatLifecycleManager,
     PipecatRepository,
 )
-from voicekit.runtimes.pipecat.mapping import PIPECAT_CONFIG_MAPPINGS
-from voicekit.runtimes.pipecat.providers import ProviderFactory
-from voicekit.runtimes.pipecat.session import (
+from voicey.runtimes.pipecat.mapping import PIPECAT_CONFIG_MAPPINGS
+from voicey.runtimes.pipecat.providers import ProviderFactory
+from voicey.runtimes.pipecat.session import (
     DTMFPolicyProcessor,
     PipecatSession,
     PipecatSessionBuilder,
 )
-from voicekit.storage.models import EndedReason
-from voicekit.storage.sqlite import SQLiteRepository
+from voicey.storage.models import EndedReason
+from voicey.storage.sqlite import SQLiteRepository
 
 
 @tool
@@ -164,7 +164,7 @@ class _WarmTransfer:
         if self.fail:
             set_reason("transferred")
             set_reason(None)
-            raise VoicekitError("VK-TEL-012", detail="test handoff failed.")
+            raise VoiceyError("VY-TEL-012", detail="test handoff failed.")
         set_reason("transferred")
 
 
@@ -492,7 +492,7 @@ async def test_warm_transfer_tool_requires_consent_briefs_and_sets_terminal_reas
 
     monkeypatch.setattr(session.worker, "queue_frame", collect)
     schema = next(item for item in session.global_tools if item.name == "warm_transfer_to_human")
-    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+    with pytest.raises(VoiceyError, match="VY-TEL-012"):
         await cast(Any, schema.handler)(
             {"briefing": "Billing issue.", "caller_consented": False},
             session.flow_manager,
@@ -539,7 +539,7 @@ async def test_warm_transfer_failure_does_not_queue_success_end_frame(
     monkeypatch.setattr(session.worker, "queue_frame", collect)
     schema = next(item for item in session.global_tools if item.name == "warm_transfer_to_human")
 
-    with pytest.raises(VoicekitError, match="VK-TEL-012"):
+    with pytest.raises(VoiceyError, match="VY-TEL-012"):
         await cast(Any, schema.handler)(
             {"briefing": "Billing issue.", "caller_consented": True},
             session.flow_manager,
@@ -690,6 +690,7 @@ async def test_worker_events_map_failures_and_idle_timeout() -> None:
         CancelFrame(reason="cancelled"),
     )
     await asyncio.sleep(0)
+    assert session.ended_reason == "worker_crash"
     session._ended_reason = None  # pyright: ignore[reportPrivateUsage]
     await session.worker._call_event_handler(  # pyright: ignore[reportPrivateUsage]
         "on_pipeline_error",
@@ -720,14 +721,14 @@ async def test_language_controller_noop_and_unbound_error() -> None:
 
     with_fallback, _ = _session(_agent(voice=Voice(fallback_language="es")))
     with_fallback.language._worker = None  # pyright: ignore[reportPrivateUsage]
-    with pytest.raises(VoicekitError, match="VK-RUN-002"):
+    with pytest.raises(VoiceyError, match="VY-RUN-002"):
         await with_fallback.language.activate()
 
 
 def test_session_builder_rejects_other_runtime_and_missing_transfer_handler() -> None:
     other_runtime = _agent().model_copy(update={"runtime": "livekit"})
     builder = PipecatSessionBuilder(cast(PipecatRepository, _MemoryRepository()))
-    with pytest.raises(VoicekitError, match="VK-RUN-001"):
+    with pytest.raises(VoiceyError, match="VY-RUN-001"):
         builder.build(
             agent=other_runtime,
             call=PipecatCall("call_other", "web", "inbound"),
@@ -736,7 +737,7 @@ def test_session_builder_rejects_other_runtime_and_missing_transfer_handler() ->
             sample_rate=16000,
         )
 
-    with pytest.raises(VoicekitError, match="VK-RUN-002"):
+    with pytest.raises(VoiceyError, match="VY-RUN-002"):
         _session(_agent(behavior=Behavior(transfer_number="+14155550123")))
 
 
@@ -747,7 +748,7 @@ async def test_admission_is_atomic_and_busy_at_limit() -> None:
         admission.acquire("one"),
         admission.acquire("two"),
     )
-    with pytest.raises(VoicekitError, match="VK-RUN-004"):
+    with pytest.raises(VoiceyError, match="VY-RUN-004"):
         await admission.acquire("three")
     assert admission.active_count == 2
     assert await admission.release(leases[0])
@@ -808,7 +809,7 @@ async def test_lifecycle_rejects_mismatched_admission_lease(tmp_path: Path) -> N
     manager = PipecatLifecycleManager(repository, admission)
     lease = await admission.acquire("call_one")
 
-    with pytest.raises(VoicekitError, match="VK-RUN-005"):
+    with pytest.raises(VoiceyError, match="VY-RUN-005"):
         await manager.begin(
             _agent(),
             PipecatCall(call_id="call_two", channel="web", direction="inbound"),
@@ -831,7 +832,7 @@ async def test_lifecycle_rejects_non_json_result_without_releasing_fence(
     lifecycle = await manager.begin(_agent(), call, lease)
     lifecycle.buffer.data["opaque"] = object()
 
-    with pytest.raises(VoicekitError, match="VK-RUN-006"):
+    with pytest.raises(VoiceyError, match="VY-RUN-006"):
         await lifecycle.finish("agent_hangup")
 
     assert admission.active_count == 1
@@ -855,10 +856,10 @@ async def test_lifecycle_wraps_unexpected_terminal_persistence_error(
         raise OSError("private storage detail")
 
     monkeypatch.setattr(repository, "flush_results", fail_flush)
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await lifecycle.finish("agent_hangup")
 
-    assert caught.value.code == "VK-RUN-006"
+    assert caught.value.code == "VY-RUN-006"
     assert "private storage detail" not in str(caught.value)
     assert admission.active_count == 1
     await admission.release(lease)

@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.storage.artifacts import LocalArtifactStore
-from voicekit.telephony import PipecatTarget
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.models import RollbackToken
-from voicekit.telephony.telnyx import TelnyxAdapter
+from voicey.storage.artifacts import LocalArtifactStore
+from voicey.telephony import PipecatTarget
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.models import RollbackToken
+from voicey.telephony.telnyx import TelnyxAdapter
 
 pytestmark = pytest.mark.live
 
@@ -48,7 +48,7 @@ def test_telnyx_live_account_and_owned_number_are_ready(tmp_path: Path) -> None:
         matches = [
             number
             for number in adapter.list_numbers()
-            if number.number == _required("VOICEKIT_TELNYX_LIVE_FROM")
+            if number.number == _required("VOICEY_TELNYX_LIVE_FROM")
         ]
     finally:
         ledger.close()
@@ -59,14 +59,14 @@ def test_telnyx_live_account_and_owned_number_are_ready(tmp_path: Path) -> None:
 
 
 def test_telnyx_live_route_point_and_crash_safe_restore(tmp_path: Path) -> None:
-    if os.environ.get("VOICEKIT_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
-        pytest.skip("VOICEKIT_LIVE_ROUTE_CONFIRM acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
+        pytest.skip("VOICEY_LIVE_ROUTE_CONFIRM acknowledgement is absent")
     adapter, ledger = _adapter(tmp_path, "route")
-    public_base = _required("VOICEKIT_LIVE_PUBLIC_BASE")
+    public_base = _required("VOICEY_LIVE_PUBLIC_BASE")
     token: RollbackToken | None = None
     try:
         token = adapter.point_inbound(
-            _required("VOICEKIT_TELNYX_LIVE_FROM"),
+            _required("VOICEY_TELNYX_LIVE_FROM"),
             PipecatTarget(public_base),
         )
         assert ledger.get_route(token.token).state == "applied"
@@ -81,24 +81,24 @@ def test_telnyx_live_route_point_and_crash_safe_restore(tmp_path: Path) -> None:
 def test_telnyx_live_paid_pstn_dtmf_recording_and_cold_transfer(
     tmp_path: Path,
 ) -> None:
-    if os.environ.get("VOICEKIT_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
-        pytest.skip("VOICEKIT_LIVE_CONFIRM charge acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
+        pytest.skip("VOICEY_LIVE_CONFIRM charge acknowledgement is absent")
     adapter, ledger = _adapter(tmp_path, "paid-call")
-    public_base = _required("VOICEKIT_LIVE_PUBLIC_BASE")
+    public_base = _required("VOICEY_LIVE_PUBLIC_BASE")
     call_id = adapter.start_call(
-        _required("VOICEKIT_TELNYX_LIVE_FROM"),
-        _required("VOICEKIT_TELNYX_LIVE_TO"),
+        _required("VOICEY_TELNYX_LIVE_FROM"),
+        _required("VOICEY_TELNYX_LIVE_TO"),
         PipecatTarget(public_base),
         intent_id="intent_telnyx_live_certification",
         amd=True,
         record=True,
     )
     try:
-        wait_seconds = float(os.environ.get("VOICEKIT_LIVE_ANSWER_WAIT_SECONDS", "15"))
+        wait_seconds = float(os.environ.get("VOICEY_LIVE_ANSWER_WAIT_SECONDS", "15"))
         time.sleep(wait_seconds)
         adapter.send_dtmf(call_id, "12#")
         time.sleep(2)
-        adapter.cold_transfer(call_id, _required("VOICEKIT_TELNYX_TRANSFER_TO"))
+        adapter.cold_transfer(call_id, _required("VOICEY_TELNYX_TRANSFER_TO"))
         time.sleep(5)
     finally:
         try:
@@ -118,7 +118,7 @@ async def test_telnyx_live_signed_recording_url_ingests_to_engine_storage(
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     try:
         key = await adapter.download_recording(
-            _required("VOICEKIT_TELNYX_LIVE_RECORDING_URL"),
+            _required("VOICEY_TELNYX_LIVE_RECORDING_URL"),
             artifact_store=artifacts,
             storage_key="recordings/telnyx-live-certification.mp3",
         )

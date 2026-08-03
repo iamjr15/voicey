@@ -14,15 +14,15 @@ concurrency:
 
 jobs:
   pipecat-twilio:
-    if: ${{ vars.VOICEKIT_LIVE_PSTN_ENABLED == 'true' }}
+    if: ${{ vars.VOICEY_LIVE_PSTN_ENABLED == 'true' }}
     environment: paid-pstn
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      VOICEKIT_LIVE_PSTN_ACK: ${{ vars.VOICEKIT_LIVE_PSTN_ACK }}
-      VOICEKIT_LIVE_PSTN_MAX_CALLS: "4"
-      VOICEKIT_LIVE_TARGET_NUMBER: ${{ secrets.VOICEKIT_LIVE_TARGET_NUMBER }}
-      VOICEKIT_LIVE_TWILIO_FROM: ${{ secrets.VOICEKIT_LIVE_TWILIO_FROM }}
+      VOICEY_LIVE_PSTN_ACK: ${{ vars.VOICEY_LIVE_PSTN_ACK }}
+      VOICEY_LIVE_PSTN_MAX_CALLS: "4"
+      VOICEY_LIVE_TARGET_NUMBER: ${{ secrets.VOICEY_LIVE_TARGET_NUMBER }}
+      VOICEY_LIVE_TWILIO_FROM: ${{ secrets.VOICEY_LIVE_TWILIO_FROM }}
       TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
       TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
       NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
@@ -41,25 +41,25 @@ jobs:
         run: uv sync --frozen --extra pipecat --extra twilio --extra tunnel
       - name: Run acknowledged Pipecat → Twilio → PSTN loopback
         working-directory: tests/fixtures/live-pstn-pipecat
-        run: ../../../.venv/bin/voicekit test --live --report junit
+        run: ../../../.venv/bin/voicey test --live --report junit
       - name: Upload secret-free carrier evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pipecat-twilio-pstn-junit
-          path: tests/fixtures/live-pstn-pipecat/.voicekit/test-results.xml
+          path: tests/fixtures/live-pstn-pipecat/.voicey/test-results.xml
           if-no-files-found: warn
 
   livekit-sip:
-    if: ${{ vars.VOICEKIT_LIVE_PSTN_ENABLED == 'true' }}
+    if: ${{ vars.VOICEY_LIVE_PSTN_ENABLED == 'true' }}
     environment: paid-pstn
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      VOICEKIT_LIVE_PSTN_ACK: ${{ vars.VOICEKIT_LIVE_PSTN_ACK }}
-      VOICEKIT_LIVE_PSTN_MAX_CALLS: "4"
-      VOICEKIT_LIVE_TARGET_NUMBER: ${{ secrets.VOICEKIT_LIVE_TARGET_NUMBER }}
-      VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID: ${{ secrets.VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID }}
+      VOICEY_LIVE_PSTN_ACK: ${{ vars.VOICEY_LIVE_PSTN_ACK }}
+      VOICEY_LIVE_PSTN_MAX_CALLS: "4"
+      VOICEY_LIVE_TARGET_NUMBER: ${{ secrets.VOICEY_LIVE_TARGET_NUMBER }}
+      VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID: ${{ secrets.VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID }}
       LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
       LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
       LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
@@ -78,11 +78,11 @@ jobs:
         run: uv sync --frozen --extra livekit
       - name: Run acknowledged LiveKit SIP → PSTN loopback
         working-directory: tests/fixtures/live-pstn-livekit
-        run: ../../../.venv/bin/voicekit test --live --report junit
+        run: ../../../.venv/bin/voicey test --live --report junit
       - name: Upload secret-free carrier evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: livekit-sip-pstn-junit
-          path: tests/fixtures/live-pstn-livekit/.voicekit/test-results.xml
+          path: tests/fixtures/live-pstn-livekit/.voicey/test-results.xml
           if-no-files-found: warn

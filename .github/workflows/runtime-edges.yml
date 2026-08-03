@@ -5,7 +5,7 @@ on:
     paths:
       - "pyproject.toml"
       - "uv.lock"
-      - "src/voicekit/compatibility.py"
+      - "src/voicey/compatibility.py"
       - "tests/verification/canary_recipes.py"
       - ".github/workflows/runtime-edges.yml"
   schedule:
@@ -46,16 +46,16 @@ jobs:
             "${{ matrix.distribution }}==${{ matrix.version }}"
       - name: Assert installed edge is certified
         env:
-          VOICEKIT_EDGE_RUNTIME: ${{ matrix.runtime }}
-          VOICEKIT_EDGE_VERSION: ${{ matrix.version }}
+          VOICEY_EDGE_RUNTIME: ${{ matrix.runtime }}
+          VOICEY_EDGE_VERSION: ${{ matrix.version }}
         run: |
           uv run --no-sync python - <<'PY'
           import importlib.metadata
           import os
-          from voicekit.compatibility import inspect_runtime_compatibility
+          from voicey.compatibility import inspect_runtime_compatibility
 
-          runtime = os.environ["VOICEKIT_EDGE_RUNTIME"]
-          expected = os.environ["VOICEKIT_EDGE_VERSION"]
+          runtime = os.environ["VOICEY_EDGE_RUNTIME"]
+          expected = os.environ["VOICEY_EDGE_VERSION"]
           report = inspect_runtime_compatibility(runtime)
           assert report.installed_version == expected, report
           assert report.status == "supported", report

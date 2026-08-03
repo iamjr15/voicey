@@ -12,9 +12,10 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.services.openai.tts import OpenAITTSService
 
-from voicekit import Voice
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.pipecat.providers import DefaultProviderFactory
+from voicey import Voice
+from voicey.config.catalog import CURATED_DEFAULT_VOICE_IDS
+from voicey.errors import VoiceyError
+from voicey.runtimes.pipecat.providers import DefaultProviderFactory
 
 _ENVIRONMENT = {
     "DEEPGRAM_API_KEY": "deepgram-test",  # pragma: allowlist secret
@@ -92,8 +93,15 @@ def test_tts_catalog_builds_current_settings(
 
     assert isinstance(service, expected_type)
     assert cast(Any, service)._settings.model == provider_model
-    if voice_id is not None:
-        assert cast(Any, service)._settings.voice == voice_id
+    assert cast(Any, service)._settings.voice == (voice_id or CURATED_DEFAULT_VOICE_IDS[model_id])
+
+
+def test_anthropic_disables_signature_only_adaptive_thinking_workaround() -> None:
+    service = DefaultProviderFactory(_ENVIRONMENT).create_llm(
+        "anthropic/claude-sonnet-5", "Test persona."
+    )
+
+    assert cast(Any, service)._settings.thinking.type == "disabled"
 
 
 @pytest.mark.parametrize(
@@ -115,14 +123,14 @@ def test_missing_provider_credentials_are_cataloged(
         "create_tts": lambda: factory.create_tts(model_id, Voice(), 16000),
     }
 
-    with pytest.raises(VoicekitError, match="VK-RUN-002"):
+    with pytest.raises(VoiceyError, match="VY-RUN-002"):
         calls[method]()
 
 
 def test_unsupported_provider_model_and_settings_are_cataloged() -> None:
     factory = DefaultProviderFactory(_ENVIRONMENT)
 
-    with pytest.raises(VoicekitError, match="VK-RUN-002"):
+    with pytest.raises(VoiceyError, match="VY-RUN-002"):
         factory.create_stt("unknown/model", Voice(), 16000)
-    with pytest.raises(VoicekitError, match="VK-RUN-002"):
+    with pytest.raises(VoiceyError, match="VY-RUN-002"):
         factory.language_delta(cast(FrameProcessor, object()), "es")

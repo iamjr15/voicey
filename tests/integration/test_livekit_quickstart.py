@@ -11,10 +11,10 @@ import pytest
 from livekit.agents import Agent as NativeLiveKitAgent
 from livekit.agents import llm
 
-from voicekit.cli.scaffold import ScaffoldWriter, ScratchScaffold
-from voicekit.config.manifest import ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.runtimes.livekit.flow import load_native_agent
+from voicey.cli.scaffold import ScaffoldWriter, ScratchScaffold
+from voicey.config.manifest import ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.runtimes.livekit.flow import load_native_agent
 
 
 def _agent_handoff(

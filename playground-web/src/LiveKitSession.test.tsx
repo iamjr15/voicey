@@ -82,7 +82,7 @@ describe("LiveKitSession", () => {
         session={{
           session_id: "web-1",
           runtime: "livekit",
-          token: "voicekit-token",
+          token: "voicey-token",
           token_url: "http://127.0.0.1:7861/api/livekit/token",
           poll_url: "/api/playground/sessions/web-1",
           expires_at: 4_102_444_800,
@@ -117,7 +117,7 @@ describe("LiveKitSession", () => {
             startTime: 120,
           },
         ],
-        { identity: "voicekit-agent" },
+        { identity: "voicey-agent" },
       );
     });
     expect(onState).toHaveBeenCalledWith("connected");

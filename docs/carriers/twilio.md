@@ -15,7 +15,7 @@ explicitly. Credentials are never written into the manifest, routing ledger,
 TwiML, callback paths, or call records.
 
 ```python
-from voicekit.telephony import load_adapter
+from voicey.telephony import load_adapter
 
 adapter = load_adapter(
     "twilio",
@@ -23,11 +23,11 @@ adapter = load_adapter(
 )
 ```
 
-`expected_public_base` is mandatory for webhook verification. Voicekit trusts
+`expected_public_base` is mandatory for webhook verification. Voicey trusts
 forwarded scheme/host fields only from configured proxy addresses and then
 requires the reconstructed origin to equal this base. WebSocket upgrades are
 verified against the exact `wss://` URL with empty parameters. HTTP form and
-JSON `bodySHA256` requests use Twilio's installed `RequestValidator`; voicekit
+JSON `bodySHA256` requests use Twilio's installed `RequestValidator`; voicey
 does not implement a second signature algorithm.
 
 ## Capabilities
@@ -56,7 +56,7 @@ so higher-volume deployments must have their carrier CPS limit reviewed.
 ## Temporary inbound routing
 
 ```python
-from voicekit.telephony import PipecatTarget
+from voicey.telephony import PipecatTarget
 
 target = PipecatTarget(https_base="https://voice.example.com")
 token = adapter.point_inbound("+14155550100", target)
@@ -66,7 +66,7 @@ finally:
     adapter.restore(token)
 ```
 
-Before changing Twilio, voicekit writes a FULL-durability SQLite snapshot of:
+Before changing Twilio, voicey writes a FULL-durability SQLite snapshot of:
 
 - voice URL/method and fallback URL/method;
 - status callback URL/method;
@@ -75,18 +75,18 @@ Before changing Twilio, voicekit writes a FULL-durability SQLite snapshot of:
 
 The last two fields take precedence over a voice URL and are explicitly
 cleared while the temporary route is active. Restore is compare-and-swap: the
-current carrier settings must still equal what voicekit wrote. A concurrent
-manual or automated change produces `VK-TEL-006` and is never overwritten.
+current carrier settings must still equal what voicey wrote. A concurrent
+manual or automated change produces `VY-TEL-006` and is never overwritten.
 `adapter.recover_routes()` reconciles and restores prepared/applied/ambiguous
 tokens after a crashed development process.
 
 ## Outbound safety
 
-Twilio `Calls.create` has no native idempotency key. Voicekit therefore writes
+Twilio `Calls.create` has no native idempotency key. Voicey therefore writes
 an `intent_<id>` row before the API call and embeds that id in the status
 callback path. A definite Twilio 4xx becomes a rejected intent. A network
 failure, 5xx, malformed acceptance response, or crash window becomes
-`VK-TEL-007`; the create request is not retried.
+`VY-TEL-007`; the create request is not retried.
 
 ```python
 call_sid = adapter.start_call(
@@ -116,7 +116,7 @@ machine policy, avoiding two competing audio consumers.
   answerOnBridge>`. Redirecting exits `<Connect>` and ends the Media Stream.
 - `hangup(call_sid)` completes the carrier leg.
 
-When `behavior.transfer_number` is set on Pipecat/Twilio, voicekit exposes the
+When `behavior.transfer_number` is set on Pipecat/Twilio, voicey exposes the
 native Flows function `warm_transfer_to_human`. Its required arguments are a
 private briefing of at most 500 characters and `caller_consented=true`.
 Conversation policy must obtain explicit consent before invoking it.
@@ -143,12 +143,12 @@ the same exact Twilio signature verification as other voice callbacks.
 LiveKit uses its native warm-transfer task instead.
 
 Recording callbacks are signature-verified like every carrier callback.
-For inbound Pipecat calls, voicekit first reserves the engine call and then
+For inbound Pipecat calls, voicey first reserves the engine call and then
 uses Twilio's live-call Recordings resource to start one dual-channel
 recording with `completed` and `absent` callbacks. A read-before-write check
 reuses one existing recording and fails closed if the carrier reports more
 than one.
-Voicekit ignores callback media URLs for ingestion and constructs the recording
+Voicey ignores callback media URLs for ingestion and constructs the recording
 resource URL from the validated account and recording SIDs. It downloads with
 HTTP Basic authentication, accepts only known audio content types, enforces a
 100 MiB default limit, and writes through the protected `ArtifactStore`. The
@@ -175,24 +175,31 @@ support username/password authentication for traffic originating at Twilio.
 Credentials therefore belong only on the LiveKit outbound trunk that terminates
 into Twilio. The Twilio origination URI ends in `;transport=tls`, the LiveKit
 outbound transport is TLS, and both LiveKit trunks allow encrypted media.
+Twilio error `21240` requires each SIP credential password to contain at least
+12 characters, one lowercase letter, one uppercase letter, and one number.
+Voicey rejects a weaker value before the first control-plane write.
 
 Every confirmed created resource is appended to the ledger before the next
 mutation. A definitive failure rolls back in reverse order and restores the
 complete phone-number route snapshot. An indeterminate network outcome is
 fenced as `ambiguous` and never destructively guessed.
 
+The credentialed 2026-08-03 no-call gate passed provision, identical reuse,
+and reverse rollback. LiveKit showed zero inbound/outbound trunks afterward.
+This is control-plane evidence only and does not certify PSTN media.
+
 Outbound `create_sip_participant(wait_until_answered=True)` is also preceded by
 a durable intent. `SipCallError.sip_status_code` maps a definitive SIP rejection
-to `carrier_error`; an unknown outcome becomes `VK-TEL-007` and is not retried.
+to `carrier_error`; an unknown outcome becomes `VY-TEL-007` and is not retried.
 
 When `phone.record` is enabled, a newly managed Twilio trunk is configured for
-dual-channel record-from-answer. Voicekit refuses to silently change the
+dual-channel record-from-answer. Voicey refuses to silently change the
 recording mode of an existing trunk because that can affect unrelated traffic.
 
 Twilio's Elastic SIP recording resource has no completion callback field—it
 supports only `mode` and `trim`. LiveKit provides the Twilio CA Call SID through
 the built-in `sip.twilio.callSid` participant attribute. After the terminal
-event, voicekit polls Core Recordings by that CA SID, requires exactly one
+event, voicey polls Core Recordings by that CA SID, requires exactly one
 completed item whose source is `Trunking`, downloads it with Basic
 authentication, and emits the same `call.recording.ready` event used by the
 Pipecat callback path. A timeout stays visibly pending for retry/recovery.
@@ -201,22 +208,22 @@ Pipecat callback path. A timeout stays visibly pending for retry/recovery.
 
 | Code | Meaning / action |
 |---|---|
-| `VK-TEL-001` | Install `voicekit[twilio]`; check duplicate third-party entry points |
-| `VK-TEL-002` | Correct credentials, HTTPS target, E.164 number, timeout, or DTMF |
-| `VK-TEL-003` | Owned/available number lookup was empty or non-unique |
-| `VK-TEL-004` | Twilio definitively rejected the request; use the safe HTTP/code in the error |
-| `VK-TEL-005` | Stop mutations and repair the protected telephony ledger |
-| `VK-TEL-006` | Routing is ambiguous or changed concurrently; inspect before manual restore |
-| `VK-TEL-007` | Reconcile the outbound intent; never place a speculative retry |
-| `VK-TEL-008` | Reject an unknown/incomplete callback shape |
-| `VK-TEL-009` | Check recording SID, auth, availability, type, and size |
-| `VK-TEL-010` | Reject an invalid Media Streams frame/codec event |
-| `VK-TEL-011` | Carrier availability was indeterminate; reconcile mutations first |
-| `VK-TEL-012` | Inspect the warm-transfer id; do not retry until its state is terminal |
+| `VY-TEL-001` | Install `voicey[twilio]`; check duplicate third-party entry points |
+| `VY-TEL-002` | Correct credentials, HTTPS target, E.164 number, timeout, or DTMF |
+| `VY-TEL-003` | Owned/available number lookup was empty or non-unique |
+| `VY-TEL-004` | Twilio definitively rejected the request; use the safe HTTP/code in the error |
+| `VY-TEL-005` | Stop mutations and repair the protected telephony ledger |
+| `VY-TEL-006` | Routing is ambiguous or changed concurrently; inspect before manual restore |
+| `VY-TEL-007` | Reconcile the outbound intent; never place a speculative retry |
+| `VY-TEL-008` | Reject an unknown/incomplete callback shape |
+| `VY-TEL-009` | Check recording SID, auth, availability, type, and size |
+| `VY-TEL-010` | Reject an invalid Media Streams frame/codec event |
+| `VY-TEL-011` | Carrier availability was indeterminate; reconcile mutations first |
+| `VY-TEL-012` | Inspect the warm-transfer id; do not retry until its state is terminal |
 
 Trial accounts may call only verified destinations and play a trial preamble.
 Unfunded accounts and countries with address/bundle/identity requirements must
-be resolved in Twilio before certification. `voicekit doctor` will surface
+be resolved in Twilio before certification. `voicey doctor` will surface
 these account facts when the P1 CLI unit lands.
 
 ## Verification
@@ -240,10 +247,11 @@ uv run pytest --no-cov \
   tests/certification/test_twilio_livekit_sip.py
 ```
 
-The no-charge, account-readiness, route mutation, paid PSTN, recording, DTMF,
-transfer, and physical-handset commands are recorded verbatim in
-[`docs/GAPS.md`](../GAPS.md). They remain pending because no Twilio credentials
-or live numbers are available in this workspace.
+The no-charge test-credential and live account/owned-number readiness commands
+passed on 2026-08-03 without placing a real call. The route mutation, paid
+PSTN, recording, DTMF, transfer, and physical-handset commands remain verbatim
+in [`docs/GAPS.md`](../GAPS.md) and are not green without a deployed target and
+real media evidence.
 
 Next step: start the selected runtime, then run its guarded route and PSTN
 commands from `docs/GAPS.md`.

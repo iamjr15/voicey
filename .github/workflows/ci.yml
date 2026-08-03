@@ -115,18 +115,18 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: voicekit
-          POSTGRES_PASSWORD: voicekit-test # pragma: allowlist secret
-          POSTGRES_DB: voicekit
+          POSTGRES_USER: voicey
+          POSTGRES_PASSWORD: voicey-test # pragma: allowlist secret
+          POSTGRES_DB: voicey
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U voicekit -d voicekit"
+          --health-cmd "pg_isready -U voicey -d voicey"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      VOICEKIT_TEST_POSTGRES_DSN: postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit # pragma: allowlist secret
+      VOICEY_TEST_POSTGRES_DSN: postgresql://voicey:voicey-test@127.0.0.1:5432/voicey # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -140,11 +140,11 @@ jobs:
         run: |
           uv run pytest -q -o addopts='' \
             --strict-config --strict-markers \
-            --cov=voicekit.deploy.managed \
-            --cov=voicekit.deploy.results_service \
-            --cov=voicekit.storage.postgres \
-            --cov=voicekit.relay.postgres \
-            --cov=voicekit.storage.s3 \
+            --cov=voicey.deploy.managed \
+            --cov=voicey.deploy.results_service \
+            --cov=voicey.storage.postgres \
+            --cov=voicey.relay.postgres \
+            --cov=voicey.storage.s3 \
             --cov-config=.coveragerc-managed \
             --cov-branch \
             --cov-report=term-missing \
@@ -177,7 +177,7 @@ jobs:
       - name: Run local P1 phase gate
         run: |
           uv run python tests/verification/run_p1_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --report p1-gate-report.json
       - name: Upload truthful phase report
         if: always()
@@ -209,7 +209,7 @@ jobs:
       - name: Run local P2 phase gate
         run: |
           uv run python tests/verification/run_p2_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --report p2-gate-report.json
       - name: Upload truthful phase reports
         if: always()
@@ -228,18 +228,18 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: voicekit
-          POSTGRES_PASSWORD: voicekit-test # pragma: allowlist secret
-          POSTGRES_DB: voicekit
+          POSTGRES_USER: voicey
+          POSTGRES_PASSWORD: voicey-test # pragma: allowlist secret
+          POSTGRES_DB: voicey
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U voicekit -d voicekit"
+          --health-cmd "pg_isready -U voicey -d voicey"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      VOICEKIT_TEST_POSTGRES_DSN: postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit # pragma: allowlist secret
+      VOICEY_TEST_POSTGRES_DSN: postgresql://voicey:voicey-test@127.0.0.1:5432/voicey # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -269,7 +269,7 @@ jobs:
       - name: Run local P3 phase gate
         run: |
           uv run python tests/verification/run_p3_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --report p3-gate-report.json
       - name: Upload truthful phase reports
         if: always()
@@ -288,18 +288,18 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: voicekit
-          POSTGRES_PASSWORD: voicekit-test # pragma: allowlist secret
-          POSTGRES_DB: voicekit
+          POSTGRES_USER: voicey
+          POSTGRES_PASSWORD: voicey-test # pragma: allowlist secret
+          POSTGRES_DB: voicey
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U voicekit -d voicekit"
+          --health-cmd "pg_isready -U voicey -d voicey"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      VOICEKIT_TEST_POSTGRES_DSN: postgresql://voicekit:voicekit-test@127.0.0.1:5432/voicekit # pragma: allowlist secret
+      VOICEY_TEST_POSTGRES_DSN: postgresql://voicey:voicey-test@127.0.0.1:5432/voicey # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -340,13 +340,13 @@ jobs:
         run: |
           uv build --wheel --out-dir dist
           uv run python tests/verification/run_p4_release_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --channel canary \
             --report p4-release-report.json
       - name: Run source-derived docs and fresh-wheel quickstarts
         run: |
           uv run python tests/verification/run_p4_docs_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --report p4-docs-report.json
       - name: Upload truthful hardening reports
         if: always()
@@ -383,11 +383,11 @@ jobs:
         run: git clone https://github.com/standard-webhooks/standard-webhooks.git "$RUNNER_TEMP/standard-webhooks"
       - name: Pin official Go verifier commit
         run: git -C "$RUNNER_TEMP/standard-webhooks" checkout 01d6eb75702229a0927c07d52fda7223e201c03d
-      - name: Install voicekit vector test
-        run: cp tests/interop/voicekit_vector_test.go "$RUNNER_TEMP/standard-webhooks/libraries/go/"
+      - name: Install voicey vector test
+        run: cp tests/interop/voicey_vector_test.go "$RUNNER_TEMP/standard-webhooks/libraries/go/"
       - name: Verify Go vector
         working-directory: ${{ runner.temp }}/standard-webhooks/libraries/go
         env:
           GO111MODULE: "off"
-          VOICEKIT_VECTOR_PATH: ${{ github.workspace }}/tests/interop/standard_webhooks_vector.json
-        run: go test webhook.go voicekit_vector_test.go
+          VOICEY_VECTOR_PATH: ${{ github.workspace }}/tests/interop/standard_webhooks_vector.json
+        run: go test webhook.go voicey_vector_test.go

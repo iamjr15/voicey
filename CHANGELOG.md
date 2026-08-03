@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes are recorded here. Voicekit follows Semantic Versioning for
+All notable changes are recorded here. Voicey follows Semantic Versioning for
 release compatibility; Python package indexes may normalize prerelease spelling
 to PEP 440.
 
@@ -22,7 +22,7 @@ to PEP 440.
 
 ### Changed
 
-- `voicekit doctor` now reports an installed but uncertified Pipecat or LiveKit
+- `voicey doctor` now reports an installed but uncertified Pipecat or LiveKit
   version as a loud warning instead of failing an otherwise usable project.
 
 ### Security

@@ -6,10 +6,10 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request, Response
 
-from voicekit._p0.common import RuntimeProbe
-from voicekit._p0.livekit_probe import run_livekit_probe
-from voicekit._p0.pipecat_probe import run_pipecat_probe
-from voicekit.results import WebhookSigner
+from voicey._p0.common import RuntimeProbe
+from voicey._p0.livekit_probe import run_livekit_probe
+from voicey._p0.pipecat_probe import run_pipecat_probe
+from voicey.results import WebhookSigner
 
 pytestmark = pytest.mark.integration
 ProbeRunner = Callable[[], Awaitable[RuntimeProbe]]

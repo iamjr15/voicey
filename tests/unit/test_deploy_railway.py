@@ -12,8 +12,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from voicekit.cli.environment import EnvFileStore
-from voicekit.deploy.railway import (
+from voicey.cli.environment import EnvFileStore
+from voicey.deploy.railway import (
     RailwayArtifactGenerator,
     RailwayCliRunner,
     RailwayCommandResult,
@@ -28,8 +28,8 @@ from voicekit.deploy.railway import (
     _parse_json,
     _variable_reference,
 )
-from voicekit.errors import VoicekitError
-from voicekit.relay.auth import RelayCredential
+from voicey.errors import VoiceyError
+from voicey.relay.auth import RelayCredential
 
 
 class FakeRailwayRunner:
@@ -48,24 +48,24 @@ class FakeRailwayRunner:
         self.bucket_id = "bucket_123"
         self.domain_id = "domain_123"
         self.projects: list[dict[str, object]] = (
-            [{"id": self.project_id, "name": "voicekit-results"}] if existing else []
+            [{"id": self.project_id, "name": "voicey-results"}] if existing else []
         )
         self.services: list[dict[str, object]] = (
             [
-                {"id": self.service_id, "name": "voicekit-results"},
+                {"id": self.service_id, "name": "voicey-results"},
                 {"id": self.postgres_id, "name": "Postgres"},
             ]
             if existing
             else []
         )
         self.buckets: list[dict[str, object]] = (
-            [{"id": self.bucket_id, "name": "voicekit-results-objects"}] if existing else []
+            [{"id": self.bucket_id, "name": "voicey-results-objects"}] if existing else []
         )
         self.domains: list[dict[str, object]] = (
             [
                 {
                     "id": self.domain_id,
-                    "domain": "voicekit-results-production.up.railway.app",
+                    "domain": "voicey-results-production.up.railway.app",
                 }
             ]
             if existing
@@ -103,7 +103,7 @@ class FakeRailwayRunner:
         if command[:2] == ("list", "--json"):
             return _result(stdout=json.dumps(self.projects))
         if command[0] == "init":
-            self.projects = [{"id": self.project_id, "name": "voicekit-results"}]
+            self.projects = [{"id": self.project_id, "name": "voicey-results"}]
             return _result(
                 stdout=json.dumps(
                     {
@@ -147,14 +147,14 @@ class FakeRailwayRunner:
             self.domains.append(
                 {
                     "id": self.domain_id,
-                    "domain": "voicekit-results-production.up.railway.app",
+                    "domain": "voicey-results-production.up.railway.app",
                 }
             )
             return _result(
                 stdout=json.dumps(
                     {
                         "domainId": self.domain_id,
-                        "domain": "voicekit-results-production.up.railway.app",
+                        "domain": "voicey-results-production.up.railway.app",
                     }
                 )
             )
@@ -211,11 +211,11 @@ def _result(
 
 def _plan(*, project_id: str | None = None) -> RailwayPlan:
     return RailwayPlan(
-        project_name="voicekit-results",
+        project_name="voicey-results",
         workspace="workspace_123",
         environment="production",
-        service_name="voicekit-results",
-        bucket_name="voicekit-results-objects",
+        service_name="voicey-results",
+        bucket_name="voicey-results-objects",
         service_region="us-east",
         bucket_region="iad",
         callback_providers=("twilio",),
@@ -225,7 +225,7 @@ def _plan(*, project_id: str | None = None) -> RailwayPlan:
 
 def _wheel(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
-    wheel = path / "voicekit-0.0.0.dev0-py3-none-any.whl"
+    wheel = path / "voicey-0.0.0.dev0-py3-none-any.whl"
     wheel.write_bytes(b"wheel fixture")
     return wheel
 
@@ -234,8 +234,8 @@ def _environment() -> dict[str, str]:
     return {
         "TWILIO_ACCOUNT_SID": f"AC{'a' * 32}",
         "TWILIO_AUTH_TOKEN": "test-token",  # pragma: allowlist secret
-        "VOICEKIT_OTLP_ENDPOINT": "https://collector.example.test/v1/traces",
-        "VOICEKIT_OTLP_HEADERS": "authorization=test-only",
+        "VOICEY_OTLP_ENDPOINT": "https://collector.example.test/v1/traces",
+        "VOICEY_OTLP_HEADERS": "authorization=test-only",
     }
 
 
@@ -244,12 +244,12 @@ def _http_client() -> httpx.AsyncClient:
         if request.url.path == "/healthz":
             return httpx.Response(200, json={"status": "ok"})
         if request.url.path == "/v1/ready":
-            assert request.headers["authorization"].startswith("VoicekitRelay ")
+            assert request.headers["authorization"].startswith("VoiceyRelay ")
             return httpx.Response(
                 200,
                 json={
                     "ready": True,
-                    "protocol": "voicekit-results-relay/v1",
+                    "protocol": "voicey-results-relay/v1",
                     "storage_ready": True,
                 },
             )
@@ -272,28 +272,28 @@ def test_railway_plan_artifacts_and_helpers_are_strict_and_secret_free(
     assert config["deploy"]["numReplicas"] == 2
     assert config["deploy"]["healthcheckPath"] == "/healthz"
     assert "--preflight-only" in config["deploy"]["preDeployCommand"]
-    assert "voicekit.deploy.results_service" in dockerfile
+    assert "voicey.deploy.results_service" in dockerfile
     assert "USER 10001:10001" in dockerfile
-    assert "VOICEKIT_RELAY_CREDENTIAL" not in artifacts.config.read_text()
+    assert "VOICEY_RELAY_CREDENTIAL" not in artifacts.config.read_text()
     assert _variable_reference("Postgres", "DATABASE_URL") == ("${{Postgres.DATABASE_URL}}")
     assert _json_items({"services": [{"id": "one"}, 2]}) == [{"id": "one"}]
     assert _find_text({"data": {"projectId": "project"}}) == ""
     assert _find_text({"data": {"projectId": "project"}}, "projectId") == "project"
     assert _parse_json('{"ok":true}', label="test") == {"ok": True}
 
-    with pytest.raises(VoicekitError, match="VK-DEP-003"):
+    with pytest.raises(VoiceyError, match="VY-DEP-003"):
         RailwayPlan(
             project_name="Bad_Project",
             workspace="workspace",
             environment="production",
-            service_name="voicekit-results",
-            bucket_name="voicekit-results-objects",
+            service_name="voicey-results",
+            bucket_name="voicey-results-objects",
             service_region="us-east",
             bucket_region="iad",
         )
-    with pytest.raises(VoicekitError, match="VK-DEP-007"):
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
         _variable_reference("unsafe}}", "DATABASE_URL")
-    with pytest.raises(VoicekitError, match="VK-DEP-007"):
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
         _parse_json("not-json", label="test")
 
 
@@ -308,46 +308,46 @@ def test_railway_output_normalization_and_state_validation(tmp_path: Path) -> No
     assert _item_text({"name": 3}, "name") == ""
     assert _domain_text({"url": "https://result.up.railway.app"}) == ("result.up.railway.app")
 
-    with pytest.raises(VoicekitError, match="not an object"):
+    with pytest.raises(VoiceyError, match="not an object"):
         RailwayResourceState.from_payload([])
-    with pytest.raises(VoicekitError, match="fields are invalid"):
+    with pytest.raises(VoiceyError, match="fields are invalid"):
         RailwayResourceState.from_payload({"schema_version": "bad"})
     invalid = {
         **asdict(RailwayResourceState.initial(_plan())),
         "schema_version": 99,
     }
-    with pytest.raises(VoicekitError, match="version or identity"):
+    with pytest.raises(VoiceyError, match="version or identity"):
         RailwayResourceState.from_payload(invalid)
 
     state = RailwayResourceState.initial(_plan())
-    with pytest.raises(VoicekitError, match="does not match"):
+    with pytest.raises(VoiceyError, match="does not match"):
         state.validate_plan(
             RailwayPlan(
                 project_name="other-project",
                 workspace="workspace_123",
                 environment="production",
-                service_name="voicekit-results",
-                bucket_name="voicekit-results-objects",
+                service_name="voicey-results",
+                bucket_name="voicey-results-objects",
                 service_region="us-east",
                 bucket_region="iad",
             )
         )
-    with pytest.raises(VoicekitError, match="rolled back"):
+    with pytest.raises(VoiceyError, match="rolled back"):
         state.checkpoint(rolled_back=True).validate_plan(_plan())
 
     invalid_json = tmp_path / "invalid.json"
     invalid_json.write_text("{bad json", encoding="utf-8")
     invalid_json.chmod(0o600)
-    with pytest.raises(VoicekitError, match="cannot be read"):
+    with pytest.raises(VoiceyError, match="cannot be read"):
         RailwayResourceStore(invalid_json).load()
 
     target = tmp_path / "target.json"
     target.write_text("{}\n", encoding="utf-8")
     link = tmp_path / "linked.json"
     link.symlink_to(target)
-    with pytest.raises(VoicekitError, match="VK-SEC-002"):
+    with pytest.raises(VoiceyError, match="VY-SEC-002"):
         RailwayResourceStore(link).load()
-    with pytest.raises(VoicekitError, match="VK-SEC-002"):
+    with pytest.raises(VoiceyError, match="VY-SEC-002"):
         RailwayResourceStore(link).save(state)
 
 
@@ -356,20 +356,20 @@ def test_railway_artifacts_support_published_install_and_reject_bad_wheels(
     tmp_path: Path,
 ) -> None:
     generator = RailwayArtifactGenerator(tmp_path)
-    with pytest.raises(VoicekitError, match=r"requires.*engine-wheel"):
+    with pytest.raises(VoiceyError, match=r"requires.*engine-wheel"):
         generator.generate(engine_wheel=None)
-    bad = tmp_path / "not-voicekit.txt"
+    bad = tmp_path / "not-voicey.txt"
     bad.write_text("bad", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="engine wheel is invalid"):
+    with pytest.raises(VoiceyError, match="engine wheel is invalid"):
         generator.generate(engine_wheel=bad)
 
-    monkeypatch.setattr("voicekit.deploy.railway.__version__", "1.0.0")
+    monkeypatch.setattr("voicey.deploy.railway.__version__", "1.0.0")
     published = generator.generate(engine_wheel=None)
     assert published.engine_wheel is None
-    assert '"voicekit[companion]==1.0.0"' in published.dockerfile.read_text(encoding="utf-8")
+    assert '"voicey[companion]==1.0.0"' in published.dockerfile.read_text(encoding="utf-8")
 
-    monkeypatch.setattr("voicekit.deploy.railway._railway_config", lambda: "{}\n")
-    with pytest.raises(VoicekitError, match="topology invariant"):
+    monkeypatch.setattr("voicey.deploy.railway._railway_config", lambda: "{}\n")
+    with pytest.raises(VoiceyError, match="topology invariant"):
         generator.generate(engine_wheel=None)
 
 
@@ -380,8 +380,8 @@ def test_railway_cli_runner_maps_missing_process_failure_and_timeout(
     def missing_executable(_name: str) -> None:
         return None
 
-    monkeypatch.setattr("voicekit.deploy.railway.shutil.which", missing_executable)
-    with pytest.raises(VoicekitError, match="VK-DEP-006"):
+    monkeypatch.setattr("voicey.deploy.railway.shutil.which", missing_executable)
+    with pytest.raises(VoiceyError, match="VY-DEP-006"):
         RailwayCliRunner(tmp_path)
 
     success = subprocess.CompletedProcess(
@@ -397,7 +397,7 @@ def test_railway_cli_runner_maps_missing_process_failure_and_timeout(
     ) -> subprocess.CompletedProcess[str]:
         return success
 
-    monkeypatch.setattr("voicekit.deploy.railway.subprocess.run", successful_run)
+    monkeypatch.setattr("voicey.deploy.railway.subprocess.run", successful_run)
     runner = RailwayCliRunner(tmp_path, "/usr/local/bin/railway")
     assert runner.run(["--version"]).stdout == "railway 5.30.1\n"
 
@@ -414,15 +414,15 @@ def test_railway_cli_runner_maps_missing_process_failure_and_timeout(
     ) -> subprocess.CompletedProcess[str]:
         return failed
 
-    monkeypatch.setattr("voicekit.deploy.railway.subprocess.run", failed_run)
-    with pytest.raises(VoicekitError, match="VK-DEP-006"):
+    monkeypatch.setattr("voicey.deploy.railway.subprocess.run", failed_run)
+    with pytest.raises(VoiceyError, match="VY-DEP-006"):
         runner.run(["whoami"])
 
     def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(["railway"], timeout=1)
 
-    monkeypatch.setattr("voicekit.deploy.railway.subprocess.run", timeout)
-    with pytest.raises(VoicekitError, match="VK-DEP-006"):
+    monkeypatch.setattr("voicey.deploy.railway.subprocess.run", timeout)
+    with pytest.raises(VoiceyError, match="VY-DEP-006"):
         runner.run(["whoami"])
 
 
@@ -431,42 +431,42 @@ def test_railway_version_and_identity_drift_guards(tmp_path: Path) -> None:
         tmp_path / "version",
         runner=FakeRailwayRunner(version="railway current"),
     )
-    with pytest.raises(VoicekitError, match="semantic version"):
+    with pytest.raises(VoiceyError, match="semantic version"):
         malformed._authenticate()
 
     runner = FakeRailwayRunner()
     manager = RailwayDeploymentManager(tmp_path / "identity", runner=runner)
     project_state = RailwayResourceState.initial(_plan()).checkpoint(project_id=runner.project_id)
-    with pytest.raises(VoicekitError, match="project is missing"):
+    with pytest.raises(VoiceyError, match="project is missing"):
         manager._ensure_project(_plan(), project_state, False)
 
     runner.projects = [{"id": runner.project_id, "name": "renamed-project"}]
-    with pytest.raises(VoicekitError, match="project name drifted"):
+    with pytest.raises(VoiceyError, match="project name drifted"):
         manager._ensure_project(_plan(), project_state, False)
 
     linked = project_state.checkpoint(environment_id=runner.environment_id)
     runner.services = [
-        {"id": "duplicate_one", "name": "voicekit-results"},
-        {"id": "duplicate_two", "name": "voicekit-results"},
+        {"id": "duplicate_one", "name": "voicey-results"},
+        {"id": "duplicate_two", "name": "voicey-results"},
     ]
-    with pytest.raises(VoicekitError, match="service identity is ambiguous"):
+    with pytest.raises(VoiceyError, match="service identity is ambiguous"):
         manager._ensure_service(_plan(), linked, False)
 
     service_state = linked.checkpoint(service_id=runner.service_id)
     runner.services = []
-    with pytest.raises(VoicekitError, match="service is missing"):
+    with pytest.raises(VoiceyError, match="service is missing"):
         manager._ensure_service(_plan(), service_state, False)
 
     postgres_state = service_state.checkpoint(
         postgres_id=runner.postgres_id,
         postgres_name="Postgres",
     )
-    with pytest.raises(VoicekitError, match="Postgres is missing"):
+    with pytest.raises(VoiceyError, match="Postgres is missing"):
         manager._ensure_postgres(_plan(), postgres_state, False)
 
     bucket_state = service_state.checkpoint(bucket_id=runner.bucket_id)
     runner.buckets = []
-    with pytest.raises(VoicekitError, match="bucket is missing"):
+    with pytest.raises(VoiceyError, match="bucket is missing"):
         manager._ensure_bucket(_plan(), bucket_state, False)
 
     domain_state = service_state.checkpoint(
@@ -474,12 +474,12 @@ def test_railway_version_and_identity_drift_guards(tmp_path: Path) -> None:
         public_base="https://missing.up.railway.app",
     )
     runner.domains = []
-    with pytest.raises(VoicekitError, match="domain is missing"):
+    with pytest.raises(VoiceyError, match="domain is missing"):
         manager._ensure_domain(_plan(), domain_state, False)
 
-    with pytest.raises(VoicekitError, match="context is incomplete"):
+    with pytest.raises(VoiceyError, match="context is incomplete"):
         manager._context_args(RailwayResourceState.initial(_plan()))
-    with pytest.raises(VoicekitError, match="another project"):
+    with pytest.raises(VoiceyError, match="another project"):
         manager._checkpoint_link(
             project_state,
             {
@@ -487,7 +487,7 @@ def test_railway_version_and_identity_drift_guards(tmp_path: Path) -> None:
                 "environmentId": runner.environment_id,
             },
         )
-    with pytest.raises(VoicekitError, match="omitted the environment"):
+    with pytest.raises(VoiceyError, match="omitted the environment"):
         manager._checkpoint_link(project_state, {"projectId": runner.project_id})
 
 
@@ -538,16 +538,16 @@ async def test_railway_fallback_resolution_rotation_and_credential_drift(
 
     assert first.state.project_id == runner.project_id
     assert first.state.postgres_name == "Postgres"
-    assert after["VOICEKIT_RELAY_PREVIOUS_CREDENTIAL"] == (before["VOICEKIT_RELAY_CREDENTIAL"])
-    assert after["VOICEKIT_RESULTS_PREVIOUS_SECRET"] == (before["VOICEKIT_RESULTS_SECRET"])
+    assert after["VOICEY_RELAY_PREVIOUS_CREDENTIAL"] == (before["VOICEY_RELAY_CREDENTIAL"])
+    assert after["VOICEY_RESULTS_PREVIOUS_SECRET"] == (before["VOICEY_RESULTS_SECRET"])
     assert second.state.relay_fingerprint != first.state.relay_fingerprint
     assert second.state.results_fingerprint != first.state.results_fingerprint
 
     command_count = len(runner.commands)
-    with pytest.raises(VoicekitError, match="VK-DEP-007"):
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
         await manager.deploy(
             replace(_plan(), callback_providers=()),
-            environment={"VOICEKIT_RELAY_CREDENTIAL": RelayCredential.issue("drift").reveal()},
+            environment={"VOICEY_RELAY_CREDENTIAL": RelayCredential.issue("drift").reveal()},
             engine_wheel=wheel,
             skip_smoke=True,
         )
@@ -588,18 +588,18 @@ async def test_railway_deploy_resumes_and_keeps_secrets_out_of_arguments(
     assert "test-token" not in flattened
     assert "authorization=test-only" not in flattened
     assert "${{Postgres.DATABASE_URL}}" in flattened
-    assert "${{voicekit-results-objects.SECRET_ACCESS_KEY}}" in flattened
+    assert "${{voicey-results-objects.SECRET_ACCESS_KEY}}" in flattened
     assert "RAILWAY_DEPLOYMENT_OVERLAP_SECONDS=30" in flattened
-    assert "VOICEKIT_PROMETHEUS_ENABLED=1" in flattened
-    assert "VOICEKIT_PROMETHEUS_BIND=0.0.0.0" in flattened
-    assert "VOICEKIT_PROMETHEUS_PORT=9464" in flattened
+    assert "VOICEY_PROMETHEUS_ENABLED=1" in flattened
+    assert "VOICEY_PROMETHEUS_BIND=0.0.0.0" in flattened
+    assert "VOICEY_PROMETHEUS_PORT=9464" in flattened
     assert any(command[0] == "scale" and "us-east=2" in command for command in runner.commands)
     assert {name for name, _value in runner.secret_payloads} >= {
         "TWILIO_ACCOUNT_SID",
         "TWILIO_AUTH_TOKEN",
-        "VOICEKIT_RELAY_CREDENTIAL",
-        "VOICEKIT_RESULTS_SECRET",
-        "VOICEKIT_OTLP_HEADERS",
+        "VOICEY_RELAY_CREDENTIAL",
+        "VOICEY_RESULTS_SECRET",
+        "VOICEY_OTLP_HEADERS",
     }
 
     create_count = sum(
@@ -633,7 +633,7 @@ async def test_railway_missing_callbacks_and_smoke_failures_are_bounded(
         runner=missing_runner,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="TWILIO_ACCOUNT_SID"):
+    with pytest.raises(VoiceyError, match="TWILIO_ACCOUNT_SID"):
         await missing.deploy(
             _plan(),
             environment={},
@@ -651,7 +651,7 @@ async def test_railway_missing_callbacks_and_smoke_failures_are_bounded(
         http_client=bad_client,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="liveness returned HTTP 503"):
+    with pytest.raises(VoiceyError, match="liveness returned HTTP 503"):
         await bad.deploy(
             _plan(project_id=None),
             environment=_environment(),
@@ -669,7 +669,7 @@ async def test_railway_missing_callbacks_and_smoke_failures_are_bounded(
         http_client=offline_client,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="ConnectError"):
+    with pytest.raises(VoiceyError, match="ConnectError"):
         await offline.deploy(
             _plan(),
             environment=_environment(),
@@ -683,12 +683,12 @@ async def test_railway_smoke_rejects_incomplete_deployment_identity(
     tmp_path: Path,
 ) -> None:
     manager = RailwayDeploymentManager(tmp_path, runner=FakeRailwayRunner())
-    with pytest.raises(VoicekitError, match="incomplete before smoke"):
+    with pytest.raises(VoiceyError, match="incomplete before smoke"):
         await manager._smoke(
             RailwayResourceState.initial(_plan()),
             RelayCredential.issue("smoke"),
         )
-    with pytest.raises(VoicekitError, match="project id is missing"):
+    with pytest.raises(VoiceyError, match="project id is missing"):
         manager._services(RailwayResourceState.initial(_plan()))
 
 
@@ -703,7 +703,7 @@ async def test_railway_requires_exact_adoption_and_never_deletes_adopted_resourc
         http_client=_http_client(),
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="ownership"):
+    with pytest.raises(VoiceyError, match="ownership"):
         await manager.deploy(
             _plan(),
             environment=_environment(),
@@ -751,7 +751,7 @@ async def test_railway_failure_version_and_created_only_rollback(
         runner=wrong_version,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="VK-DEP-006"):
+    with pytest.raises(VoiceyError, match="VY-DEP-006"):
         await wrong_manager.deploy(
             _plan(),
             environment=_environment(),
@@ -765,7 +765,7 @@ async def test_railway_failure_version_and_created_only_rollback(
         runner=runner,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="FAILED"):
+    with pytest.raises(VoiceyError, match="FAILED"):
         await manager.deploy(
             _plan(),
             environment=_environment(),
@@ -798,13 +798,13 @@ async def test_railway_rejects_ambiguous_identity_and_nonterminal_timeout(
     tmp_path: Path,
 ) -> None:
     ambiguous = FakeRailwayRunner(existing=True)
-    ambiguous.projects.append({"id": "project_456", "name": "voicekit-results"})
+    ambiguous.projects.append({"id": "project_456", "name": "voicey-results"})
     manager = RailwayDeploymentManager(
         tmp_path / "ambiguous",
         runner=ambiguous,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="ambiguous"):
+    with pytest.raises(VoiceyError, match="ambiguous"):
         await manager.deploy(
             _plan(project_id=ambiguous.project_id),
             environment=_environment(),
@@ -820,7 +820,7 @@ async def test_railway_rejects_ambiguous_identity_and_nonterminal_timeout(
         poll_interval_s=0,
         deployment_timeout_s=0,
     )
-    with pytest.raises(VoicekitError, match="timed out"):
+    with pytest.raises(VoiceyError, match="timed out"):
         await timeout_manager.deploy(
             _plan(),
             environment=_environment(),
@@ -837,19 +837,19 @@ def test_railway_resource_store_rejects_public_or_drifted_ledgers(
     state = RailwayResourceState.initial(_plan())
     store.save(state)
     path.chmod(0o644)
-    with pytest.raises(VoicekitError, match="VK-SEC-001"):
+    with pytest.raises(VoiceyError, match="VY-SEC-001"):
         store.load()
     path.chmod(0o600)
     loaded = store.load()
     assert loaded is not None
-    with pytest.raises(VoicekitError, match="VK-DEP-007"):
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
         loaded.validate_plan(
             RailwayPlan(
                 project_name="other-project",
                 workspace="workspace_123",
                 environment="production",
-                service_name="voicekit-results",
-                bucket_name="voicekit-results-objects",
+                service_name="voicey-results",
+                bucket_name="voicey-results-objects",
                 service_region="us-east",
                 bucket_region="iad",
             )
@@ -858,5 +858,5 @@ def test_railway_resource_store_rejects_public_or_drifted_ledgers(
 
 def test_railway_rollback_requires_a_ledger(tmp_path: Path) -> None:
     manager = RailwayDeploymentManager(tmp_path, runner=FakeRailwayRunner())
-    with pytest.raises(VoicekitError, match="no Railway resource ledger"):
+    with pytest.raises(VoiceyError, match="no Railway resource ledger"):
         manager.rollback_created(_plan())

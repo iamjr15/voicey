@@ -26,28 +26,31 @@ from livekit.agents.inference import TurnDetector
 from livekit.agents.llm import ChatMessage
 from livekit.plugins import anthropic, cartesia, deepgram, elevenlabs, openai
 
-from voicekit import Agent, Behavior, Models, Phone, Results, Web, results, tool
-from voicekit.errors import VoicekitError
-from voicekit.obs import LatencySample
-from voicekit.obs.records import TimelineEvent, ToolCallObservation, TranscriptTurn
-from voicekit.runtimes.livekit import (
+from voicey import Agent, Behavior, Models, Phone, Results, Web, results, tool
+from voicey.config.catalog import CURATED_DEFAULT_VOICE_IDS
+from voicey.errors import VoiceyError
+from voicey.obs import LatencySample
+from voicey.obs.records import TimelineEvent, ToolCallObservation, TranscriptTurn
+from voicey.runtimes.livekit import (
     LiveKitAdmissionGate,
     LiveKitCall,
     LiveKitLifecycleManager,
     LiveKitTokenIssuer,
     shared_livekit_tools,
 )
-from voicekit.runtimes.livekit.flow import load_native_agent
-from voicekit.runtimes.livekit.mapping import LIVEKIT_CONFIG_MAPPINGS, LiveKitPolicy
-from voicekit.runtimes.livekit.observability import LiveKitObservationBridge
-from voicekit.runtimes.livekit.providers import (
+from voicey.runtimes.livekit.flow import load_native_agent
+from voicey.runtimes.livekit.mapping import LIVEKIT_CONFIG_MAPPINGS, LiveKitPolicy
+from voicey.runtimes.livekit.observability import LiveKitObservationBridge
+from voicey.runtimes.livekit.providers import (
     DefaultLiveKitProviderFactory,
     LiveKitServices,
     build_livekit_services,
+    ensure_anthropic_no_prefill,
+    sanitize_anthropic_sonnet5_kwargs,
 )
-from voicekit.runtimes.livekit.session import LiveKitLanguageController, LiveKitSessionBuilder
-from voicekit.runtimes.pipecat.admission import AdmissionController
-from voicekit.storage.sqlite import SQLiteRepository
+from voicey.runtimes.livekit.session import LiveKitLanguageController, LiveKitSessionBuilder
+from voicey.runtimes.pipecat.admission import AdmissionController
+from voicey.storage.sqlite import SQLiteRepository
 
 
 class MemoryToolSink:
@@ -109,7 +112,7 @@ def _agent() -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -283,6 +286,56 @@ def test_livekit_provider_catalog_uses_installed_plugins() -> None:
     assert isinstance(factory.create_turn_detector(), TurnDetector)
 
 
+def test_sonnet5_compatibility_removes_trailing_assistant_prefill() -> None:
+    assistant_tail = llm.ChatContext.empty()
+    assistant_tail.add_message(role="user", content="Book an appointment.")
+    assistant_tail.add_message(role="assistant", content="Which date?")
+
+    safe = ensure_anthropic_no_prefill(assistant_tail)
+    messages, _ = cast(
+        tuple[list[dict[str, Any]], Any],
+        safe.to_provider_format("anthropic"),
+    )
+
+    assert messages[-1] == {
+        "role": "user",
+        "content": [{"text": ".", "type": "text"}],
+    }
+    assert cast(llm.ChatMessage, assistant_tail.items[-1]).role == "assistant"
+    user_tail = llm.ChatContext.empty()
+    user_tail.add_message(role="user", content="Tomorrow.")
+    assert ensure_anthropic_no_prefill(user_tail) is user_tail
+    assert sanitize_anthropic_sonnet5_kwargs(
+        {"temperature": 0.0, "metadata": {"source": "native-judge"}}
+    ) == {"metadata": {"source": "native-judge"}}
+
+
+@pytest.mark.parametrize(
+    ("model_id", "option_name"),
+    [
+        ("cartesia/sonic-3.5", "voice"),
+        ("elevenlabs/flash-2.5", "voice_id"),
+        ("openai/gpt-4o-mini-tts", "voice"),
+    ],
+)
+def test_livekit_tts_uses_cross_runtime_curated_default(
+    model_id: str,
+    option_name: str,
+) -> None:
+    factory = DefaultLiveKitProviderFactory(
+        {
+            "CARTESIA_API_KEY": "cartesia-test",  # pragma: allowlist secret
+            "ELEVENLABS_API_KEY": "eleven-test",  # pragma: allowlist secret
+            "OPENAI_API_KEY": "openai-test",  # pragma: allowlist secret
+        },
+        vad_model=cast(vad.VAD, object()),
+    )
+
+    service = factory.create_tts(model_id, _agent().voice)
+
+    assert getattr(cast(Any, service)._opts, option_name) == CURATED_DEFAULT_VOICE_IDS[model_id]
+
+
 def test_livekit_provider_fallbacks_use_native_adapters() -> None:
     agent = _agent().model_copy(
         update={
@@ -320,7 +373,7 @@ def test_livekit_provider_fallbacks_use_native_adapters() -> None:
 async def test_native_livekit_flow_loader_accepts_only_agent_workflows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = types.ModuleType("voicekit_test_livekit_flow")
+    module = types.ModuleType("voicey_test_livekit_flow")
 
     async def authored_tool() -> str:
         """Return authored workflow evidence."""
@@ -425,9 +478,9 @@ async def test_livekit_language_fallback_updates_all_compatible_members() -> Non
 async def test_livekit_token_reserves_before_dispatch_and_mints_agent_claim() -> None:
     gate = LiveKitAdmissionGate(1, reservation_ttl_s=1)
     await gate.reserve("call_token")
-    with pytest.raises(VoicekitError) as full:
+    with pytest.raises(VoiceyError) as full:
         await gate.reserve("call_other")
-    assert getattr(full.value, "code", None) == "VK-RUN-004"
+    assert getattr(full.value, "code", None) == "VY-RUN-004"
     assert await gate.admit("job_1", "call_token") is True
     await gate.release("job_1")
 
@@ -502,7 +555,7 @@ async def test_livekit_policy_reaches_native_session_and_transfer_tools(
             del digits
             return None
 
-    flow_module = types.ModuleType("voicekit_test_session_flow")
+    flow_module = types.ModuleType("voicey_test_session_flow")
 
     def flow_entry() -> NativeAgent:
         return NativeAgent(instructions="Use the native session.")
@@ -510,7 +563,7 @@ async def test_livekit_policy_reaches_native_session_and_transfer_tools(
     flow_module.__dict__["entry"] = flow_entry
     monkeypatch.setitem(sys.modules, flow_module.__name__, flow_module)
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.session.AgentSession",
+        "voicey.runtimes.livekit.session.AgentSession",
         FakeNativeSession,
     )
     agent = _agent().model_copy(

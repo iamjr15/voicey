@@ -11,23 +11,23 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.obs import (
+from voicey.errors import VoiceyError
+from voicey.obs import (
     LatencySample,
     NewCall,
     TimelineEvent,
     ToolCallObservation,
     TranscriptTurn,
 )
-from voicekit.relay import (
+from voicey.relay import (
     RelayClient,
     RelayCredential,
     RelayKeyring,
     RepositoryRelayBackend,
     create_relay_app,
 )
-from voicekit.relay.auth import FenceSigner
-from voicekit.storage import (
+from voicey.relay.auth import FenceSigner
+from voicey.storage import (
     RecordingReady,
     ResultDeliveryConfig,
     ResultSnapshot,
@@ -39,9 +39,9 @@ CONFIG_HASH = f"sha256:{'f' * 64}"
 
 
 def _dsn() -> str:
-    value = os.environ.get("VOICEKIT_TEST_POSTGRES_DSN")
+    value = os.environ.get("VOICEY_TEST_POSTGRES_DSN")
     if not value:
-        pytest.skip("VOICEKIT_TEST_POSTGRES_DSN is not configured")
+        pytest.skip("VOICEY_TEST_POSTGRES_DSN is not configured")
     return value
 
 
@@ -66,7 +66,7 @@ async def _isolated_postgres_dsn() -> AsyncGenerator[str]:
     from psycopg import sql
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-    schema = f"voicekit_test_{uuid.uuid4().hex}"
+    schema = f"voicey_test_{uuid.uuid4().hex}"
     settings = conninfo_to_dict(_dsn())
     existing_options = settings.get("options", "")
     settings["options"] = f"{existing_options} -c search_path={schema}".strip()
@@ -83,7 +83,7 @@ async def _isolated_postgres_dsn() -> AsyncGenerator[str]:
 
 @pytest.mark.asyncio
 async def test_postgres_terminal_outbox_recording_and_retention_contract() -> None:
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.storage.postgres import PostgresRepository
 
     ended_at = datetime.now(UTC) - timedelta(days=2)
     call = _call("call_pg_terminal", started_at=ended_at - timedelta(seconds=90))
@@ -164,7 +164,7 @@ async def test_postgres_terminal_outbox_recording_and_retention_contract() -> No
 
 @pytest.mark.asyncio
 async def test_postgres_generation_fencing_and_skip_locked_claims() -> None:
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.storage.postgres import PostgresRepository
 
     started = datetime.now(UTC) - timedelta(seconds=5)
     call = _call("call_pg_fence", started_at=started)
@@ -184,7 +184,7 @@ async def test_postgres_generation_fencing_and_skip_locked_claims() -> None:
             lease_ttl=timedelta(seconds=30),
             now=datetime.now(UTC),
         )
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await repository.flush_results(stale, ResultSnapshot(outcome="stale"))
         event = await repository.terminalize(
             current,
@@ -195,14 +195,14 @@ async def test_postgres_generation_fencing_and_skip_locked_claims() -> None:
         )
 
     assert current.generation == 2
-    assert caught.value.code == "VK-RES-006"
+    assert caught.value.code == "VY-RES-006"
     assert event.event_type == "call.failed"
 
 
 @pytest.mark.asyncio
 async def test_postgres_relay_backend_matches_signed_protocol() -> None:
-    from voicekit.relay.postgres import PostgresRelayJournal
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.relay.postgres import PostgresRelayJournal
+    from voicey.storage.postgres import PostgresRepository
 
     repository = PostgresRepository(_dsn(), max_size=4)
     journal = PostgresRelayJournal(_dsn(), max_size=4)
@@ -299,7 +299,7 @@ async def test_postgres_relay_backend_matches_signed_protocol() -> None:
 async def test_postgres_schema_checksum_is_validated() -> None:
     import psycopg
 
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.storage.postgres import PostgresRepository
 
     repository = PostgresRepository(_dsn())
     await repository.open()
@@ -307,7 +307,7 @@ async def test_postgres_schema_checksum_is_validated() -> None:
         async with await psycopg.AsyncConnection.connect(_dsn()) as connection:
             cursor = await connection.execute(
                 """
-                SELECT checksum FROM voicekit_schema_migrations WHERE version = 1
+                SELECT checksum FROM voicey_schema_migrations WHERE version = 1
                 """
             )
             row = await cursor.fetchone()
@@ -315,29 +315,29 @@ async def test_postgres_schema_checksum_is_validated() -> None:
             checksum = str(row[0])
             await connection.execute(
                 """
-                UPDATE voicekit_schema_migrations
+                UPDATE voicey_schema_migrations
                 SET checksum = 'tampered' WHERE version = 1
                 """
             )
         incompatible = PostgresRepository(_dsn())
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await incompatible.open()
         async with await psycopg.AsyncConnection.connect(_dsn()) as connection:
             await connection.execute(
                 """
-                UPDATE voicekit_schema_migrations SET checksum = %s WHERE version = 1
+                UPDATE voicey_schema_migrations SET checksum = %s WHERE version = 1
                 """,
                 (checksum,),
             )
     finally:
         await repository.close()
 
-    assert caught.value.code == "VK-OBS-004"
+    assert caught.value.code == "VY-OBS-004"
 
 
 @pytest.mark.asyncio
 async def test_postgres_concurrent_migration_and_rolling_generation() -> None:
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.storage.postgres import PostgresRepository
 
     async with _isolated_postgres_dsn() as dsn:
         old_generation = PostgresRepository(dsn, max_size=3)
@@ -362,7 +362,7 @@ async def test_postgres_concurrent_migration_and_rolling_generation() -> None:
                 lease_ttl=timedelta(seconds=30),
                 now=now,
             )
-            with pytest.raises(VoicekitError) as fenced:
+            with pytest.raises(VoiceyError) as fenced:
                 await old_generation.flush_results(
                     old_lease,
                     ResultSnapshot(outcome="late-old-release"),
@@ -378,22 +378,22 @@ async def test_postgres_concurrent_migration_and_rolling_generation() -> None:
             await asyncio.gather(old_generation.close(), new_generation.close())
 
     assert new_lease.generation == 2
-    assert fenced.value.code == "VK-RES-006"
+    assert fenced.value.code == "VY-RES-006"
     assert event.event_type == "call.completed"
 
 
 @pytest.mark.asyncio
 async def test_postgres_repository_complete_operator_contract() -> None:
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.storage.postgres import PostgresRepository
 
-    with pytest.raises(VoicekitError) as bad_settings:
+    with pytest.raises(VoiceyError) as bad_settings:
         PostgresRepository("", min_size=2, max_size=1)
-    assert bad_settings.value.code == "VK-RES-008"
+    assert bad_settings.value.code == "VY-RES-008"
     async with _isolated_postgres_dsn() as dsn, PostgresRepository(dsn) as repository:
         assert await repository.open() is repository
         now = datetime.now(UTC)
         invalid_call = _call("call_pg_invalid_time", started_at=now)
-        with pytest.raises(VoicekitError) as naive_time:
+        with pytest.raises(VoiceyError) as naive_time:
             await repository.begin_call(
                 invalid_call,
                 owner_id="worker",
@@ -403,8 +403,8 @@ async def test_postgres_repository_complete_operator_contract() -> None:
                 lease_ttl=timedelta(seconds=30),
                 now=datetime.now(),
             )
-        assert naive_time.value.code == "VK-RES-008"
-        with pytest.raises(VoicekitError) as invalid_ttl:
+        assert naive_time.value.code == "VY-RES-008"
+        with pytest.raises(VoiceyError) as invalid_ttl:
             await repository.begin_call(
                 invalid_call,
                 owner_id="worker",
@@ -414,7 +414,7 @@ async def test_postgres_repository_complete_operator_contract() -> None:
                 lease_ttl=timedelta(0),
                 now=now,
             )
-        assert invalid_ttl.value.code == "VK-RES-008"
+        assert invalid_ttl.value.code == "VY-RES-008"
         call = _call("call_pg_operator", started_at=now)
         lease = await repository.begin_call(
             call,
@@ -436,7 +436,7 @@ async def test_postgres_repository_complete_operator_contract() -> None:
         await repository.assert_relay_fence(renewed)
         pending = await repository.get_recording_for_call(call.call_id)
         assert pending is not None
-        with pytest.raises(VoicekitError) as early_recording:
+        with pytest.raises(VoiceyError) as early_recording:
             await repository.mark_recording_ready(
                 RecordingReady(
                     recording_id=pending.recording_id,
@@ -444,16 +444,16 @@ async def test_postgres_repository_complete_operator_contract() -> None:
                     storage_key="recordings/early.wav",
                 )
             )
-        assert early_recording.value.code == "VK-RES-010"
-        with pytest.raises(VoicekitError) as premature_takeover:
+        assert early_recording.value.code == "VY-RES-010"
+        with pytest.raises(VoiceyError) as premature_takeover:
             await repository.takeover_expired_call(
                 call.call_id,
                 owner_id="worker-b",
                 lease_ttl=timedelta(seconds=30),
                 now=now,
             )
-        assert premature_takeover.value.code == "VK-RES-006"
-        with pytest.raises(VoicekitError) as bad_handoff:
+        assert premature_takeover.value.code == "VY-RES-006"
+        with pytest.raises(VoiceyError) as bad_handoff:
             await repository.handoff_call(
                 call.call_id,
                 expected_owner_id="wrong-owner",
@@ -461,7 +461,7 @@ async def test_postgres_repository_complete_operator_contract() -> None:
                 lease_ttl=timedelta(seconds=30),
                 now=now,
             )
-        assert bad_handoff.value.code == "VK-RES-006"
+        assert bad_handoff.value.code == "VY-RES-006"
 
         event = await repository.terminalize(
             renewed,
@@ -498,17 +498,17 @@ async def test_postgres_repository_complete_operator_contract() -> None:
         assert call.call_id in {
             item.call_id for item in await repository.list_calls(status="completed")
         }
-        with pytest.raises(VoicekitError) as bad_list_limit:
+        with pytest.raises(VoiceyError) as bad_list_limit:
             await repository.list_calls(limit=0)
-        assert bad_list_limit.value.code == "VK-OBS-005"
-        with pytest.raises(VoicekitError) as bad_claim_limit:
+        assert bad_list_limit.value.code == "VY-OBS-005"
+        with pytest.raises(VoiceyError) as bad_claim_limit:
             await repository.claim_deliveries(
                 owner_id="delivery",
                 limit=0,
                 lease_ttl=timedelta(seconds=30),
             )
-        assert bad_claim_limit.value.code == "VK-OBS-005"
-        with pytest.raises(VoicekitError) as missing_ready:
+        assert bad_claim_limit.value.code == "VY-OBS-005"
+        with pytest.raises(VoiceyError) as missing_ready:
             await repository.mark_recording_ready(
                 RecordingReady(
                     recording_id="missing",
@@ -516,13 +516,13 @@ async def test_postgres_repository_complete_operator_contract() -> None:
                     storage_key="recordings/missing.wav",
                 )
             )
-        assert missing_ready.value.code == "VK-RES-010"
-        with pytest.raises(VoicekitError) as stale_ready:
+        assert missing_ready.value.code == "VY-RES-010"
+        with pytest.raises(VoiceyError) as stale_ready:
             await repository.mark_recording_ready(
                 update,
                 relay_lease=renewed.model_copy(update={"owner_id": "stale"}),
             )
-        assert stale_ready.value.code == "VK-REL-004"
+        assert stale_ready.value.code == "VY-REL-004"
 
         claims = await repository.claim_deliveries(
             owner_id="delivery",
@@ -531,14 +531,14 @@ async def test_postgres_repository_complete_operator_contract() -> None:
             now=now,
         )
         terminal_claim = next(item for item in claims if item.event_id == event.event_id)
-        with pytest.raises(VoicekitError) as invalid_jitter:
+        with pytest.raises(VoiceyError) as invalid_jitter:
             await repository.fail_delivery(
                 terminal_claim,
                 error="transient",
                 jitter=lambda _: 999,
                 now=now,
             )
-        assert invalid_jitter.value.code == "VK-RES-008"
+        assert invalid_jitter.value.code == "VY-RES-008"
         failed = await repository.fail_delivery(
             terminal_claim,
             error="transient secret=redacted",
@@ -573,12 +573,12 @@ async def test_postgres_repository_complete_operator_contract() -> None:
             now=now,
         )
         terminal_claim = next(item for item in redelivery_claims if item.event_id == event.event_id)
-        with pytest.raises(VoicekitError) as lost_claim:
+        with pytest.raises(VoiceyError) as lost_claim:
             await repository.acknowledge_delivery(
                 terminal_claim.model_copy(update={"lease_owner": "wrong"}),
                 now=now,
             )
-        assert lost_claim.value.code == "VK-RES-008"
+        assert lost_claim.value.code == "VY-RES-008"
         await repository.acknowledge_delivery(terminal_claim, now=now)
         assert any(
             item.status == "delivered"
@@ -613,9 +613,9 @@ async def test_postgres_repository_complete_operator_contract() -> None:
             lease_ttl=timedelta(seconds=30),
             now=now,
         )
-        with pytest.raises(VoicekitError) as fenced_missing_recording:
+        with pytest.raises(VoiceyError) as fenced_missing_recording:
             await repository.mark_recording_failed_fenced(no_recording_lease)
-        assert fenced_missing_recording.value.code == "VK-RES-010"
+        assert fenced_missing_recording.value.code == "VY-RES-010"
 
         stale_call = _call("call_pg_stale", started_at=now)
         stale_lease = await repository.begin_call(
@@ -636,9 +636,9 @@ async def test_postgres_repository_complete_operator_contract() -> None:
             lease_ttl=timedelta(seconds=30),
             now=now + timedelta(seconds=2),
         )
-        with pytest.raises(VoicekitError) as relay_fence:
+        with pytest.raises(VoiceyError) as relay_fence:
             await repository.assert_relay_fence(stale_lease)
-        assert relay_fence.value.code == "VK-REL-004"
+        assert relay_fence.value.code == "VY-REL-004"
         await repository.terminalize(
             current,
             TerminalRequest(event_type="call.failed", ended_reason="worker_crash"),
@@ -664,11 +664,11 @@ async def test_postgres_repository_complete_operator_contract() -> None:
             repository.current_relay_lease("missing"),
             repository.redeliver("missing"),
         ):
-            with pytest.raises(VoicekitError):
+            with pytest.raises(VoiceyError):
                 await operation
-        with pytest.raises(VoicekitError) as missing_recording:
+        with pytest.raises(VoiceyError) as missing_recording:
             await repository.mark_recording_failed("missing")
-        assert missing_recording.value.code == "VK-RES-010"
+        assert missing_recording.value.code == "VY-RES-010"
         await repository.close()
         await repository.close()
 
@@ -677,13 +677,13 @@ async def test_postgres_repository_complete_operator_contract() -> None:
 async def test_postgres_migration_rejects_unknown_newer_schema() -> None:
     import psycopg
 
-    from voicekit.storage.postgres import PostgresRepository
+    from voicey.storage.postgres import PostgresRepository
 
     async with _isolated_postgres_dsn() as dsn:
         async with await psycopg.AsyncConnection.connect(dsn) as connection:
             await connection.execute(
                 """
-                CREATE TABLE voicekit_schema_migrations (
+                CREATE TABLE voicey_schema_migrations (
                     version INTEGER PRIMARY KEY,
                     name TEXT NOT NULL UNIQUE,
                     checksum TEXT NOT NULL,
@@ -693,26 +693,26 @@ async def test_postgres_migration_rejects_unknown_newer_schema() -> None:
             )
             await connection.execute(
                 """
-                INSERT INTO voicekit_schema_migrations(
+                INSERT INTO voicey_schema_migrations(
                     version, name, checksum, applied_at
                 ) VALUES (999, 'future.sql', 'future', %s)
                 """,
                 (datetime.now(UTC),),
             )
         repository = PostgresRepository(dsn)
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await repository.open()
-        assert caught.value.code == "VK-OBS-004"
+        assert caught.value.code == "VY-OBS-004"
 
 
 @pytest.mark.asyncio
 async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
-    from voicekit.relay.postgres import PostgresRelayJournal
+    from voicey.relay.postgres import PostgresRelayJournal
 
     async with _isolated_postgres_dsn() as dsn:
-        with pytest.raises(VoicekitError) as bad_settings:
+        with pytest.raises(VoiceyError) as bad_settings:
             PostgresRelayJournal(dsn, min_size=2, max_size=1)
-        assert bad_settings.value.code == "VK-REL-006"
+        assert bad_settings.value.code == "VY-REL-006"
         journal = PostgresRelayJournal(dsn, max_size=3)
         async with journal:
             assert await journal.open() is journal
@@ -724,14 +724,14 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                 expires_at=now + timedelta(minutes=1),
                 now=now,
             )
-            with pytest.raises(VoicekitError) as replay:
+            with pytest.raises(VoiceyError) as replay:
                 await journal.claim_nonce(
                     key_id="key",
                     nonce="nonce",
                     expires_at=now + timedelta(minutes=1),
                     now=now,
                 )
-            assert replay.value.code == "VK-REL-003"
+            assert replay.value.code == "VY-REL-003"
 
             assert (
                 await journal.reserve_request(
@@ -743,7 +743,7 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                 )
                 is None
             )
-            with pytest.raises(VoicekitError) as request_conflict:
+            with pytest.raises(VoiceyError) as request_conflict:
                 await journal.reserve_request(
                     idempotency_key="request-key",
                     request_hash="hash-b",
@@ -751,7 +751,7 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                     call_id="call-journal",
                     now=now,
                 )
-            assert request_conflict.value.code == "VK-REL-005"
+            assert request_conflict.value.code == "VY-REL-005"
             await journal.complete_request(
                 idempotency_key="request-key",
                 request_hash="hash-a",
@@ -767,16 +767,16 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                 )
                 == b"ack"
             )
-            with pytest.raises(VoicekitError) as missing_request:
+            with pytest.raises(VoiceyError) as missing_request:
                 await journal.complete_request(
                     idempotency_key="missing",
                     request_hash="missing",
                     response_body=b"ack",
                 )
-            assert missing_request.value.code == "VK-REL-005"
+            assert missing_request.value.code == "VY-REL-005"
 
             assert await journal.next_sequence("call-journal") == 1
-            with pytest.raises(VoicekitError) as gap:
+            with pytest.raises(VoiceyError) as gap:
                 await journal.reserve_update(
                     call_id="call-journal",
                     sequence=2,
@@ -784,7 +784,7 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                     request_hash="hash-gap",
                     now=now,
                 )
-            assert gap.value.code == "VK-REL-005"
+            assert gap.value.code == "VY-REL-005"
             assert (
                 await journal.reserve_update(
                     call_id="call-journal",
@@ -795,7 +795,7 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                 )
                 is None
             )
-            with pytest.raises(VoicekitError) as update_conflict:
+            with pytest.raises(VoiceyError) as update_conflict:
                 await journal.reserve_update(
                     call_id="call-journal",
                     sequence=1,
@@ -803,8 +803,8 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                     request_hash="different",
                     now=now,
                 )
-            assert update_conflict.value.code == "VK-REL-005"
-            with pytest.raises(VoicekitError) as missing_update:
+            assert update_conflict.value.code == "VY-REL-005"
+            with pytest.raises(VoiceyError) as missing_update:
                 await journal.complete_update(
                     call_id="call-journal",
                     sequence=1,
@@ -812,7 +812,7 @@ async def test_postgres_relay_journal_replay_and_ordering_contract() -> None:
                     request_hash="hash-one",
                     response_body=b"one",
                 )
-            assert missing_update.value.code == "VK-REL-005"
+            assert missing_update.value.code == "VY-REL-005"
             await journal.complete_update(
                 call_id="call-journal",
                 sequence=1,

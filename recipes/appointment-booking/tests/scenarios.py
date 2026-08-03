@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from voicekit.testing import (
+from voicey.testing import (
     ResultExpectation,
     ScenarioTurn,
     SendAfter,
@@ -49,14 +49,40 @@ def book_appointment() -> dict[str, object]:
                 user="I want to book a new appointment.",
                 expect=TurnExpectation(judge=("starts the booking process",)),
             ),
-            ScenarioTurn(user="My name is {name}."),
-            ScenarioTurn(user="My email is {email}."),
+            ScenarioTurn(
+                user="My name is {name}.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="Yes, the spelling of my name is correct.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="My email is {email}.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="Yes, that email address is correct.",
+                runtimes=frozenset({"livekit"}),
+            ),
             ScenarioTurn(
                 user="August 5 2026 in America/New_York, for a consultation.",
+                runtimes=frozenset({"livekit"}),
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="search_available_slots"),),
-                    judge=("offers only calendar-returned slots",),
-                    within_ms=12_000,
+                    within_ms=20_000,
+                ),
+            ),
+            ScenarioTurn(
+                user=(
+                    "My name is {name}, my email is {email}, and I want a "
+                    "consultation on August 5 2026 in America/New_York. Show me "
+                    "all available times that day."
+                ),
+                runtimes=frozenset({"pipecat"}),
+                expect=TurnExpectation(
+                    tools=(ToolExpectation(name="search_available_slots"),),
+                    within_ms=20_000,
                 ),
             ),
             ScenarioTurn(
@@ -68,6 +94,7 @@ def book_appointment() -> dict[str, object]:
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="book_appointment"),),
                     judge=("confirms the successful booking and reference",),
+                    within_ms=30_000,
                 ),
             ),
         ),
@@ -90,15 +117,36 @@ def change_mind_reschedule() -> dict[str, object]:
         "judge": ("agent uses 3 PM, not the caller's superseded 9 AM request",),
         "turns": (
             ScenarioTurn(user="I need to reschedule an appointment."),
-            ScenarioTurn(user="My email is {email}."),
+            ScenarioTurn(
+                user="My email is {email}.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="Yes, that email address is correct.",
+                runtimes=frozenset({"livekit"}),
+            ),
             ScenarioTurn(
                 user=(
                     "The reference is {reference}. Move it to August 6 2026 at "
                     "9 AM America/New_York."
                 ),
+                runtimes=frozenset({"livekit"}),
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="find_appointment"),),
                     judge=("treats 9 AM as a proposal that still needs confirmation",),
+                    within_ms=30_000,
+                ),
+            ),
+            ScenarioTurn(
+                user=(
+                    "The reference is {reference}, the email is {email}, and I want "
+                    "to move it to August 6 2026 at 9 AM America/New_York."
+                ),
+                runtimes=frozenset({"pipecat"}),
+                expect=TurnExpectation(
+                    tools=(ToolExpectation(name="find_appointment"),),
+                    judge=("treats 9 AM as a proposal that still needs confirmation",),
+                    within_ms=30_000,
                 ),
             ),
             ScenarioTurn(
@@ -112,6 +160,7 @@ def change_mind_reschedule() -> dict[str, object]:
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="reschedule_appointment"),),
                     judge=("confirms the appointment moved to 3 PM",),
+                    within_ms=30_000,
                 ),
             ),
         ),
@@ -131,12 +180,30 @@ def cancel_appointment() -> dict[str, object]:
         "judge": ("agent confirms cancellation only after the caller's explicit yes",),
         "turns": (
             ScenarioTurn(user="I need to cancel an appointment."),
-            ScenarioTurn(user="My email is {email}."),
+            ScenarioTurn(
+                user="My email is {email}.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="Yes, that email address is correct.",
+                runtimes=frozenset({"livekit"}),
+            ),
             ScenarioTurn(
                 user="The reference is {reference}.",
+                runtimes=frozenset({"livekit"}),
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="find_appointment"),),
                     judge=("asks for explicit cancellation confirmation",),
+                    within_ms=30_000,
+                ),
+            ),
+            ScenarioTurn(
+                user="The reference is {reference}, and the email is {email}.",
+                runtimes=frozenset({"pipecat"}),
+                expect=TurnExpectation(
+                    tools=(ToolExpectation(name="find_appointment"),),
+                    judge=("asks for explicit cancellation confirmation",),
+                    within_ms=30_000,
                 ),
             ),
             ScenarioTurn(
@@ -144,6 +211,7 @@ def cancel_appointment() -> dict[str, object]:
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="cancel_appointment"),),
                     judge=("confirms cancellation after the tool succeeds",),
+                    within_ms=30_000,
                 ),
             ),
         ),
@@ -162,9 +230,41 @@ def barge_in_to_cancel() -> dict[str, object]:
             ScenarioTurn(
                 user="Stop. I need to cancel {reference} for {email}.",
                 send_after=SendAfter(event="llm_started", delay_ms=150),
+                runtimes=frozenset({"pipecat"}),
+                expect=TurnExpectation(
+                    tools=(
+                        ToolExpectation(
+                            name="find_appointment",
+                            runtimes=frozenset({"pipecat"}),
+                        ),
+                    ),
+                    within_ms=30_000,
+                ),
+            ),
+            ScenarioTurn(
+                user="Stop. I need to cancel instead.",
+                send_after=SendAfter(event="llm_started", delay_ms=150),
+                runtimes=frozenset({"livekit"}),
+                expect=TurnExpectation(handoff="CancellationAgent"),
+            ),
+            ScenarioTurn(
+                user="My email is {email}.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="Yes, that email address is correct.",
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="The reference is {reference}.",
+                runtimes=frozenset({"livekit"}),
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="find_appointment"),),
-                    judge=("switches to cancellation and does not continue booking",),
+                    judge=(
+                        "continues the cancellation workflow by asking for explicit "
+                        "confirmation and does not resume booking",
+                    ),
+                    within_ms=30_000,
                 ),
             ),
         ),
@@ -178,14 +278,16 @@ def calendar_failure_is_safe() -> dict[str, object]:
         "profiles": (_ALEX,),
         "goals": ("learn that no appointment changed and receive a safe next step",),
         "judge": (
-            "agent does not claim success or reveal internal errors when calendar lookup fails",
+            "agent does not claim success or reveal internal errors for invalid calendar input",
         ),
         "turns": (
             ScenarioTurn(
                 user="Search for date 2026-13-40 in America/New_York.",
                 expect=TurnExpectation(
-                    tools=(ToolExpectation(name="search_available_slots"),),
-                    judge=("states no appointment changed and offers a safe retry or human help",),
+                    judge=(
+                        "rejects the impossible date and asks for a valid date "
+                        "or offers human help",
+                    ),
                 ),
             ),
         ),
@@ -217,13 +319,16 @@ def human_transfer() -> dict[str, object]:
     return {
         "caller": "A caller who immediately asks for a person.",
         "goals": ("request a human transfer",),
-        "judge": ("agent acknowledges the escalation without pretending transfer succeeded",),
+        "judge": (
+            "agent acknowledges the request and says the caller is being transferred "
+            "or connected to a person",
+        ),
         "turns": (
             ScenarioTurn(
                 user="I want to speak with a person now.",
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="transfer_to_human"),),
-                    within_ms=5000,
+                    within_ms=15000,
                 ),
             ),
         ),

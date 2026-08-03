@@ -6,14 +6,14 @@ import pytest
 from livekit.api import SipCallError
 from livekit.protocol import sip as lk_sip
 
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.sip import (
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.sip import (
     LiveKitSipDialer,
     ManagedSipResource,
     TwilioLiveKitSipConfig,
     TwilioLiveKitSipProvisioner,
 )
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.telephony.ledger import TelephonyLedger
 
 
 class FakeLiveKitSip:
@@ -50,7 +50,7 @@ class FakeLiveKitSip:
         ]
         return lk_sip.ListSIPInboundTrunkResponse(items=items)
 
-    async def delete_sip_trunk(
+    async def delete_trunk(
         self,
         delete: lk_sip.DeleteSIPTrunkRequest,
     ) -> lk_sip.SIPTrunkInfo:
@@ -216,7 +216,7 @@ class FakeTwilioSip:
         if self.fail_kind == kind:
             if self.unknown_failure:
                 raise ConnectionError("unknown carrier outcome")
-            raise VoicekitError("VK-TEL-004", detail=f"{kind} rejected.")
+            raise VoiceyError("VY-TEL-004", detail=f"{kind} rejected.")
         created = kind not in self.state
         self.state[kind] = resource_id
         return ManagedSipResource(kind, resource_id, created, parent_id)
@@ -227,9 +227,9 @@ def _config() -> TwilioLiveKitSipConfig:
         number="+14155550100",
         agent_name="appointment-agent",
         livekit_sip_uri="sip:project.sip.livekit.cloud",
-        twilio_domain_name="voicekit-example.pstn.twilio.com",
-        auth_username="voicekit-user",
-        auth_password="long-random-password",  # pragma: allowlist secret
+        twilio_domain_name="voicey-example.pstn.twilio.com",
+        auth_username="voicey-user",
+        auth_password="LongRandomPassword1",  # pragma: allowlist secret
         record=True,
     )
 
@@ -287,10 +287,10 @@ async def test_twilio_livekit_provisioning_rolls_back_definitive_failure(
         ledger=ledger,
     )
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await provisioner.provision(_config())
 
-    assert caught.value.code == "VK-TEL-004"
+    assert caught.value.code == "VY-TEL-004"
     records = ledger.provisioning_records(provider="twilio-livekit")
     assert len(records) == 1
     assert records[0].state == "rolled_back"
@@ -320,10 +320,10 @@ async def test_twilio_livekit_unknown_failure_stays_ambiguous_without_deleting(
         ledger=ledger,
     )
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await provisioner.provision(_config())
 
-    assert caught.value.code == "VK-TEL-006"
+    assert caught.value.code == "VY-TEL-006"
     open_operations = ledger.open_provisioning(provider="twilio-livekit")
     assert len(open_operations) == 1
     assert open_operations[0].state == "ambiguous"
@@ -372,7 +372,7 @@ async def test_livekit_sip_dialer_maps_success_rejection_and_ambiguity(
     assert ledger.get_intent("intent_rejected").state == "rejected"
 
     livekit.participant = ConnectionError("unknown")
-    with pytest.raises(VoicekitError) as ambiguous:
+    with pytest.raises(VoiceyError) as ambiguous:
         await dialer.dial(
             from_number="+14155550100",
             to_number="+14155550103",
@@ -380,6 +380,6 @@ async def test_livekit_sip_dialer_maps_success_rejection_and_ambiguity(
             participant_identity="sip-ambiguous",
             intent_id="intent_ambiguous",
         )
-    assert ambiguous.value.code == "VK-TEL-007"
+    assert ambiguous.value.code == "VY-TEL-007"
     assert ledger.get_intent("intent_ambiguous").state == "ambiguous"
     ledger.close()

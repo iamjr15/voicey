@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Protocol
 
-from voicekit import results, tool
+from voicey import results, tool
 
 
 class FrontDeskGateway(Protocol):
@@ -72,16 +72,17 @@ def take_message(
     message: str,
 ) -> dict[str, str]:
     """Persist a confirmed callback message and return its stable reference."""
+    normalized_department = department.strip().casefold()
     reference = _gateway.create_message(
         name=name,
         callback_number=callback_number,
-        department=department,
+        department=normalized_department,
         message=message,
     )
     result = {
         "status": "recorded",
         "reference": reference,
-        "department": department,
+        "department": normalized_department,
         "callback_number": callback_number,
     }
     results.set("message", result)

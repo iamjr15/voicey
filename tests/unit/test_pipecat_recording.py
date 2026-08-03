@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.obs.records import NewCall
-from voicekit.runtimes.pipecat.recording import PipecatRecordingHandler
-from voicekit.storage.artifacts import ArtifactStore, LocalArtifactStore
-from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
-from voicekit.storage.sqlite import SQLiteRepository
-from voicekit.telephony.models import CallEvent
+from voicey.errors import VoiceyError
+from voicey.obs.records import NewCall
+from voicey.runtimes.pipecat.recording import PipecatRecordingHandler
+from voicey.storage.artifacts import ArtifactStore, LocalArtifactStore
+from voicey.storage.models import ResultDeliveryConfig, TerminalRequest
+from voicey.storage.sqlite import SQLiteRepository
+from voicey.telephony.models import CallEvent
 
 
 class TwilioDownloader:
@@ -224,7 +224,7 @@ async def test_recording_handler_ingests_all_carriers_and_protects_reads(
             )
             == b"plivo-audio"
         )
-        with pytest.raises(VoicekitError) as unauthorized:
+        with pytest.raises(VoiceyError) as unauthorized:
             await handler.read(twilio_snapshot.recording_id, "Bearer wrong")
 
         await handler.handle_twilio(
@@ -240,7 +240,7 @@ async def test_recording_handler_ingests_all_carriers_and_protects_reads(
     assert telnyx.calls == ["https://storage.example.test/signed.mp3"]
     assert vobiz.calls == ["https://storage.example.test/vobiz.mp3"]
     assert plivo.calls == ["https://storage.example.test/plivo.mp3"]
-    assert unauthorized.value.code == "VK-WEB-004"
+    assert unauthorized.value.code == "VY-WEB-004"
     assert twilio_snapshot.status == "ready"
     assert twilio_snapshot.access_url is not None
     assert "RE-recording" not in twilio_snapshot.access_url
@@ -272,7 +272,7 @@ async def test_recording_handler_marks_failure_and_retries_premature_ready(
         assert failed is not None
         assert failed.status == "failed"
 
-        with pytest.raises(VoicekitError) as premature:
+        with pytest.raises(VoiceyError) as premature:
             await handler.handle_twilio(
                 CallEvent(
                     type="recording_ready",
@@ -282,7 +282,7 @@ async def test_recording_handler_marks_failure_and_retries_premature_ready(
                 )
             )
 
-    assert premature.value.code == "VK-RES-010"
+    assert premature.value.code == "VY-RES-010"
     assert twilio.calls == []
 
 
@@ -298,7 +298,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
             access_base="https://voice.example.test",
             current_secret="whsec_dGVzdA==",  # pragma: allowlist secret
         )
-        with pytest.raises(VoicekitError, match="invalid Twilio"):
+        with pytest.raises(VoiceyError, match="invalid Twilio"):
             await handler.handle_twilio(
                 CallEvent(
                     type="recording_ready",
@@ -306,7 +306,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     provider_status="completed",
                 )
             )
-        with pytest.raises(VoicekitError, match="Twilio recording adapter"):
+        with pytest.raises(VoiceyError, match="Twilio recording adapter"):
             await handler.handle_twilio(
                 CallEvent(
                     type="recording_ready",
@@ -315,7 +315,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_sid="RE-pending",
                 )
             )
-        with pytest.raises(VoicekitError, match="invalid Telnyx"):
+        with pytest.raises(VoiceyError, match="invalid Telnyx"):
             await handler.handle_telnyx(
                 CallEvent(
                     type="recording_ready",
@@ -324,7 +324,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_sid="recording-pending",
                 )
             )
-        with pytest.raises(VoicekitError, match="Telnyx recording adapter"):
+        with pytest.raises(VoiceyError, match="Telnyx recording adapter"):
             await handler.handle_telnyx(
                 CallEvent(
                     type="recording_ready",
@@ -334,7 +334,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_url="https://storage.example.test/signed.mp3",
                 )
             )
-        with pytest.raises(VoicekitError, match="invalid Vobiz"):
+        with pytest.raises(VoiceyError, match="invalid Vobiz"):
             await handler.handle_vobiz(
                 CallEvent(
                     type="recording_ready",
@@ -343,7 +343,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_sid="recording-pending",
                 )
             )
-        with pytest.raises(VoicekitError, match="Vobiz recording adapter"):
+        with pytest.raises(VoiceyError, match="Vobiz recording adapter"):
             await handler.handle_vobiz(
                 CallEvent(
                     type="recording_ready",
@@ -353,7 +353,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_url="https://storage.example.test/vobiz.mp3",
                 )
             )
-        with pytest.raises(VoicekitError, match="invalid Plivo"):
+        with pytest.raises(VoiceyError, match="invalid Plivo"):
             await handler.handle_plivo(
                 CallEvent(
                     type="recording_ready",
@@ -362,7 +362,7 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
                     recording_sid="recording-pending",
                 )
             )
-        with pytest.raises(VoicekitError, match="Plivo recording adapter"):
+        with pytest.raises(VoiceyError, match="Plivo recording adapter"):
             await handler.handle_plivo(
                 CallEvent(
                     type="recording_ready",
@@ -374,14 +374,14 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
             )
         pending = await repository.get_recording_for_call("CA-pending")
         assert pending is not None
-        with pytest.raises(VoicekitError) as unreadable:
+        with pytest.raises(VoiceyError) as unreadable:
             await handler.read(
                 pending.recording_id,
                 "Bearer whsec_dGVzdA==",  # pragma: allowlist secret
             )
-        with pytest.raises(VoicekitError) as unknown:
+        with pytest.raises(VoiceyError) as unknown:
             await repository.get_recording("rec_unknown")
-        with pytest.raises(VoicekitError) as missing_failure:
+        with pytest.raises(VoiceyError) as missing_failure:
             await repository.mark_recording_failed("call_unknown")
 
         await handler.handle_telnyx(
@@ -414,9 +414,9 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
         )
         failed = await repository.get_recording_for_call("CA-pending")
 
-    assert unreadable.value.code == "VK-RES-010"
-    assert unknown.value.code == "VK-RES-010"
-    assert missing_failure.value.code == "VK-RES-010"
+    assert unreadable.value.code == "VY-RES-010"
+    assert unknown.value.code == "VY-RES-010"
+    assert missing_failure.value.code == "VY-RES-010"
     assert failed is not None
     assert failed.status == "failed"
 
@@ -424,14 +424,14 @@ async def test_recording_handler_catalogs_invalid_missing_and_failed_states(
 def test_recording_handler_rejects_unsafe_access_configuration(tmp_path: Path) -> None:
     repository = SQLiteRepository(tmp_path / "calls.sqlite3")
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    with pytest.raises(VoicekitError, match="HTTPS"):
+    with pytest.raises(VoiceyError, match="HTTPS"):
         PipecatRecordingHandler(
             repository=repository,
             artifact_store=artifacts,
             access_base="http://voice.example.test",
             current_secret="secret",  # pragma: allowlist secret
         )
-    with pytest.raises(VoicekitError, match="webhook secret"):
+    with pytest.raises(VoiceyError, match="webhook secret"):
         PipecatRecordingHandler(
             repository=repository,
             artifact_store=artifacts,

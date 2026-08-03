@@ -8,7 +8,7 @@ from datetime import date
 from typing import Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from voicekit import results, tool
+from voicey import results, tool
 
 
 class CalendarGateway(Protocol):

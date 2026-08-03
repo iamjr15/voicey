@@ -7,7 +7,7 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
-from voicekit.tunnel import TunnelManager, TunnelProbe
+from voicey.tunnel import TunnelManager, TunnelProbe
 
 pytestmark = pytest.mark.live
 
@@ -19,8 +19,8 @@ def _free_port() -> int:
 
 
 async def test_cloudflared_quick_tunnel_websocket_round_trip() -> None:
-    if os.environ.get("VOICEKIT_LIVE_TUNNEL_CONFIRM") != "I_ACKNOWLEDGE_PUBLIC_TUNNEL":
-        pytest.skip("VOICEKIT_LIVE_TUNNEL_CONFIRM acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_TUNNEL_CONFIRM") != "I_ACKNOWLEDGE_PUBLIC_TUNNEL":
+        pytest.skip("VOICEY_LIVE_TUNNEL_CONFIRM acknowledgement is absent")
 
     port = _free_port()
     app = FastAPI()
@@ -35,7 +35,7 @@ async def test_cloudflared_quick_tunnel_websocket_round_trip() -> None:
             access_log=False,
         )
     )
-    server_task = asyncio.create_task(server.serve(), name="voicekit-live-tunnel-origin")
+    server_task = asyncio.create_task(server.serve(), name="voicey-live-tunnel-origin")
     handle = None
     try:
         for _ in range(100):

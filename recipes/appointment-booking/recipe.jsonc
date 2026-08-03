@@ -7,7 +7,7 @@
   "summary": "Book, reschedule, and cancel appointments through a calendar stub.",
   "integration_points": [
     "tools.py:TodoCalendarGateway",
-    "VOICEKIT_TRANSFER_NUMBER",
+    "VOICEY_TRANSFER_NUMBER",
     "agent.py:Results.webhook"
   ]
 }

@@ -11,15 +11,15 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
-import voicekit.deploy.results_service as runtime
-from voicekit.deploy.managed import ManagedPersistenceReport
-from voicekit.errors import VoicekitError
-from voicekit.relay import RelayCredential
-from voicekit.relay.companion import MaintenanceRun
-from voicekit.results import DeliveryRun, RecoveryRun, encode_secret
-from voicekit.storage.postgres import PostgresRepository
-from voicekit.storage.s3 import S3ArtifactStore
-from voicekit.telephony.models import CallEvent
+import voicey.deploy.results_service as runtime
+from voicey.deploy.managed import ManagedPersistenceReport
+from voicey.errors import VoiceyError
+from voicey.relay import RelayCredential
+from voicey.relay.companion import MaintenanceRun
+from voicey.results import DeliveryRun, RecoveryRun, encode_secret
+from voicey.storage.postgres import PostgresRepository
+from voicey.storage.s3 import S3ArtifactStore
+from voicey.telephony.models import CallEvent
 
 _CURRENT_RESULT = encode_secret(b"r" * 32)
 _PREVIOUS_RESULT = encode_secret(b"p" * 32)
@@ -28,31 +28,31 @@ _PREVIOUS_RESULT = encode_secret(b"p" * 32)
 def _environment(*, callbacks: str = "") -> dict[str, str]:
     current = RelayCredential.issue("current-key").reveal()
     previous = RelayCredential.issue("previous-key").reveal()
-    database_url = "postgresql://voicekit:test@db.example.test/voicekit"  # pragma: allowlist secret
+    database_url = "postgresql://voicey:test@db.example.test/voicey"  # pragma: allowlist secret
     return {
-        "VOICEKIT_PUBLIC_BASE": "https://results.example.test",
+        "VOICEY_PUBLIC_BASE": "https://results.example.test",
         "DATABASE_URL": database_url,
-        "VOICEKIT_OBJECT_BUCKET": "voicekit-artifacts",
-        "VOICEKIT_OBJECT_PREFIX": "production",
-        "VOICEKIT_OBJECT_ENDPOINT": "https://objects.example.test",
+        "VOICEY_OBJECT_BUCKET": "voicey-artifacts",
+        "VOICEY_OBJECT_PREFIX": "production",
+        "VOICEY_OBJECT_ENDPOINT": "https://objects.example.test",
         "AWS_REGION": "auto",
         "AWS_ACCESS_KEY_ID": "object-access",
         "AWS_SECRET_ACCESS_KEY": "object-secret",  # pragma: allowlist secret
-        "VOICEKIT_OBJECT_FORCE_PATH_STYLE": "true",
-        "VOICEKIT_RELAY_CREDENTIAL": current,
-        "VOICEKIT_RELAY_PREVIOUS_CREDENTIAL": previous,
-        "VOICEKIT_RESULTS_SECRET": _CURRENT_RESULT,
-        "VOICEKIT_RESULTS_PREVIOUS_SECRET": _PREVIOUS_RESULT,
-        "VOICEKIT_DEPLOY_TARGET": "fly",
-        "VOICEKIT_STORAGE_BACKEND": "postgres",
-        "VOICEKIT_ARTIFACT_BACKEND": "s3",
-        "VOICEKIT_DB_POOL_MIN": "0",
-        "VOICEKIT_DB_POOL_MAX": "2",
-        "VOICEKIT_DB_CONNECTION_BUDGET": "4",
-        "VOICEKIT_MAINTENANCE_INTERVAL_S": "0.5",
-        "VOICEKIT_DRAIN_GRACE_S": "0",
-        "VOICEKIT_RESULTS_OWNER": "results-test",
-        "VOICEKIT_CALLBACK_PROVIDERS": callbacks,
+        "VOICEY_OBJECT_FORCE_PATH_STYLE": "true",
+        "VOICEY_RELAY_CREDENTIAL": current,
+        "VOICEY_RELAY_PREVIOUS_CREDENTIAL": previous,
+        "VOICEY_RESULTS_SECRET": _CURRENT_RESULT,
+        "VOICEY_RESULTS_PREVIOUS_SECRET": _PREVIOUS_RESULT,
+        "VOICEY_DEPLOY_TARGET": "fly",
+        "VOICEY_STORAGE_BACKEND": "postgres",
+        "VOICEY_ARTIFACT_BACKEND": "s3",
+        "VOICEY_DB_POOL_MIN": "0",
+        "VOICEY_DB_POOL_MAX": "2",
+        "VOICEY_DB_CONNECTION_BUDGET": "4",
+        "VOICEY_MAINTENANCE_INTERVAL_S": "0.5",
+        "VOICEY_DRAIN_GRACE_S": "0",
+        "VOICEY_RESULTS_OWNER": "results-test",
+        "VOICEY_CALLBACK_PROVIDERS": callbacks,
         "PORT": "9090",
         "TWILIO_ACCOUNT_SID": f"AC{'a' * 32}",
         "TWILIO_AUTH_TOKEN": "twilio-token",
@@ -79,8 +79,8 @@ def test_results_service_settings_parse_full_contract_and_error_paths() -> None:
     assert not settings.observability.prometheus_enabled
 
     defaults = _environment()
-    del defaults["VOICEKIT_RESULTS_OWNER"]
-    del defaults["VOICEKIT_OBJECT_FORCE_PATH_STYLE"]
+    del defaults["VOICEY_RESULTS_OWNER"]
+    del defaults["VOICEY_OBJECT_FORCE_PATH_STYLE"]
     default_settings = runtime.ResultsServiceSettings.from_environment(defaults)
     assert default_settings.owner_id.startswith("results-")
     assert not default_settings.object_force_path_style
@@ -88,28 +88,28 @@ def test_results_service_settings_parse_full_contract_and_error_paths() -> None:
     for name, value in (
         ("PORT", "0"),
         ("PORT", "not-an-integer"),
-        ("VOICEKIT_MAINTENANCE_INTERVAL_S", "not-a-number"),
-        ("VOICEKIT_OBJECT_FORCE_PATH_STYLE", "maybe"),
+        ("VOICEY_MAINTENANCE_INTERVAL_S", "not-a-number"),
+        ("VOICEY_OBJECT_FORCE_PATH_STYLE", "maybe"),
     ):
         invalid = {**environment, name: value}
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             runtime.ResultsServiceSettings.from_environment(invalid)
-        assert caught.value.code == "VK-DEP-003"
+        assert caught.value.code == "VY-DEP-003"
 
     invalid_metrics = {
         **environment,
-        "VOICEKIT_PROMETHEUS_ENABLED": "1",
-        "VOICEKIT_PROMETHEUS_PORT": "70000",
+        "VOICEY_PROMETHEUS_ENABLED": "1",
+        "VOICEY_PROMETHEUS_PORT": "70000",
     }
-    with pytest.raises(VoicekitError) as metrics:
+    with pytest.raises(VoiceyError) as metrics:
         runtime.ResultsServiceSettings.from_environment(invalid_metrics)
-    assert metrics.value.code == "VK-OBS-006"
+    assert metrics.value.code == "VY-OBS-006"
 
     enabled_metrics = {
         **environment,
-        "VOICEKIT_PROMETHEUS_ENABLED": "1",
-        "VOICEKIT_PROMETHEUS_BIND": "0.0.0.0",
-        "VOICEKIT_OTLP_ENDPOINT": "https://collector.example.test/v1/traces",
+        "VOICEY_PROMETHEUS_ENABLED": "1",
+        "VOICEY_PROMETHEUS_BIND": "0.0.0.0",
+        "VOICEY_OTLP_ENDPOINT": "https://collector.example.test/v1/traces",
     }
     observed = runtime.ResultsServiceSettings.from_environment(enabled_metrics).observability
     assert observed.prometheus_enabled
@@ -117,36 +117,36 @@ def test_results_service_settings_parse_full_contract_and_error_paths() -> None:
     assert observed.otlp_endpoint == "https://collector.example.test/v1/traces"
 
     missing = dict(environment)
-    del missing["VOICEKIT_PUBLIC_BASE"]
-    with pytest.raises(VoicekitError) as required:
+    del missing["VOICEY_PUBLIC_BASE"]
+    with pytest.raises(VoiceyError) as required:
         runtime.ResultsServiceSettings.from_environment(missing)
-    assert required.value.code == "VK-DEP-003"
+    assert required.value.code == "VY-DEP-003"
 
     missing_dsn = dict(environment)
     del missing_dsn["DATABASE_URL"]
-    with pytest.raises(VoicekitError) as database:
+    with pytest.raises(VoiceyError) as database:
         runtime.ResultsServiceSettings.from_environment(missing_dsn)
-    assert database.value.code == "VK-DEP-003"
+    assert database.value.code == "VY-DEP-003"
 
     missing_callback = dict(environment)
     del missing_callback["TWILIO_AUTH_TOKEN"]
-    with pytest.raises(VoicekitError) as callback:
+    with pytest.raises(VoiceyError) as callback:
         runtime.ResultsServiceSettings.from_environment(missing_callback)
-    assert callback.value.code == "VK-DEP-003"
+    assert callback.value.code == "VY-DEP-003"
 
-    topology = {**environment, "VOICEKIT_DEPLOY_TARGET": "railway"}
+    topology = {**environment, "VOICEY_DEPLOY_TARGET": "railway"}
     assert runtime.ResultsServiceSettings.from_environment(topology).target == "railway"
 
-    incompatible_topology = {**environment, "VOICEKIT_DEPLOY_TARGET": "docker"}
-    with pytest.raises(VoicekitError) as incompatible:
+    incompatible_topology = {**environment, "VOICEY_DEPLOY_TARGET": "docker"}
+    with pytest.raises(VoiceyError) as incompatible:
         runtime.ResultsServiceSettings.from_environment(incompatible_topology)
-    assert incompatible.value.code == "VK-DEP-002"
+    assert incompatible.value.code == "VY-DEP-002"
 
     alternate_dsn = dict(environment)
-    alternate_dsn["VOICEKIT_DATABASE_URL"] = alternate_dsn.pop("DATABASE_URL")
+    alternate_dsn["VOICEY_DATABASE_URL"] = alternate_dsn.pop("DATABASE_URL")
     assert (
         runtime.ResultsServiceSettings.from_environment(alternate_dsn).database_url
-        == alternate_dsn["VOICEKIT_DATABASE_URL"]
+        == alternate_dsn["VOICEY_DATABASE_URL"]
     )
 
 
@@ -215,21 +215,21 @@ def test_build_callback_runtime_catalogues_setup_failures(
         raise OSError("no temp")
 
     monkeypatch.setattr(runtime.tempfile, "TemporaryDirectory", no_temporary)
-    with pytest.raises(VoicekitError) as temporary:
+    with pytest.raises(VoiceyError) as temporary:
         runtime._build_recording_runtime(
             settings,
             _environment(callbacks="twilio"),
             repository=cast("PostgresRepository", _ObservationRepository()),
             artifacts=cast("S3ArtifactStore", object()),
         )
-    assert temporary.value.code == "VK-DEP-003"
+    assert temporary.value.code == "VY-DEP-003"
 
 
 @pytest.mark.parametrize(
     ("failure", "code"),
     [
-        (ModuleNotFoundError("optional dependency"), "VK-TEL-001"),
-        (VoicekitError("VK-TEL-005", detail="ledger"), "VK-TEL-005"),
+        (ModuleNotFoundError("optional dependency"), "VY-TEL-001"),
+        (VoiceyError("VY-TEL-005", detail="ledger"), "VY-TEL-005"),
     ],
 )
 def test_build_callback_runtime_cleans_partial_adapter_failure(
@@ -243,7 +243,7 @@ def test_build_callback_runtime_cleans_partial_adapter_failure(
         raise failure
 
     monkeypatch.setattr(runtime, "TelephonyLedger", fail_ledger)
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         runtime._build_recording_runtime(
             settings,
             _environment(callbacks="twilio"),
@@ -434,7 +434,7 @@ async def test_supervisor_drains_after_signal_and_detects_early_exit(
     assert restored == [True]
 
     _FakeServer.exit_immediately = True
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await runtime._supervise(
             cast("runtime.CompanionService", _Service()),
             cast("runtime.CompanionMaintenance", _Maintenance()),
@@ -443,7 +443,7 @@ async def test_supervisor_drains_after_signal_and_detects_early_exit(
             drain_grace_s=0,
         )
     _FakeServer.exit_immediately = False
-    assert caught.value.code == "VK-DEP-003"
+    assert caught.value.code == "VY-DEP-003"
 
 
 class _StoppingMaintenance:
@@ -454,7 +454,7 @@ class _StoppingMaintenance:
     async def run_once(self) -> MaintenanceRun:
         self.stop.set()
         if self.fail:
-            raise VoicekitError("VK-REL-006", detail="injected")
+            raise VoiceyError("VY-REL-006", detail="injected")
         return _maintenance_report(claimed=1)
 
 
@@ -473,7 +473,7 @@ async def test_maintenance_loop_handles_work_and_catalogued_failure(fail: bool) 
 class _FinalFailureMaintenance(_Maintenance):
     async def run_once(self) -> MaintenanceRun:
         self.runs += 1
-        raise VoicekitError("VK-REL-006", detail="final")
+        raise VoiceyError("VY-REL-006", detail="final")
 
 
 @pytest.mark.asyncio
@@ -506,16 +506,16 @@ async def test_wait_started_success_task_failure_and_timeout() -> None:
     stopped = _FakeServer(object())
     done = asyncio.create_task(asyncio.sleep(0))
     await done
-    with pytest.raises(VoicekitError) as exited:
+    with pytest.raises(VoiceyError) as exited:
         await runtime._wait_started(cast("uvicorn.Server", stopped), done)
-    assert exited.value.code == "VK-DEP-003"
+    assert exited.value.code == "VY-DEP-003"
 
     never = _FakeServer(object())
     pending = asyncio.create_task(asyncio.sleep(1))
-    with pytest.raises(VoicekitError) as timeout:
+    with pytest.raises(VoiceyError) as timeout:
         await runtime._wait_started(cast("uvicorn.Server", never), pending, timeout_s=0.001)
     pending.cancel()
-    assert timeout.value.code == "VK-DEP-003"
+    assert timeout.value.code == "VY-DEP-003"
 
 
 @pytest.mark.asyncio
@@ -561,7 +561,7 @@ def test_results_service_main_success_and_catalogued_failure(
         return None
 
     async def failure() -> None:
-        raise VoicekitError("VK-DEP-003", detail="injected")
+        raise VoiceyError("VY-DEP-003", detail="injected")
 
     preflight_runs: list[bool] = []
 

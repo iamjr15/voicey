@@ -1,6 +1,6 @@
 # Development tunnels
 
-Voicekit tunnels only the public runtime listener used by carrier callbacks,
+Voicey tunnels only the public runtime listener used by carrier callbacks,
 carrier media, and web signaling. The admin listener introduced with the P1.9
 playground is separate and is never a tunnel target.
 
@@ -24,14 +24,14 @@ uv sync --extra tunnel
 
 Cloudflared remains an external executable. Automatic quick tunnels require no
 Cloudflare account. They are development endpoints with no SLA and must pass
-the WebSocket probe before voicekit points a real carrier number.
+the WebSocket probe before voicey points a real carrier number.
 
 ## Runtime integration
 
 ```python
 from fastapi import FastAPI
 
-from voicekit.tunnel import TunnelManager, TunnelProbe
+from voicey.tunnel import TunnelManager, TunnelProbe
 
 app = FastAPI()
 probe = TunnelProbe()
@@ -53,7 +53,7 @@ and the local public listener in one round trip.
 
 `TunnelProbe.verify()` retries transient DNS and connection readiness within
 one bounded deadline. A wrong challenge fails immediately. Failed verification
-returns `VK-TUN-004`; callers must not mutate carrier routing afterward.
+returns `VY-TUN-004`; callers must not mutate carrier routing afterward.
 
 ## Cloudflared process safety
 
@@ -64,7 +64,7 @@ cloudflared tunnel --no-autoupdate --url http://127.0.0.1:7860
 ```
 
 `cloudflared_protocol="http2"` adds `--protocol http2` for networks where the
-default transport is blocked. Voicekit accepts only a generated
+default transport is blocked. Voicey accepts only a generated
 `https://*.trycloudflare.com` origin from the process logs. It drains both log
 pipes for the tunnel's full lifetime, bounds and redacts startup diagnostics,
 and shuts down with:
@@ -86,7 +86,7 @@ error is returned.
 
 ## Manual URL
 
-An existing tunnel or reverse proxy can be adopted without giving voicekit its
+An existing tunnel or reverse proxy can be adopted without giving voicey its
 lifecycle:
 
 ```python
@@ -98,7 +98,7 @@ handle = await TunnelManager().open(
 ```
 
 The value must be an HTTPS origin with no credentials, non-default port, path,
-query, or fragment. Voicekit still requires the authenticated WebSocket probe;
+query, or fragment. Voicey still requires the authenticated WebSocket probe;
 closing a manual handle does not stop the operator-owned proxy.
 
 ## Verification
@@ -114,7 +114,7 @@ uv run pytest --no-cov tests/unit/test_tunnel.py
 Public cloudflared edge verification:
 
 ```bash
-VOICEKIT_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL \
+VOICEY_LIVE_TUNNEL_CONFIRM=I_ACKNOWLEDGE_PUBLIC_TUNNEL \
   uv run pytest -m live --no-cov \
   tests/live/test_tunnel_live.py::test_cloudflared_quick_tunnel_websocket_round_trip
 ```
@@ -124,5 +124,5 @@ establishes a connector and emits a URL, but the generated hostname did not
 resolve within 60 seconds on 2026-07-27. This is recorded in
 [`GAPS.md`](GAPS.md), not represented as a green edge test.
 
-`voicekit dev --phone` now owns this lifecycle: it probes the tunnel before
+`voicey dev --phone` now owns this lifecycle: it probes the tunnel before
 changing a route and restores both route and tunnel during teardown.

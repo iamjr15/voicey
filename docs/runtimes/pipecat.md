@@ -1,7 +1,7 @@
 # Pipecat runtime
 
-Voicekit pins Pipecat to `pipecat-ai==1.6.0` and uses only its current APIs.
-Conversation logic stays in native `pipecat.flows` `NodeConfig` code. Voicekit
+Voicey pins Pipecat to `pipecat-ai==1.6.0` and uses only its current APIs.
+Conversation logic stays in native `pipecat.flows` `NodeConfig` code. Voicey
 does not translate a custom state machine or flow DSL.
 
 ## Install
@@ -48,7 +48,7 @@ def entry(flow_manager: FlowManager) -> NodeConfig:
     )
 ```
 
-Tools declared with `@voicekit.tool` become native
+Tools declared with `@voicey.tool` become native
 `FlowsFunctionSchema` global functions. Each handler returns Pipecat's
 `(result, next_node)` pair. `say_while_running`, timeout-bounded execution,
 call-local result context, and protected tool observations are applied by the
@@ -62,7 +62,7 @@ only when their corresponding config is enabled.
 `PipelineWorker`; a zero-call process stays ready for the next call.
 
 ```python
-from voicekit.runtimes.pipecat import PipecatHost, PipecatHostSettings
+from voicey.runtimes.pipecat import PipecatHost, PipecatHostSettings
 
 host = PipecatHost(
     agent=agent,
@@ -163,5 +163,5 @@ mapping, failover, 8 kHz serializer settings, incremental observations, and
 fenced terminal persistence. External PSTN evidence remains separately tracked
 in [`docs/GAPS.md`](../GAPS.md).
 
-Next step: run `voicekit doctor`, then use `voicekit dev` for the guided host
+Next step: run `voicey doctor`, then use `voicey dev` for the guided host
 startup.

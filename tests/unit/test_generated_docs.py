@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from voicekit.errors import ERROR_CATALOG
-from voicekit.release.docs import (
+from voicey.errors import ERROR_CATALOG
+from voicey.release.docs import (
     API_REFERENCE_PATHS,
     build_api_reference,
     changed_api_reference,
@@ -19,9 +19,9 @@ def test_committed_api_reference_is_current_and_complete() -> None:
 
     assert tuple(pages) == API_REFERENCE_PATHS
     assert "`Agent`" in pages[Path("docs/api/config.md")]
-    assert "`voicekit.testing`" in pages[Path("docs/api/python.md")]
+    assert "`voicey.testing`" in pages[Path("docs/api/python.md")]
     assert "`WebhookEvent`" in pages[Path("docs/api/webhooks.md")]
-    assert pages[Path("docs/api/errors.md")].count("| [`VK-") == len(ERROR_CATALOG)
+    assert pages[Path("docs/api/errors.md")].count("| [`VY-") == len(ERROR_CATALOG)
 
 
 def test_api_reference_writer_repairs_only_drift(tmp_path: Path) -> None:

@@ -18,7 +18,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.serializers.telnyx import TelnyxFrameSerializer
 
-from voicekit.telephony.twilio import (
+from voicey.telephony.twilio import (
     FramePacer,
     JitterBuffer,
     MediaFrame,

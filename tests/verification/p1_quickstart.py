@@ -18,14 +18,14 @@ def main() -> int:
     parser.add_argument("--budget-seconds", type=float, default=300)
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()
-    if not wheel.is_file() or not wheel.name.startswith("voicekit-"):
-        parser.error("--wheel must be a built voicekit wheel")
+    if not wheel.is_file() or not wheel.name.startswith("voicey-"):
+        parser.error("--wheel must be a built voicey wheel")
     uv = shutil.which("uv")
     if uv is None:
         parser.error("uv is required for the fresh-environment quickstart")
 
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="voicekit-p1-quickstart-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="voicey-p1-quickstart-") as temporary:
         root = Path(temporary)
         environment = root / ".venv"
         project = root / "quickstart-agent"

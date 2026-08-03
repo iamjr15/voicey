@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.testing import SoakConfig, SoakReport, run_engine_soak
-from voicekit.testing import soak as soak_module
+from voicey.errors import VoiceyError
+from voicey.testing import SoakConfig, SoakReport, run_engine_soak
+from voicey.testing import soak as soak_module
 
 
 @pytest.mark.asyncio
@@ -31,22 +31,22 @@ async def test_dual_runtime_soak_reaches_capacity_and_leaks_nothing(tmp_path: Pa
 
 
 def test_soak_config_fails_closed() -> None:
-    with pytest.raises(VoicekitError) as invalid:
+    with pytest.raises(VoiceyError) as invalid:
         SoakConfig(duration_s=0, max_concurrent=1)
-    assert invalid.value.code == "VK-TST-005"
+    assert invalid.value.code == "VY-TST-005"
 
 
 @pytest.mark.asyncio
 async def test_soak_rejects_empty_or_duplicate_runtime_selection(tmp_path: Path) -> None:
     config = SoakConfig(duration_s=0.01, max_concurrent=1, call_hold_s=0.005)
     for runtimes in ((), ("pipecat", "pipecat")):
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await run_engine_soak(
                 tmp_path / "unused.sqlite3",
                 config,
                 runtimes=runtimes,  # type: ignore[arg-type]
             )
-        assert caught.value.code == "VK-TST-005"
+        assert caught.value.code == "VY-TST-005"
 
 
 def test_unhealthy_soak_report_raises_catalog_error() -> None:
@@ -67,9 +67,9 @@ def test_unhealthy_soak_report_raises_catalog_error() -> None:
     )
 
     assert not report.healthy
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         report.assert_healthy()
-    assert caught.value.code == "VK-TST-005"
+    assert caught.value.code == "VY-TST-005"
 
 
 @pytest.mark.asyncio

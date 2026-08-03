@@ -35,7 +35,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-railway-report.json"),
+        default=Path(".voicey/verification/p4-railway-report.json"),
     )
     args = parser.parse_args()
     report_path = args.report.expanduser().resolve()
@@ -59,11 +59,11 @@ def main() -> int:
             name="authenticated_railway_deploy",
             status="pending-live",
             command=(
-                'uv run voicekit deploy railway --project "$VOICEKIT_RAILWAY_PROJECT" '
-                '--workspace "$VOICEKIT_RAILWAY_WORKSPACE" --environment production '
-                '--service "$VOICEKIT_RAILWAY_SERVICE" '
-                '--bucket "$VOICEKIT_RAILWAY_BUCKET" --service-region us-east '
-                '--bucket-region iad --engine-wheel "$VOICEKIT_ENGINE_WHEEL" '
+                'uv run voicey deploy railway --project "$VOICEY_RAILWAY_PROJECT" '
+                '--workspace "$VOICEY_RAILWAY_WORKSPACE" --environment production '
+                '--service "$VOICEY_RAILWAY_SERVICE" '
+                '--bucket "$VOICEY_RAILWAY_BUCKET" --service-region us-east '
+                '--bucket-region iad --engine-wheel "$VOICEY_ENGINE_WHEEL" '
                 "--yes --json"
             ),
             detail=(
@@ -157,12 +157,12 @@ def _railway_cli_contract() -> GateResult:
 
 
 def _managed_preflight(pytest: list[str]) -> GateResult:
-    if not os.environ.get("VOICEKIT_TEST_POSTGRES_DSN"):
+    if not os.environ.get("VOICEY_TEST_POSTGRES_DSN"):
         return GateResult(
             name="railway_postgres_migration_and_rolling_preflight",
             status="pending-local-environment",
             command=(
-                "VOICEKIT_TEST_POSTGRES_DSN=postgresql://... uv run pytest --no-cov -q "
+                "VOICEY_TEST_POSTGRES_DSN=postgresql://... uv run pytest --no-cov -q "
                 "tests/integration/test_managed_results_service.py"
             ),
             detail="requires a disposable PostgreSQL 17 database",

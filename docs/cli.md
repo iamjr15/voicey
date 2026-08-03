@@ -1,6 +1,6 @@
 # CLI guide
 
-The voicekit CLI is a guided rail over the engine. Bare `voicekit` reports the
+The voicey CLI is a guided rail over the engine. Bare `voicey` reports the
 nearest project state and an exact next command. Every successful command also
 prints `Next:`; expected failures print a stable code, fix, documentation link,
 and next step.
@@ -10,7 +10,7 @@ and next step.
 Run:
 
 ```bash
-voicekit init ./my-agent
+voicey init ./my-agent
 ```
 
 The wizard asks at most five product questions, with no selected answer or
@@ -26,7 +26,7 @@ The wizard asks at most five product questions, with no selected answer or
 Advanced and automation inputs have flag twins:
 
 ```bash
-voicekit init ./my-agent \
+voicey init ./my-agent \
   --name my-agent \
   --recipe scratch \
   --description "Help callers understand their order status." \
@@ -40,7 +40,7 @@ voicekit init ./my-agent \
 ```
 
 `--yes` suppresses confirmations; it never supplies a product choice. Missing
-choices fail as `VK-CLI-001` in a non-interactive process.
+choices fail as `VY-CLI-001` in a non-interactive process.
 
 Setup validates each provider credential with a read-only authenticated request
 at paste time. Valid keys are written atomically to owner-only `.env`, and
@@ -48,17 +48,17 @@ at paste time. Valid keys are written atomically to owner-only `.env`, and
 process take precedence and are not copied into `.env`. The generated
 `.env.example` documents variable names only.
 
-An interruption leaves a secret-free `init-checkpoint` in `voicekit.jsonc`.
+An interruption leaves a secret-free `init-checkpoint` in `voicey.jsonc`.
 Resume it with:
 
 ```bash
-voicekit init ./my-agent --resume
+voicey init ./my-agent --resume
 ```
 
 The completed scratch project contains `agent.py`, native runtime `flow.py`,
 typed `tools.py`, prompts, tests, and a runtime-extra `pyproject.toml`.
 Pipecat emits a native `NodeConfig` entry; LiveKit emits a native
-`livekit.agents.Agent` factory. There is no voicekit conversation DSL.
+`livekit.agents.Agent` factory. There is no voicey conversation DSL.
 
 `appointment-booking@1.0.0` is available on both runtimes. Its authored prompts,
 calendar stub, and selected native flow are copied into the project; Pipecat
@@ -73,9 +73,9 @@ units ship; a dead-end choice is never silently accepted.
 ## Development and calls
 
 ```bash
-voicekit dev
-voicekit dev --phone --tunnel auto
-voicekit call +14155550199 --url https://public.example.test --yes
+voicey dev
+voicey dev --phone --tunnel auto
+voicey call +14155550199 --url https://public.example.test --yes
 ```
 
 `dev` starts the selected production runtime. Pipecat phone mode probes the
@@ -83,7 +83,7 @@ public tunnel before temporarily changing the selected Twilio, Telnyx, Vobiz,
 or Plivo route. LiveKit supervises its native worker and, with `--phone`,
 temporarily provisions the selected carrier's SIP chain. Generic SIP
 provisions only the LiveKit side and leaves the external PBX/carrier route
-operator-managed. Exit and interruption restore the voicekit-managed prior
+operator-managed. Exit and interruption restore the voicey-managed prior
 route/SIP resources and environment/import state.
 The public runtime/signaling listener binds to `127.0.0.1:<port>` and the
 playground/admin listener binds separately to `127.0.0.1:<port + 1>`. For the
@@ -103,21 +103,21 @@ can spend money, `call` requires interactive confirmation or `--yes`.
 ## Keys, numbers, and call results
 
 ```bash
-voicekit keys list
-voicekit keys add deepgram
-voicekit keys add livekit
-voicekit keys validate
+voicey keys list
+voicey keys add deepgram
+voicey keys add livekit
+voicey keys validate
 
-voicekit numbers list
-voicekit numbers buy US --area 415 --yes
-voicekit numbers point +14155550123 --url https://public.example.test --yes
-voicekit numbers restore <rollback-token> --yes
-voicekit numbers release +14155550123 --yes
+voicey numbers list
+voicey numbers buy US --area 415 --yes
+voicey numbers point +14155550123 --url https://public.example.test --yes
+voicey numbers restore <rollback-token> --yes
+voicey numbers release +14155550123 --yes
 
-voicekit calls list
-voicekit calls list --undelivered
-voicekit calls show <call-id>
-voicekit calls redeliver <call-id-or-event-id> --yes
+voicey calls list
+voicey calls list --undelivered
+voicey calls show <call-id>
+voicey calls redeliver <call-id-or-event-id> --yes
 ```
 
 LiveKit project credentials are validated by an authenticated, read-only
@@ -132,20 +132,20 @@ terminal-event/outbox contract as the runtime.
 Generate and validate the canonical self-host artifacts from an agent project:
 
 ```bash
-voicekit deploy docker --skip-smoke
-docker compose -f compose.voicekit.yaml up -d --build
+voicey deploy docker --skip-smoke
+docker compose -f compose.voicey.yaml up -d --build
 ```
 
 The command refuses to overwrite conflicting artifacts, records `docker` in
 the project manifest, validates the Compose model, and prints the explicit
 number-cutover and smoke steps. An unpublished checkout additionally requires
-`--engine-wheel /absolute/path/to/voicekit-*.whl`.
+`--engine-wheel /absolute/path/to/voicey-*.whl`.
 
 Once HTTPS ingress and number routing are ready, a phone project can run the
 paid endpoint-and-call smoke:
 
 ```bash
-voicekit deploy docker \
+voicey deploy docker \
   --smoke https://voice.example.com \
   --to +15551234567 \
   --yes
@@ -163,7 +163,7 @@ Deploy the user-owned durable companion for ephemeral cloud workers by making
 every placement, database plan, volume, and bucket choice explicit:
 
 ```bash
-voicekit deploy fly \
+voicey deploy fly \
   --app my-agent-results \
   --org my-fly-org \
   --region iad \
@@ -189,12 +189,12 @@ Prepare the secret-free context, build and push the exact immutable image, then
 deploy it:
 
 ```bash
-voicekit deploy pipecat-cloud \
+voicey deploy pipecat-cloud \
   --agent my-agent \
   --org my-org \
   --region us-west \
   --secret-set my-agent-secrets \
-  --image registry.example.com/voicekit/my-agent:git-sha \
+  --image registry.example.com/voicey/my-agent:git-sha \
   --min-agents 1 \
   --max-agents 4 \
   --profile agent-1x \
@@ -202,16 +202,16 @@ voicekit deploy pipecat-cloud \
   --prepare-only
 
 docker build \
-  -t registry.example.com/voicekit/my-agent:git-sha \
-  .voicekit/deploy/pipecat-cloud/context
-docker push registry.example.com/voicekit/my-agent:git-sha
+  -t registry.example.com/voicey/my-agent:git-sha \
+  .voicey/deploy/pipecat-cloud/context
+docker push registry.example.com/voicey/my-agent:git-sha
 
-voicekit deploy pipecat-cloud \
+voicey deploy pipecat-cloud \
   --agent my-agent \
   --org my-org \
   --region us-west \
   --secret-set my-agent-secrets \
-  --image registry.example.com/voicekit/my-agent:git-sha \
+  --image registry.example.com/voicey/my-agent:git-sha \
   --min-agents 1 \
   --max-agents 4 \
   --profile agent-1x \
@@ -231,7 +231,7 @@ created-only rollback is `--rollback-created --yes`. See the
 Deploy a native LiveKit worker against the validated companion:
 
 ```bash
-voicekit deploy livekit-cloud \
+voicey deploy livekit-cloud \
   --agent my-agent \
   --project my-livekit-project \
   --region us-west \
@@ -239,10 +239,10 @@ voicekit deploy livekit-cloud \
   --yes
 ```
 
-Phone projects require `VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID` and
+Phone projects require `VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID` and
 `--smoke-to <E.164>` unless `--skip-smoke` is explicit. Existing agents require
 `--agent-id <id> --adopt`. `--rollback --yes` deletes a first version created
-by voicekit or restores the exact ledgered previous version. See the
+by voicey or restores the exact ledgered previous version. See the
 [LiveKit Cloud guide](deploy/livekit-cloud.md).
 
 ## Doctor
@@ -250,10 +250,10 @@ by voicekit or restores the exact ledgered previous version. See the
 Run local preflight:
 
 ```bash
-voicekit doctor
-voicekit doctor --fix
-voicekit doctor --send-test
-voicekit doctor --json
+voicey doctor
+voicey doctor --fix
+voicey doctor --send-test
+voicey doctor --json
 ```
 
 Checks run concurrently and report `{description, ok, issues, advice}` for:
@@ -269,13 +269,13 @@ cloud resources.
 
 ## Recipe drift and engine upgrades
 
-`voicekit recipes update-check` is read-only and supports `--json`. It compares
+`voicey recipes update-check` is read-only and supports `--json`. It compares
 the committed recipe baseline, current project source, and recipe source in the
 installed engine. Human output shows changed paths, conflict status, explicit
 AI-merge guidance, and the next command. JSON exposes paths and content digests
 without source text.
 
-`voicekit upgrade --stable --yes` updates only voicekit's `uv.lock` resolution;
+`voicey upgrade --stable --yes` updates only voicey's `uv.lock` resolution;
 `--pre` selects the canary channel. The command syncs the locked environment,
 runs drift analysis through that new process, verifies that `pyproject.toml`
 and recipe-owned source are unchanged, and restores the prior lock on failure.
@@ -291,9 +291,9 @@ numbers, calls, and doctor. Confirmed upgrade also accepts `--json` for its
 post-mutation report. JSON failures include `code`, `cause`, `detail`, `fix`,
 `docs`, and `next_step`. Mutating commands use deterministic flags and `--yes`.
 
-Use `voicekit <command> --help` for the complete flag surface. Commands reserved
+Use `voicey <command> --help` for the complete flag surface. Commands reserved
 for later phases remain visible only while their capability is unavailable and
-return `VK-CLI-005` with the exact capability status.
+return `VY-CLI-005` with the exact capability status.
 
 ## Manual P1.8 verification
 
@@ -301,7 +301,7 @@ The automated matrix is in `tests/unit/test_cli*.py`. Two usability gates need
 a person and are therefore never inferred from unit tests:
 
 ```bash
-uv run voicekit init /tmp/voicekit-human-wizard
+uv run voicey init /tmp/voicey-human-wizard
 ```
 
 Complete every prompt without flags, verify no answer is selected initially,

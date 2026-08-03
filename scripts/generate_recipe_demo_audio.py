@@ -54,7 +54,7 @@ def _generate(
     say: str,
     ffmpeg: str,
 ) -> None:
-    with tempfile.TemporaryDirectory(prefix=f"voicekit-{name}-audio-") as directory:
+    with tempfile.TemporaryDirectory(prefix=f"voicey-{name}-audio-") as directory:
         temporary = Path(directory)
         segments: list[Path] = []
         for index, turn in enumerate(turns):

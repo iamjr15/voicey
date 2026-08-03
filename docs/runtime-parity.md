@@ -1,9 +1,9 @@
 # Runtime parity
 
-Voicekit exposes one product contract across Pipecat and LiveKit while keeping
+Voicey exposes one product contract across Pipecat and LiveKit while keeping
 conversation logic native to each framework. Pipecat projects use
 `pipecat.flows`; LiveKit projects use native `Agent` workflows and tasks.
-Voicekit does not introduce a flow DSL or translate one runtime's workflow into
+Voicey does not introduce a flow DSL or translate one runtime's workflow into
 the other.
 
 Two checked-in machine-readable matrices make the boundary auditable:
@@ -43,7 +43,7 @@ conference bridge, while LiveKit uses its native warm-transfer workflow.
 ## Recording mapping
 
 `phone.record` is copied into both runtime policies. On Pipecat phone calls,
-voicekit starts carrier-native dual-channel recording only after the durable
+voicey starts carrier-native dual-channel recording only after the durable
 call reservation exists and before media is exposed. Twilio uses a signed
 completion callback; Telnyx uses its idempotent `record_start` command and
 signed event callback. The adapters verify and normalize completion events and
@@ -51,7 +51,7 @@ download carrier media into the engine artifact boundary.
 
 On LiveKit, the native session record policy is combined with provider
 recording reconciliation. Twilio Elastic SIP has no per-trunk completion
-callback, so voicekit correlates the authenticated Twilio call SID and performs
+callback, so voicey correlates the authenticated Twilio call SID and performs
 bounded post-call reconciliation.
 
 The carrier commands are based on the current official

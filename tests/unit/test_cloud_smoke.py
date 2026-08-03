@@ -6,12 +6,12 @@ from typing import Any, cast
 
 import pytest
 
-from voicekit import Agent, Models, Results, Web
-from voicekit.deploy.cloud_smoke import LiveKitCloudSessionSmoke
-from voicekit.errors import VoicekitError
-from voicekit.obs.records import CallRecord, NewCall, TimelineEvent
-from voicekit.relay.auth import RelayCredential
-from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
+from voicey import Agent, Models, Results, Web
+from voicey.deploy.cloud_smoke import LiveKitCloudSessionSmoke
+from voicey.errors import VoiceyError
+from voicey.obs.records import CallRecord, NewCall, TimelineEvent
+from voicey.relay.auth import RelayCredential
+from voicey.storage.models import ResultDeliveryConfig, TerminalRequest
 
 
 class FakeRoomService:
@@ -27,7 +27,7 @@ class FakeRoomService:
         if self.relay.call is not None:
             assert metadata["call_id"] == self.relay.call.call_id
         self.relay.dispatched_call_id = metadata["call_id"]
-        assert agents[0].agent_name == "voicekit-agent"
+        assert agents[0].agent_name == "voicey-agent"
         self.relay.claimed = True
         return object()
 
@@ -94,7 +94,7 @@ class FakeSmokeRelay:
         )
         return CallRecord(
             call_id=stored_call_id,
-            agent_name="voicekit-agent" if stored is None else stored.agent_name,
+            agent_name="voicey-agent" if stored is None else stored.agent_name,
             runtime="livekit",
             channel="web",
             direction="inbound",
@@ -133,7 +133,7 @@ class FakeSipService:
 
 def _agent() -> Agent:
     return Agent(
-        name="voicekit-agent",
+        name="voicey-agent",
         runtime="livekit",
         models=Models(
             stt="deepgram/nova-3",
@@ -146,7 +146,7 @@ def _agent() -> Agent:
         web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",
+            secret_env="VOICEY_WEBHOOK_SECRET",
         ),
     )
 
@@ -174,7 +174,7 @@ async def test_livekit_cloud_smoke_proves_dispatch_and_terminal_event() -> None:
         relay_url="https://relay.example.test",
         relay_credential=RelayCredential.issue("smoke-key"),
         environment={
-            "LIVEKIT_URL": "wss://voicekit.livekit.cloud",
+            "LIVEKIT_URL": "wss://voicey.livekit.cloud",
             "LIVEKIT_API_KEY": "api-key",
             "LIVEKIT_API_SECRET": "api-secret",
         },
@@ -190,7 +190,7 @@ async def test_livekit_cloud_smoke_proves_dispatch_and_terminal_event() -> None:
     assert api_client.room.created is not None
     assert api_client.room.deleted is not None
     assert factory_arguments == {
-        "url": "wss://voicekit.livekit.cloud",
+        "url": "wss://voicey.livekit.cloud",
         "api_key": "api-key",
         "api_secret": "api-secret",
     }
@@ -211,7 +211,7 @@ async def test_livekit_cloud_smoke_requires_credentials_before_mutation() -> Non
         api_factory=api_factory,
         relay_client_factory=relay_factory,
     )
-    with pytest.raises(VoicekitError, match="LIVEKIT_URL"):
+    with pytest.raises(VoiceyError, match="LIVEKIT_URL"):
         await smoke.run(
             agent=_agent(),
             relay_url="https://relay.example.test",
@@ -243,10 +243,10 @@ async def test_livekit_cloud_phone_smoke_dials_pinned_outbound_trunk() -> None:
         relay_url="https://relay.example.test",
         relay_credential=RelayCredential.issue("smoke-key"),
         environment={
-            "LIVEKIT_URL": "wss://voicekit.livekit.cloud",
+            "LIVEKIT_URL": "wss://voicey.livekit.cloud",
             "LIVEKIT_API_KEY": "api-key",
             "LIVEKIT_API_SECRET": "api-secret",
-            "VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID": "ST_cloud_test",
+            "VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID": "ST_cloud_test",
         },
         to_number="+14155550199",
     )
@@ -283,13 +283,13 @@ async def test_livekit_cloud_smoke_timeout_deletes_room_and_terminalizes_reserva
         terminal_timeout_s=1,
         poll_interval_s=0,
     )
-    with pytest.raises(VoicekitError, match="did not dispatch"):
+    with pytest.raises(VoiceyError, match="did not dispatch"):
         await smoke.run(
             agent=_agent(),
             relay_url="https://relay.example.test",
             relay_credential=RelayCredential.issue("smoke-key"),
             environment={
-                "LIVEKIT_URL": "wss://voicekit.livekit.cloud",
+                "LIVEKIT_URL": "wss://voicey.livekit.cloud",
                 "LIVEKIT_API_KEY": "api-key",
                 "LIVEKIT_API_SECRET": "api-secret",
             },
@@ -302,5 +302,5 @@ async def test_livekit_cloud_smoke_timeout_deletes_room_and_terminalizes_reserva
 
 
 def test_livekit_cloud_smoke_rejects_invalid_timeouts() -> None:
-    with pytest.raises(VoicekitError, match="VK-DEP-008"):
+    with pytest.raises(VoiceyError, match="VY-DEP-008"):
         LiveKitCloudSessionSmoke(claim_timeout_s=0)

@@ -5,8 +5,8 @@ from collections.abc import Mapping
 import httpx
 import pytest
 
-from voicekit.cli.drafting import ProviderPromptDrafter
-from voicekit.errors import VoicekitError
+from voicey.cli.drafting import ProviderPromptDrafter
+from voicey.errors import VoiceyError
 
 
 class FakeDraftClient:
@@ -89,15 +89,15 @@ async def test_provider_prompt_drafting_shapes(
 
 @pytest.mark.asyncio
 async def test_drafting_rejects_unknown_provider_http_error_and_empty_output() -> None:
-    with pytest.raises(VoicekitError) as unknown:
+    with pytest.raises(VoiceyError) as unknown:
         await ProviderPromptDrafter(client=FakeDraftClient([])).draft(
             "unknown/model",
             "Help callers.",
             {},
         )
-    assert unknown.value.code == "VK-CLI-005"
+    assert unknown.value.code == "VY-CLI-005"
 
-    with pytest.raises(VoicekitError) as http_error:
+    with pytest.raises(VoiceyError) as http_error:
         await ProviderPromptDrafter(
             client=FakeDraftClient([_response(429, {"error": "rate limited"})])
         ).draft(
@@ -105,10 +105,10 @@ async def test_drafting_rejects_unknown_provider_http_error_and_empty_output() -
             "Help callers.",
             {"OPENAI_API_KEY": "openai"},  # pragma: allowlist secret
         )
-    assert http_error.value.code == "VK-CLI-004"
+    assert http_error.value.code == "VY-CLI-004"
     assert "429" in str(http_error.value)
 
-    with pytest.raises(VoicekitError) as empty:
+    with pytest.raises(VoiceyError) as empty:
         await ProviderPromptDrafter(
             client=FakeDraftClient([_response(200, {"content": []})])
         ).draft(
@@ -116,7 +116,7 @@ async def test_drafting_rejects_unknown_provider_http_error_and_empty_output() -
             "Help callers.",
             {"ANTHROPIC_API_KEY": "ant"},  # pragma: allowlist secret
         )
-    assert empty.value.code == "VK-CLI-004"
+    assert empty.value.code == "VY-CLI-004"
     assert "empty" in str(empty.value)
 
 
@@ -124,18 +124,18 @@ async def test_drafting_rejects_unknown_provider_http_error_and_empty_output() -
 async def test_drafting_maps_malformed_provider_response() -> None:
     client = FakeDraftClient([_response(200, {"output": "not-a-list"})])
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await ProviderPromptDrafter(client=client).draft(
             "openai/gpt-5",
             "Help callers.",
             {"OPENAI_API_KEY": "openai"},  # pragma: allowlist secret
         )
 
-    assert caught.value.code == "VK-CLI-004"
+    assert caught.value.code == "VY-CLI-004"
     assert "checkpoint is safe" in str(caught.value)
 
 
 def test_drafter_rejects_nonpositive_timeout() -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         ProviderPromptDrafter(timeout_s=0)
-    assert caught.value.code == "VK-CLI-004"
+    assert caught.value.code == "VY-CLI-004"

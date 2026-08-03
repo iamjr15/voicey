@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from standardwebhooks import Webhook
 
-from voicekit.errors import VoicekitError
-from voicekit.results.signing import WebhookSigner, encode_secret
+from voicey.errors import VoiceyError
+from voicey.results.signing import WebhookSigner, encode_secret
 
 CURRENT_KEY = b"current-signing-key-for-tests"
 PREVIOUS_KEY = b"previous-signing-key-for-tests"
@@ -38,8 +38,8 @@ def test_previous_secret_verifier_accepts_rotation_signature() -> None:
 @pytest.mark.parametrize(
     ("headers_change", "body", "code"),
     [
-        ({"webhook-id": ""}, BODY, "VK-RES-002"),
-        ({}, b"tampered", "VK-RES-004"),
+        ({"webhook-id": ""}, BODY, "VY-RES-002"),
+        ({}, b"tampered", "VY-RES-004"),
     ],
 )
 def test_verification_rejects_malformed_or_tampered_delivery(
@@ -50,7 +50,7 @@ def test_verification_rejects_malformed_or_tampered_delivery(
     signer = WebhookSigner(encode_secret(CURRENT_KEY))
     signed = signer.sign("evt_test", BODY, timestamp=1_750_000_000)
 
-    with pytest.raises(VoicekitError, match=code):
+    with pytest.raises(VoiceyError, match=code):
         signer.verify(
             {**signed.headers, **headers_change},
             body,
@@ -62,7 +62,7 @@ def test_verification_rejects_replay_window() -> None:
     signer = WebhookSigner(encode_secret(CURRENT_KEY))
     signed = signer.sign("evt_test", BODY, timestamp=1_750_000_000)
 
-    with pytest.raises(VoicekitError, match="VK-RES-003"):
+    with pytest.raises(VoiceyError, match="VY-RES-003"):
         signer.verify(signed.headers, BODY, now=1_750_000_301)
 
 
@@ -76,7 +76,7 @@ def test_verification_rejects_replay_window() -> None:
     ],
 )
 def test_invalid_secret_fails_with_catalog_error(secret: str) -> None:
-    with pytest.raises(VoicekitError, match="VK-RES-001"):
+    with pytest.raises(VoiceyError, match="VY-RES-001"):
         WebhookSigner(secret)
 
 

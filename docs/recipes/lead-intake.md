@@ -23,7 +23,7 @@ system speech is not provider or latency evidence.
 ## Create the project
 
 ```bash
-voicekit init ./lead-intake \
+voicey init ./lead-intake \
   --name lead-intake \
   --recipe lead-intake \
   --runtime livekit \
@@ -46,8 +46,12 @@ voicekit init ./lead-intake \
 
 ## Verification
 
-`voicekit test --report junit` covers consent refusal, correction, contact
+`voicey test --report junit` covers consent refusal, correction, contact
 confirmation, CRM failure, scheduling order, and both native runtime compilers.
+Once all four non-sensitive qualification facts are present, the read-only
+`qualify_inquiry` step runs without an extra confirmation; contact persistence
+still requires explicit consent and final read-back. The 2026-08-03 Anthropic
+API text certification passed all six cases first attempt on each runtime.
 
-Next: run `voicekit test --report junit`, then inspect that a consent refusal
+Next: run `voicey test --report junit`, then inspect that a consent refusal
 produces no durable lead.

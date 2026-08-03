@@ -5,20 +5,20 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.errors import ERROR_CATALOG, VoicekitError, error_docs_url
+from voicey.errors import ERROR_CATALOG, VoiceyError, error_docs_url
 
 
 def test_registered_error_exposes_stable_code_and_fix() -> None:
-    error = VoicekitError("VK-RES-004", detail="event evt_test")
+    error = VoiceyError("VY-RES-004", detail="event evt_test")
 
-    assert error.code == "VK-RES-004"
+    assert error.code == "VY-RES-004"
     assert error.definition.fix
     assert "event evt_test" in str(error)
 
 
 def test_unregistered_error_code_is_a_bug() -> None:
-    with pytest.raises(AssertionError, match="unregistered voicekit error code"):
-        VoicekitError("VK-NOT-REGISTERED")
+    with pytest.raises(AssertionError, match="unregistered voicey error code"):
+        VoiceyError("VY-NOT-REGISTERED")
 
 
 def test_catalog_keys_match_definitions() -> None:
@@ -26,7 +26,7 @@ def test_catalog_keys_match_definitions() -> None:
 
 
 def test_every_statically_raised_error_is_registered_and_documented() -> None:
-    source_root = Path(__file__).parents[2] / "src" / "voicekit"
+    source_root = Path(__file__).parents[2] / "src" / "voicey"
     raised: set[str] = set()
     for path in source_root.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -34,7 +34,7 @@ def test_every_statically_raised_error_is_registered_and_documented() -> None:
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id == "VoicekitError"
+                and node.func.id == "VoiceyError"
                 and node.args
                 and isinstance(node.args[0], ast.Constant)
                 and isinstance(node.args[0].value, str)
@@ -47,6 +47,6 @@ def test_every_statically_raised_error_is_registered_and_documented() -> None:
 
 
 def test_error_docs_url_rejects_unregistered_codes() -> None:
-    assert error_docs_url("VK-CLI-001").endswith("#vk-cli-001")
+    assert error_docs_url("VY-CLI-001").endswith("#vy-cli-001")
     with pytest.raises(AssertionError, match="unregistered"):
-        error_docs_url("VK-NOT-REGISTERED")
+        error_docs_url("VY-NOT-REGISTERED")

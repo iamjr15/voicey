@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 FIXTURE = ROOT / "tests" / "fixtures" / "docker-project"
-_ENV_SENTINEL = "vk-security-gate-runtime-only-value-7d7f3f2e"
+_ENV_SENTINEL = "vy-security-gate-runtime-only-value-7d7f3f2e"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +38,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-security-report.json"),
+        default=Path(".voicey/verification/p4-security-report.json"),
     )
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()
@@ -146,7 +146,7 @@ def _tracked_secret_scan() -> GateResult:
         files = [
             path.decode("utf-8")
             for path in listed.stdout.split(b"\0")
-            if path and not path.startswith(b".voicekit/")
+            if path and not path.startswith(b".voicey/")
         ]
         completed = subprocess.run(
             ["uv", "run", "detect-secrets-hook", "--baseline", ".secrets.baseline", *files],
@@ -186,7 +186,7 @@ def _release_artifact_scan() -> GateResult:
             detail="trivy is required; install Trivy and rerun the security gate",
         )
     try:
-        with tempfile.TemporaryDirectory(prefix="voicekit-security-artifacts-") as directory:
+        with tempfile.TemporaryDirectory(prefix="voicey-security-artifacts-") as directory:
             root = Path(directory)
             dist = root / "dist"
             built = subprocess.run(
@@ -271,13 +271,13 @@ def _container_image_scan(wheel: Path) -> GateResult:
             detail=f"missing required executable(s): {', '.join(missing)}",
         )
     identity = f"{os.getpid()}-{time.time_ns()}"
-    tag = f"voicekit-security-p4:{identity}"
-    container = f"voicekit-security-p4-{identity}"
-    volume = f"voicekit-security-p4-{identity}"
+    tag = f"voicey-security-p4:{identity}"
+    container = f"voicey-security-p4-{identity}"
+    volume = f"voicey-security-p4-{identity}"
     detail = ""
     status = "failed"
     try:
-        with tempfile.TemporaryDirectory(prefix="voicekit-security-image-") as directory:
+        with tempfile.TemporaryDirectory(prefix="voicey-security-image-") as directory:
             project = Path(directory) / "project"
             shutil.copytree(FIXTURE, project)
             _write_fixture_environment(project / ".env")
@@ -285,7 +285,7 @@ def _container_image_scan(wheel: Path) -> GateResult:
                 [
                     sys.executable,
                     "-c",
-                    "from voicekit.cli.app import app; app()",
+                    "from voicey.cli.app import app; app()",
                     "deploy",
                     "docker",
                     "--engine-wheel",
@@ -307,7 +307,7 @@ def _container_image_scan(wheel: Path) -> GateResult:
                     "build",
                     "--pull",
                     "--file",
-                    "Dockerfile.voicekit",
+                    "Dockerfile.voicey",
                     "--tag",
                     tag,
                     ".",
@@ -448,21 +448,21 @@ def _run_image_and_verify_drain(
             "--env-file",
             str(environment_file),
             "--env",
-            "VOICEKIT_DEPLOY_TARGET=docker",
+            "VOICEY_DEPLOY_TARGET=docker",
             "--env",
-            "VOICEKIT_STORAGE_BACKEND=sqlite",
+            "VOICEY_STORAGE_BACKEND=sqlite",
             "--env",
-            "VOICEKIT_SQLITE_LOCAL_ONLY=1",
+            "VOICEY_SQLITE_LOCAL_ONLY=1",
             "--env",
-            "VOICEKIT_REPLICA_COUNT=1",
+            "VOICEY_REPLICA_COUNT=1",
             "--env",
-            "VOICEKIT_DATA_DIR=/app/data",
+            "VOICEY_DATA_DIR=/app/data",
             "--env",
-            "VOICEKIT_PORT=7860",
+            "VOICEY_PORT=7860",
             "--env",
-            "VOICEKIT_ADMIN_PORT=7861",
+            "VOICEY_ADMIN_PORT=7861",
             "--env",
-            "VOICEKIT_ADMIN_ORIGIN=http://agent:7861",
+            "VOICEY_ADMIN_ORIGIN=http://agent:7861",
             tag,
         ],
         cwd=ROOT,
@@ -542,9 +542,9 @@ def _write_fixture_environment(path: Path) -> None:
         "ANTHROPIC_API_KEY": _ENV_SENTINEL,
         "CARTESIA_API_KEY": _ENV_SENTINEL,
         "DEEPGRAM_API_KEY": _ENV_SENTINEL,
-        "VOICEKIT_INTEGRATOR_SECRET": _ENV_SENTINEL,
-        "VOICEKIT_PUBLIC_BASE": "https://voice.example",
-        "VOICEKIT_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
+        "VOICEY_INTEGRATOR_SECRET": _ENV_SENTINEL,
+        "VOICEY_PUBLIC_BASE": "https://voice.example",
+        "VOICEY_WEBHOOK_SECRET": "whsec_Zml4dHVyZS1zZWNyZXQ=",  # pragma: allowlist secret
     }
     path.write_text(
         "".join(f"{name}={value}\n" for name, value in values.items()),

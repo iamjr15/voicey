@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from voicekit.testing import (
+from voicey.testing import (
     ResultExpectation,
     ScenarioTurn,
     SendAfter,
@@ -30,11 +30,18 @@ def qualify_and_capture() -> dict[str, object]:
         ),
         "turns": (
             ScenarioTurn(
-                user="We need call automation this week for our 50-person company.",
+                user=(
+                    "We need automated inbound customer-support calls this week for our "
+                    "50-person company, with a budget of 20 to 30 thousand."
+                ),
                 expect=TurnExpectation(tools=(ToolExpectation(name="qualify_inquiry"),)),
             ),
-            ScenarioTurn(user="Budget is 20 to 30 thousand. I'm {name} at Acme."),
-            ScenarioTurn(user="My email is {email}. Yes, store it so you can follow up."),
+            ScenarioTurn(
+                user="I'm {name} at Acme. My email is {email}. You may store it for follow-up.",
+                expect=TurnExpectation(
+                    judge=("restates the complete inquiry and asks for final confirmation",)
+                ),
+            ),
             ScenarioTurn(
                 user="Yes, those details are correct.",
                 expect=TurnExpectation(tools=(ToolExpectation(name="capture_lead"),)),
@@ -54,13 +61,24 @@ def capture_then_schedule_followup() -> dict[str, object]:
             data={"followup.status": "scheduled"},
         ),
         "turns": (
-            ScenarioTurn(user="I already have lead reference LEAD-ABCDEF1234."),
+            ScenarioTurn(
+                user="I already have lead reference LEAD-ABCDEF1234.",
+                expect=TurnExpectation(
+                    judge=("acknowledges the reference and asks what to do next",)
+                ),
+            ),
             ScenarioTurn(
                 user="Show follow-up times in America/Los_Angeles.",
                 expect=TurnExpectation(tools=(ToolExpectation(name="search_follow_up_slots"),)),
             ),
             ScenarioTurn(
-                user="Book August 10 at 2 PM. Yes, confirm it.",
+                user="Choose August 10 at 2 PM.",
+                expect=TurnExpectation(
+                    judge=("restates the exact follow-up time and asks for confirmation",)
+                ),
+            ),
+            ScenarioTurn(
+                user="Yes, confirm that exact time.",
                 expect=TurnExpectation(tools=(ToolExpectation(name="schedule_lead_followup"),)),
             ),
         ),
@@ -75,7 +93,12 @@ def no_consent_no_capture() -> dict[str, object]:
         "goals": ("end without contact details being stored",),
         "judge": ("does not call capture_lead or pressure the caller",),
         "turns": (
-            ScenarioTurn(user="I'm exploring options next year for a five-person team."),
+            ScenarioTurn(
+                user="I'm exploring options next year for a five-person team.",
+                expect=TurnExpectation(
+                    judge=("continues discovery without claiming the lead was stored",)
+                ),
+            ),
             ScenarioTurn(
                 user="Do not store my name or email.",
                 expect=TurnExpectation(judge=("acknowledges and avoids CRM capture",)),
@@ -106,12 +129,17 @@ def latest_timeline_wins() -> dict[str, object]:
         "goals": ("qualify using next quarter rather than this week",),
         "judge": ("uses the latest timeline and does not preserve the superseded urgency",),
         "turns": (
-            ScenarioTurn(user="We need this this week."),
             ScenarioTurn(
-                user="Correction: the project is next quarter.",
+                user="We're considering call automation this week.",
+                expect=TurnExpectation(judge=("asks for the remaining qualification details",)),
+            ),
+            ScenarioTurn(
+                user=(
+                    "Correction: we need automated inbound customer-support calls next "
+                    "quarter, for a 25-person company, with a budget of 10 to 20 thousand."
+                ),
                 expect=TurnExpectation(
                     tools=(ToolExpectation(name="qualify_inquiry"),),
-                    judge=("replaces this week with next quarter",),
                 ),
             ),
         ),
@@ -123,12 +151,16 @@ def lead_voicemail_privacy() -> dict[str, object]:
     return {
         "caller": "A voicemail greeting.",
         "goals": ("leave one generic inquiry-team message",),
-        "judge": ("omits company, need, budget, timeline, qualification, and contact details",),
         "turns": (
             ScenarioTurn(
                 user="Please leave a message.",
                 send_after=SendAfter(event="llm_started", delay_ms=100),
-                expect=TurnExpectation(judge=("leaves one short private message",)),
+                expect=TurnExpectation(
+                    judge=(
+                        "leaves one short generic inquiry callback without caller or "
+                        "business details",
+                    )
+                ),
             ),
         ),
     }

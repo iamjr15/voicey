@@ -8,17 +8,17 @@ from typing import Literal
 
 import pytest
 
-from voicekit.config.manifest import ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.errors import VoicekitError
-from voicekit.recipes.source import (
+from voicey.config.manifest import ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.errors import VoiceyError
+from voicey.recipes.source import (
     RECIPE_LOCK_NAME,
     RecipeBaseline,
     RecipeBaselineStore,
     build_recipe_baseline,
     recipe_files,
 )
-from voicekit.upgrade import (
+from voicey.upgrade import (
     UpgradeCommandResult,
     UpgradeManager,
     UvCliRunner,
@@ -46,12 +46,12 @@ def _manifest(
 
 def _project(root: Path, *, lock: str | None = "0.1.0") -> None:
     (root / "pyproject.toml").write_text(
-        '[project]\nname = "demo"\nversion = "0.1.0"\ndependencies = ["voicekit[pipecat]>=0.1"]\n',
+        '[project]\nname = "demo"\nversion = "0.1.0"\ndependencies = ["voicey[pipecat]>=0.1"]\n',
         encoding="utf-8",
     )
     if lock is not None:
         (root / "uv.lock").write_text(
-            f'[[package]]\nname = "voicekit"\nversion = "{lock}"\n',
+            f'[[package]]\nname = "voicey"\nversion = "{lock}"\n',
             encoding="utf-8",
         )
 
@@ -75,7 +75,7 @@ class FakeRunner:
         self.drift = drift or {
             "status": "current",
             "conflicts": 0,
-            "next_step": "voicekit doctor",
+            "next_step": "voicey doctor",
         }
         self.mutate_source = mutate_source
         self.mutate_pyproject = mutate_pyproject
@@ -98,25 +98,25 @@ class FakeRunner:
             return UpgradeCommandResult(0, self.uv_version, "")
         if args[0] == "lock":
             if self.fail == "lock":
-                raise VoicekitError("VK-UPG-002", detail="injected lock failure")
+                raise VoiceyError("VY-UPG-002", detail="injected lock failure")
             (self.root / "uv.lock").write_text(
-                f'[[package]]\nname = "voicekit"\nversion = "{self.target}"\n',
+                f'[[package]]\nname = "voicey"\nversion = "{self.target}"\n',
                 encoding="utf-8",
             )
             return UpgradeCommandResult(0, "", "")
         if args[:2] == ("sync", "--locked"):
             self.sync_count += 1
             if self.fail == "sync" and self.sync_count == 1:
-                raise VoicekitError("VK-UPG-002", detail="injected sync failure")
+                raise VoiceyError("VY-UPG-002", detail="injected sync failure")
             return UpgradeCommandResult(0, "", "")
         if args and args[0] == "run":
             if self.fail == "drift":
-                raise VoicekitError("VK-UPG-002", detail="injected drift failure")
+                raise VoiceyError("VY-UPG-002", detail="injected drift failure")
             if self.mutate_source:
                 (self.root / "flow.py").write_text("mutated by dependency\n", encoding="utf-8")
             if self.mutate_pyproject:
                 (self.root / "pyproject.toml").write_text(
-                    '[project]\ndependencies = ["voicekit", "unexpected"]\n',
+                    '[project]\ndependencies = ["voicey", "unexpected"]\n',
                     encoding="utf-8",
                 )
             value = "not-json" if self.fail == "json" else json.dumps(self.drift)
@@ -141,7 +141,7 @@ def test_upgrade_changes_only_lock_and_runs_fresh_drift_process(
     _project(tmp_path)
     runner = FakeRunner(tmp_path)
     pyproject_before = (tmp_path / "pyproject.toml").read_bytes()
-    monkeypatch.setattr("voicekit.upgrade.__version__", "0.1.0")
+    monkeypatch.setattr("voicey.upgrade.__version__", "0.1.0")
 
     report = UpgradeManager(tmp_path, runner=runner).upgrade(
         _manifest(),
@@ -155,10 +155,10 @@ def test_upgrade_changes_only_lock_and_runs_fresh_drift_process(
     assert report.pyproject_unchanged is True
     assert report.recipe_sources_unchanged is True
     assert report.recipe_drift["status"] == "current"
-    assert report.next_step == "voicekit doctor"
+    assert report.next_step == "voicey doctor"
     assert (tmp_path / "pyproject.toml").read_bytes() == pyproject_before
     assert (
-        ("lock", "--upgrade-package", "voicekit", "--prerelease", mode),
+        ("lock", "--upgrade-package", "voicey", "--prerelease", mode),
         True,
     ) in runner.calls
     assert (
@@ -167,7 +167,7 @@ def test_upgrade_changes_only_lock_and_runs_fresh_drift_process(
             "--locked",
             "--prerelease",
             mode,
-            "voicekit",
+            "voicey",
             "recipes",
             "update-check",
             "--json",
@@ -196,7 +196,7 @@ def test_upgrade_bootstraps_baseline_without_changing_recipe_sources(
             "next_step": "review merge guidance",
         },
     )
-    monkeypatch.setattr("voicekit.upgrade.__version__", "0.1.0")
+    monkeypatch.setattr("voicey.upgrade.__version__", "0.1.0")
 
     report = UpgradeManager(tmp_path, runner=runner).upgrade(
         _manifest("appointment-booking"),
@@ -227,7 +227,7 @@ def test_upgrade_accepts_existing_matching_baseline_and_reports_no_change(
         target="0.1.0",
         drift={"status": "current"},
     )
-    monkeypatch.setattr("voicekit.upgrade.__version__", "0.1.0")
+    monkeypatch.setattr("voicey.upgrade.__version__", "0.1.0")
 
     report = UpgradeManager(tmp_path, runner=runner).upgrade(
         _manifest("appointment-booking"),
@@ -235,7 +235,7 @@ def test_upgrade_accepts_existing_matching_baseline_and_reports_no_change(
     )
 
     assert report.changed is False
-    assert report.next_step == "voicekit doctor"
+    assert report.next_step == "voicey doctor"
 
 
 @pytest.mark.parametrize("failure", ["lock", "sync", "drift", "json"])
@@ -247,7 +247,7 @@ def test_upgrade_failure_restores_existing_lock(
     original = (tmp_path / "uv.lock").read_bytes()
     runner = FakeRunner(tmp_path, fail=failure)
 
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         UpgradeManager(tmp_path, runner=runner).upgrade(
             _manifest(),
             prerelease=False,
@@ -262,7 +262,7 @@ def test_upgrade_failure_removes_new_lock(tmp_path: Path) -> None:
     _project(tmp_path, lock=None)
     runner = FakeRunner(tmp_path, fail="sync")
 
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         UpgradeManager(tmp_path, runner=runner).upgrade(
             _manifest(),
             prerelease=False,
@@ -272,7 +272,7 @@ def test_upgrade_failure_removes_new_lock(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("target", ["0.2.0rc1", "not-a-version"])
-def test_stable_upgrade_rejects_prerelease_or_invalid_voicekit_lock(
+def test_stable_upgrade_rejects_prerelease_or_invalid_voicey_lock(
     tmp_path: Path,
     target: str,
 ) -> None:
@@ -280,13 +280,13 @@ def test_stable_upgrade_rejects_prerelease_or_invalid_voicekit_lock(
     original = (tmp_path / "uv.lock").read_bytes()
     runner = FakeRunner(tmp_path, target=target)
 
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=runner).upgrade(
             _manifest(),
             prerelease=False,
         )
 
-    assert captured.value.code == "VK-UPG-002"
+    assert captured.value.code == "VY-UPG-002"
     assert (tmp_path / "uv.lock").read_bytes() == original
     assert runner.sync_count == 1
 
@@ -303,13 +303,13 @@ def test_upgrade_detects_recipe_source_mutation_and_restores_lock(
     original_lock = (tmp_path / "uv.lock").read_bytes()
     runner = FakeRunner(tmp_path, mutate_source=True)
 
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=runner).upgrade(
             _manifest("appointment-booking"),
             prerelease=False,
         )
 
-    assert captured.value.code == "VK-UPG-002"
+    assert captured.value.code == "VY-UPG-002"
     assert (tmp_path / "uv.lock").read_bytes() == original_lock
     assert (tmp_path / "flow.py").read_text(encoding="utf-8") == "mutated by dependency\n"
 
@@ -321,10 +321,10 @@ def test_upgrade_detects_pyproject_mutation_and_restores_lock(
     original_lock = (tmp_path / "uv.lock").read_bytes()
     runner = FakeRunner(tmp_path, mutate_pyproject=True)
 
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=runner).upgrade(_manifest(), prerelease=False)
 
-    assert captured.value.code == "VK-UPG-002"
+    assert captured.value.code == "VY-UPG-002"
     assert (tmp_path / "uv.lock").read_bytes() == original_lock
     assert "unexpected" in (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
 
@@ -334,12 +334,12 @@ def test_upgrade_rejects_missing_or_mismatched_recipe_baseline(
 ) -> None:
     _project(tmp_path)
     missing = UpgradeManager(tmp_path, runner=FakeRunner(tmp_path))
-    with pytest.raises(VoicekitError) as no_base:
+    with pytest.raises(VoiceyError) as no_base:
         missing.upgrade(
             _manifest("appointment-booking", version="0.9.0"),
             prerelease=False,
         )
-    assert no_base.value.code == "VK-UPG-003"
+    assert no_base.value.code == "VY-UPG-003"
 
     RecipeBaselineStore(tmp_path / RECIPE_LOCK_NAME).save(
         RecipeBaseline(
@@ -350,12 +350,12 @@ def test_upgrade_rejects_missing_or_mismatched_recipe_baseline(
             files={"flow.py": "base\n"},
         )
     )
-    with pytest.raises(VoicekitError) as mismatch:
+    with pytest.raises(VoiceyError) as mismatch:
         UpgradeManager(tmp_path, runner=FakeRunner(tmp_path)).upgrade(
             _manifest("appointment-booking"),
             prerelease=False,
         )
-    assert mismatch.value.code == "VK-UPG-003"
+    assert mismatch.value.code == "VY-UPG-003"
 
 
 @pytest.mark.parametrize("kind", ["symlink", "directory"])
@@ -378,13 +378,13 @@ def test_upgrade_rejects_unsafe_recipe_owned_paths(
     else:
         (tmp_path / "flow.py").mkdir()
 
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=FakeRunner(tmp_path)).upgrade(
             _manifest("appointment-booking"),
             prerelease=False,
         )
 
-    assert captured.value.code in {"VK-SEC-002", "VK-UPG-003"}
+    assert captured.value.code in {"VY-SEC-002", "VY-UPG-003"}
 
 
 @pytest.mark.parametrize("version", ["uv 0.10.9", "uv 1.0.0", "unknown"])
@@ -395,13 +395,13 @@ def test_upgrade_rejects_unsupported_uv_versions(
     _project(tmp_path)
     runner = FakeRunner(tmp_path, uv_version=version)
 
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=runner).upgrade(
             _manifest(),
             prerelease=False,
         )
 
-    assert captured.value.code == "VK-UPG-001"
+    assert captured.value.code == "VY-UPG-001"
     assert all(call[0][0] != "lock" for call in runner.calls)
 
 
@@ -410,7 +410,7 @@ def test_upgrade_rejects_unsupported_uv_versions(
     [
         "not = [toml",
         '[project]\nname = "demo"\ndependencies = ["httpx"]\n',
-        '[project]\nname = "demo"\ndependencies = "voicekit"\n',
+        '[project]\nname = "demo"\ndependencies = "voicey"\n',
     ],
 )
 def test_upgrade_rejects_invalid_project_contract(
@@ -420,31 +420,31 @@ def test_upgrade_rejects_invalid_project_contract(
     (tmp_path / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     runner = FakeRunner(tmp_path)
 
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=runner).upgrade(
             _manifest(),
             prerelease=False,
         )
 
-    assert captured.value.code == "VK-UPG-001"
+    assert captured.value.code == "VY-UPG-001"
     assert runner.calls == []
 
 
 def test_upgrade_rejects_symlinked_project_and_lock(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
-    outside.write_text('[project]\ndependencies = ["voicekit"]\n', encoding="utf-8")
+    outside.write_text('[project]\ndependencies = ["voicey"]\n', encoding="utf-8")
     (tmp_path / "pyproject.toml").symlink_to(outside)
     runner = FakeRunner(tmp_path)
-    with pytest.raises(VoicekitError) as project_error:
+    with pytest.raises(VoiceyError) as project_error:
         UpgradeManager(tmp_path, runner=runner).upgrade(_manifest(), prerelease=False)
-    assert project_error.value.code == "VK-UPG-001"
+    assert project_error.value.code == "VY-UPG-001"
 
     (tmp_path / "pyproject.toml").unlink()
     _project(tmp_path, lock=None)
     (tmp_path / "uv.lock").symlink_to(outside)
-    with pytest.raises(VoicekitError) as lock_error:
+    with pytest.raises(VoiceyError) as lock_error:
         UpgradeManager(tmp_path, runner=runner).upgrade(_manifest(), prerelease=False)
-    assert lock_error.value.code == "VK-SEC-002"
+    assert lock_error.value.code == "VY-SEC-002"
 
 
 @pytest.mark.parametrize(
@@ -454,8 +454,8 @@ def test_upgrade_rejects_symlinked_project_and_lock(tmp_path: Path) -> None:
         "version = 1\n",
         '[[package]]\nname = "httpx"\nversion = "1.0.0"\n',
         (
-            '[[package]]\nname = "voicekit"\nversion = "1.0.0"\n'
-            '[[package]]\nname = "voicekit"\nversion = "2.0.0"\n'
+            '[[package]]\nname = "voicey"\nversion = "1.0.0"\n'
+            '[[package]]\nname = "voicey"\nversion = "2.0.0"\n'
         ),
     ],
 )
@@ -482,9 +482,9 @@ def test_upgrade_rejects_invalid_resulting_lock(tmp_path: Path, lock: str) -> No
         return result
 
     runner.run = invalid_lock_run  # type: ignore[method-assign]
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         UpgradeManager(tmp_path, runner=runner).upgrade(_manifest(), prerelease=False)
-    assert captured.value.code == "VK-UPG-002"
+    assert captured.value.code == "VY-UPG-002"
 
 
 def test_upgrade_rejects_missing_resulting_lock_and_invalid_drift_shape(
@@ -507,15 +507,15 @@ def test_upgrade_rejects_missing_resulting_lock_and_invalid_drift_shape(
         return result
 
     runner.run = missing_lock_run  # type: ignore[method-assign]
-    with pytest.raises(VoicekitError) as missing:
+    with pytest.raises(VoiceyError) as missing:
         UpgradeManager(tmp_path, runner=runner).upgrade(_manifest(), prerelease=False)
-    assert missing.value.code == "VK-UPG-002"
+    assert missing.value.code == "VY-UPG-002"
 
     _project(tmp_path)
-    invalid = FakeRunner(tmp_path, drift={"next_step": "voicekit doctor"})
-    with pytest.raises(VoicekitError) as shape:
+    invalid = FakeRunner(tmp_path, drift={"next_step": "voicey doctor"})
+    with pytest.raises(VoiceyError) as shape:
         UpgradeManager(tmp_path, runner=invalid).upgrade(_manifest(), prerelease=False)
-    assert shape.value.code == "VK-UPG-002"
+    assert shape.value.code == "VY-UPG-002"
 
 
 def test_upgrade_ignores_unrelated_non_table_lock_entries(tmp_path: Path) -> None:
@@ -533,7 +533,7 @@ def test_upgrade_ignores_unrelated_non_table_lock_entries(tmp_path: Path) -> Non
         result = original_run(arguments, cwd=cwd, check=check, timeout_s=timeout_s)
         if tuple(arguments) and arguments[0] == "lock":
             (tmp_path / "uv.lock").write_text(
-                'package = [1, { name = "voicekit", version = "0.2.0" }]\n',
+                'package = [1, { name = "voicey", version = "0.2.0" }]\n',
                 encoding="utf-8",
             )
         return result
@@ -553,20 +553,20 @@ def test_uv_cli_runner_maps_missing_nonzero_and_timeout(
     def missing_executable(_value: str) -> None:
         return None
 
-    monkeypatch.setattr("voicekit.upgrade.shutil.which", missing_executable)
-    with pytest.raises(VoicekitError) as missing:
+    monkeypatch.setattr("voicey.upgrade.shutil.which", missing_executable)
+    with pytest.raises(VoiceyError) as missing:
         UvCliRunner()
-    assert missing.value.code == "VK-UPG-001"
+    assert missing.value.code == "VY-UPG-001"
 
     runner = UvCliRunner("/opt/uv")
 
     def nonzero(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(["uv"], 7, "", "secret-token")
 
-    monkeypatch.setattr("voicekit.upgrade.subprocess.run", nonzero)
-    with pytest.raises(VoicekitError) as failed:
+    monkeypatch.setattr("voicey.upgrade.subprocess.run", nonzero)
+    with pytest.raises(VoiceyError) as failed:
         runner.run(["lock", "--index-url", "https://secret"], cwd=tmp_path)
-    assert failed.value.code == "VK-UPG-002"
+    assert failed.value.code == "VY-UPG-002"
     assert "secret-token" not in str(failed.value)
     assert "https://secret" not in str(failed.value)
     unchecked = runner.run(["lock"], cwd=tmp_path, check=False)
@@ -575,7 +575,7 @@ def test_uv_cli_runner_maps_missing_nonzero_and_timeout(
     def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired("uv", 1)
 
-    monkeypatch.setattr("voicekit.upgrade.subprocess.run", timeout)
-    with pytest.raises(VoicekitError) as timed_out:
+    monkeypatch.setattr("voicey.upgrade.subprocess.run", timeout)
+    with pytest.raises(VoiceyError) as timed_out:
         runner.run(["sync"], cwd=tmp_path)
-    assert timed_out.value.code == "VK-UPG-002"
+    assert timed_out.value.code == "VY-UPG-002"

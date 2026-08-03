@@ -11,7 +11,7 @@ ROOT = Path(__file__).parents[2]
 
 
 def _hook_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("voicekit_hatch_build", ROOT / "hatch_build.py")
+    spec = importlib.util.spec_from_file_location("voicey_hatch_build", ROOT / "hatch_build.py")
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -36,8 +36,8 @@ def test_build_hook_skip_requires_existing_assets(
 ) -> None:
     hook = _hook_module()
     monkeypatch.setattr(hook, "OUTPUT", tmp_path / "missing")
-    monkeypatch.setenv("VOICEKIT_SKIP_FRONTEND_BUILD", "1")
-    with pytest.raises(RuntimeError, match="VK-WEB-005"):
+    monkeypatch.setenv("VOICEY_SKIP_FRONTEND_BUILD", "1")
+    with pytest.raises(RuntimeError, match="VY-WEB-005"):
         _instance(hook, tmp_path).initialize("0", {})
 
 
@@ -46,7 +46,7 @@ def test_build_hook_has_actionable_missing_npm_error(
     tmp_path: Path,
 ) -> None:
     hook = _hook_module()
-    monkeypatch.delenv("VOICEKIT_SKIP_FRONTEND_BUILD", raising=False)
+    monkeypatch.delenv("VOICEY_SKIP_FRONTEND_BUILD", raising=False)
 
     def missing_npm(_binary: str) -> None:
         return None

@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import cast
 
-from voicekit.release.policy import inspect_wheel, validate_canary_promotion
+from voicey.release.policy import inspect_wheel, validate_canary_promotion
 
 ROOT = Path(__file__).parents[2]
 
@@ -36,7 +36,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-release-report.json"),
+        default=Path(".voicey/verification/p4-release-report.json"),
     )
     args = parser.parse_args()
     report_path = args.report.expanduser().resolve()
@@ -124,7 +124,7 @@ def _run_installed_recipes(wheel: Path) -> GateResult:
     started = time.monotonic()
     command = "installed wheel: canary_recipes.py"
     try:
-        with tempfile.TemporaryDirectory(prefix="voicekit-release-wheel-") as directory:
+        with tempfile.TemporaryDirectory(prefix="voicey-release-wheel-") as directory:
             root = Path(directory)
             environment = dict(os.environ)
             environment.pop("PYTHONPATH", None)

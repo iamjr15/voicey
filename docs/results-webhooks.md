@@ -1,6 +1,6 @@
 # Results, recovery, and webhooks
 
-Voicekit makes one reliability promise for every call:
+Voicey makes one reliability promise for every call:
 
 > Exactly one terminal event is persisted once, then delivery is attempted
 > until the receiver acknowledges it or the delivery is visibly dead-lettered.
@@ -25,7 +25,7 @@ Terminalization is one `BEGIN IMMEDIATE` transaction on SQLite:
 A partial unique index permits one terminal event per call. A failed outbox
 insert rolls the entire transition back. Repeating terminalization with the
 same current lease returns the existing event; an older generation receives
-`VK-RES-006`.
+`VY-RES-006`.
 
 SQLite is the P1 Docker/self-host implementation of the runtime-blind
 `StorageRepository` protocol. It uses WAL, `synchronous=FULL`, foreign keys,
@@ -51,7 +51,7 @@ sections. `Results.redact` accepts dotted paths such as `data.email` and
 and secret scrubbing happen before canonical JSON bytes are persisted.
 
 Push and pull return those exact bytes. The P1.8 CLI exposes them through
-`voicekit calls show <call-id>`.
+`voicey calls show <call-id>`.
 
 ## Standard Webhooks signing
 
@@ -78,7 +78,7 @@ outside five minutes. The examples use the current
 
 ### Python
 
-Voicekit's helper accepts a framework header mapping and supports the current
+Voicey's helper accepts a framework header mapping and supports the current
 plus previous secret during rotation:
 
 ```python
@@ -86,7 +86,7 @@ import json
 import os
 
 from fastapi import FastAPI, Request, Response
-from voicekit import verify_webhook
+from voicey import verify_webhook
 
 app = FastAPI()
 
@@ -97,8 +97,8 @@ async def voice_results(request: Request) -> Response:
     verify_webhook(
         request.headers,
         raw_body,
-        current_secret=os.environ["VOICEKIT_WEBHOOK_SECRET"],
-        previous_secret=os.environ.get("VOICEKIT_WEBHOOK_PREVIOUS_SECRET"),
+        current_secret=os.environ["VOICEY_WEBHOOK_SECRET"],
+        previous_secret=os.environ.get("VOICEY_WEBHOOK_PREVIOUS_SECRET"),
     )
     event = json.loads(raw_body)
     persist_once(event["id"], event)
@@ -126,7 +126,7 @@ app.post(
       "webhook-signature": request.get("webhook-signature"),
     };
     const rawBody = request.body.toString("utf8");
-    const event = new Webhook(process.env.VOICEKIT_WEBHOOK_SECRET).verify(
+    const event = new Webhook(process.env.VOICEY_WEBHOOK_SECRET).verify(
       rawBody,
       headers,
     );
@@ -159,7 +159,7 @@ func VoiceResults(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	webhook, err := standardwebhooks.NewWebhook(os.Getenv("VOICEKIT_WEBHOOK_SECRET"))
+	webhook, err := standardwebhooks.NewWebhook(os.Getenv("VOICEY_WEBHOOK_SECRET"))
 	if err != nil || webhook.Verify(body, r.Header) != nil {
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
@@ -254,4 +254,4 @@ replayable. The local artifact implementation rejects path traversal and
 symlinks and stores files at `0600` below a `0700` root.
 
 Next step for receiver development: copy the verification example, then run
-`voicekit doctor --send-test`.
+`voicey doctor --send-test`.

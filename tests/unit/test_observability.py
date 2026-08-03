@@ -17,9 +17,9 @@ import pytest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import ValidationError
 
-from voicekit.config.models import Observability
-from voicekit.errors import VoicekitError
-from voicekit.obs import (
+from voicey.config.models import Observability
+from voicey.errors import VoiceyError
+from voicey.obs import (
     InstrumentedRepository,
     LatencySample,
     LatencySeries,
@@ -34,8 +34,8 @@ from voicekit.obs import (
     configure_logging,
     get_logger,
 )
-from voicekit.obs.logging import REDACTED
-from voicekit.storage.models import (
+from voicey.obs.logging import REDACTED
+from voicey.storage.models import (
     CallLease,
     DeliveryClaim,
     DeliveryRecord,
@@ -388,32 +388,32 @@ async def test_sqlite_store_maps_missing_duplicate_and_invalid_queries(
     tmp_path: Path,
 ) -> None:
     store = SQLiteCallRecordStore(tmp_path / "calls.sqlite3")
-    with pytest.raises(VoicekitError) as unopened:
+    with pytest.raises(VoiceyError) as unopened:
         await store.get_call("missing")
-    assert unopened.value.code == "VK-OBS-001"
+    assert unopened.value.code == "VY-OBS-001"
 
     await store.open()
     assert await store.open() is store
     await store.create_call(_new_call())
 
-    with pytest.raises(VoicekitError) as missing:
+    with pytest.raises(VoiceyError) as missing:
         await store.get_call("missing")
-    assert missing.value.code == "VK-OBS-003"
+    assert missing.value.code == "VY-OBS-003"
 
-    with pytest.raises(VoicekitError) as duplicate:
+    with pytest.raises(VoiceyError) as duplicate:
         await store.create_call(_new_call())
-    assert duplicate.value.code == "VK-OBS-002"
+    assert duplicate.value.code == "VY-OBS-002"
 
-    with pytest.raises(VoicekitError) as bad_limit:
+    with pytest.raises(VoiceyError) as bad_limit:
         await store.list_calls(limit=0)
-    assert bad_limit.value.code == "VK-OBS-005"
+    assert bad_limit.value.code == "VY-OBS-005"
 
-    with pytest.raises(VoicekitError) as missing_parent:
+    with pytest.raises(VoiceyError) as missing_parent:
         await store.append_transcript(
             "missing",
             TranscriptTurn(turn_id="turn", role="user", text="hello", t_ms=0),
         )
-    assert missing_parent.value.code == "VK-OBS-002"
+    assert missing_parent.value.code == "VY-OBS-002"
     await store.close()
     await store.close()
 
@@ -425,10 +425,10 @@ async def test_sqlite_store_rejects_unknown_schema(tmp_path: Path) -> None:
     connection.execute("PRAGMA user_version = 99")
     connection.close()
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await SQLiteCallRecordStore(database_path).open()
 
-    assert caught.value.code == "VK-OBS-004"
+    assert caught.value.code == "VY-OBS-004"
     assert "supported schema is 3" in str(caught.value)
 
 
@@ -525,10 +525,10 @@ def test_prometheus_registry_has_bounded_runtime_metrics_without_pii() -> None:
     )
     rendered = telemetry.render_prometheus().decode()
 
-    assert 'voicekit_calls_total{agent="clinic-front-desk",runtime="pipecat"} 1.0' in rendered
-    assert 'voicekit_active_calls{agent="clinic-front-desk",runtime="pipecat"} 0.0' in rendered
+    assert 'voicey_calls_total{agent="clinic-front-desk",runtime="pipecat"} 1.0' in rendered
+    assert 'voicey_active_calls{agent="clinic-front-desk",runtime="pipecat"} 0.0' in rendered
     assert (
-        'voicekit_errors_total{agent="clinic-front-desk",code="VK-RUN-002",runtime="pipecat"} 1.0'
+        'voicey_errors_total{agent="clinic-front-desk",code="VY-RUN-002",runtime="pipecat"} 1.0'
     ) in rendered
     assert 'metric="e2e"' in rendered
     assert "person@example.test" not in rendered
@@ -594,7 +594,7 @@ async def test_telemetry_server_starts_real_listener_and_disabled_lifecycle() ->
 def test_otlp_emits_call_turn_and_tool_spans_without_payloads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import voicekit.obs.telemetry as telemetry_module
+    import voicey.obs.telemetry as telemetry_module
 
     exporter = InMemorySpanExporter()
 
@@ -611,10 +611,10 @@ def test_otlp_emits_call_turn_and_tool_spans_without_payloads(
         runtime="pipecat",
         settings=Observability(
             otlp_endpoint="http://127.0.0.1:4318/v1/traces",
-            otlp_headers_env="VOICEKIT_TEST_OTLP_HEADERS",
+            otlp_headers_env="VOICEY_TEST_OTLP_HEADERS",
         ),
         environment={
-            "VOICEKIT_TEST_OTLP_HEADERS": "authorization=test-only",
+            "VOICEY_TEST_OTLP_HEADERS": "authorization=test-only",
         },
     )
     call = _new_call("call_trace")
@@ -651,9 +651,9 @@ def test_otlp_emits_call_turn_and_tool_spans_without_payloads(
 
     spans = exporter.get_finished_spans()
     assert {span.name for span in spans} == {
-        "voicekit.call",
-        "voicekit.turn",
-        "voicekit.tool",
+        "voicey.call",
+        "voicey.turn",
+        "voicey.tool",
     }
     serialized = repr([dict(span.attributes or {}) for span in spans])
     assert "Private transcript content" not in serialized
@@ -664,18 +664,18 @@ def test_otlp_emits_call_turn_and_tool_spans_without_payloads(
 def test_otlp_missing_or_malformed_header_env_fails_with_catalog_error() -> None:
     settings = Observability(
         otlp_endpoint="http://127.0.0.1:4318/v1/traces",
-        otlp_headers_env="VOICEKIT_TEST_OTLP_HEADERS",
+        otlp_headers_env="VOICEY_TEST_OTLP_HEADERS",
     )
-    for environment in ({}, {"VOICEKIT_TEST_OTLP_HEADERS": "not-a-header"}):
+    for environment in ({}, {"VOICEY_TEST_OTLP_HEADERS": "not-a-header"}):
         telemetry = Telemetry(
             agent_name="agent",
             runtime="pipecat",
             settings=settings,
             environment=environment,
         )
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             telemetry.begin_call(_new_call("call_bad_header"))
-        assert caught.value.code == "VK-OBS-006"
+        assert caught.value.code == "VY-OBS-006"
 
 
 @pytest.mark.asyncio
@@ -703,7 +703,7 @@ async def test_repository_metrics_follow_only_successful_durable_writes() -> Non
             delivery=object(),  # type: ignore[arg-type]
             lease_ttl=object(),  # type: ignore[arg-type]
         )
-    sample = 'voicekit_calls_total{agent="agent",runtime="pipecat"}'
+    sample = 'voicey_calls_total{agent="agent",runtime="pipecat"}'
     assert f"{sample} 0.0" in telemetry.render_prometheus().decode()
 
     raw.fail = False
@@ -856,7 +856,7 @@ async def test_instrumented_repository_observes_terminal_dlq_and_close() -> None
     await repository.close()
 
     rendered = telemetry.render_prometheus().decode()
-    assert 'code="VK-RUN-006"' in rendered
+    assert 'code="VY-RUN-006"' in rendered
     assert 'metric="llm_ttft"' in rendered
     assert "} 3.0" in rendered
     assert raw.closed
@@ -873,19 +873,19 @@ def test_telemetry_admission_and_error_cardinality_are_idempotent() -> None:
     assert telemetry.release_call("call_1")
     assert not telemetry.release_call("call_1")
     telemetry.record_error("not-a-catalog-code")
-    with pytest.raises(VoicekitError) as negative:
+    with pytest.raises(VoiceyError) as negative:
         telemetry.set_dlq_depth(-1)
 
     rendered = telemetry.render_prometheus().decode()
-    assert 'voicekit_calls_total{agent="agent",runtime="livekit"} 1.0' in rendered
-    assert 'code="VK-CLI-009"' in rendered
-    assert negative.value.code == "VK-OBS-006"
+    assert 'voicey_calls_total{agent="agent",runtime="livekit"} 1.0' in rendered
+    assert 'code="VY-CLI-009"' in rendered
+    assert negative.value.code == "VY-OBS-006"
 
 
 def test_telemetry_resets_process_local_state_after_fork(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import voicekit.obs.telemetry as telemetry_module
+    import voicey.obs.telemetry as telemetry_module
 
     telemetry = Telemetry(
         agent_name="agent",

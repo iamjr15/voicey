@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: "../src/voicekit/_frontend",
+    outDir: "../src/voicey/_frontend",
     emptyOutDir: true,
     sourcemap: false,
     target: "es2022",

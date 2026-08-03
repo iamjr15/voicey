@@ -30,7 +30,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-docs-report.json"),
+        default=Path(".voicey/verification/p4-docs-report.json"),
     )
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()

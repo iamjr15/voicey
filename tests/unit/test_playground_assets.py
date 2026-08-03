@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.playground import assets
+from voicey.errors import VoiceyError
+from voicey.playground import assets
 
 
 def test_embedded_frontend_contains_built_spa() -> None:
@@ -22,6 +22,6 @@ def test_embedded_frontend_reports_broken_wheel(
         return tmp_path
 
     monkeypatch.setattr(assets, "files", missing_files)
-    with pytest.raises(VoicekitError) as missing, assets.embedded_frontend():
+    with pytest.raises(VoiceyError) as missing, assets.embedded_frontend():
         pytest.fail("missing assets must not be yielded")
-    assert missing.value.code == "VK-WEB-005"
+    assert missing.value.code == "VY-WEB-005"

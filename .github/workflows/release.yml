@@ -50,7 +50,7 @@ jobs:
         if: inputs.channel == 'stable'
         uses: actions/download-artifact@v4
         with:
-          pattern: voicekit-canary-*
+          pattern: voicey-canary-*
           path: canary-evidence
           merge-multiple: true
           run-id: ${{ inputs.canary_run_id }}
@@ -74,7 +74,7 @@ jobs:
       - name: Upload verified artifacts without publishing
         uses: actions/upload-artifact@v4
         with:
-          name: voicekit-${{ inputs.channel }}-${{ github.run_id }}
+          name: voicey-${{ inputs.channel }}-${{ github.run_id }}
           path: |
             dist/*
             p4-release-report.json

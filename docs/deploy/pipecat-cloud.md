@@ -7,7 +7,7 @@ passes signed readiness and acknowledges `begin_call`.
 
 The installed deployment contract is `pipecat-cli==0.1.15`. This version
 requires a pre-pushed image; it does not expose the cloud-build fields shown in
-some newer documentation. Voicekit therefore separates secret-free image
+some newer documentation. Voicey therefore separates secret-free image
 preparation from paid platform mutation.
 
 ## Prerequisites
@@ -18,12 +18,12 @@ preparation from paid platform mutation.
 2. Install and authenticate the Pipecat CLI with `pipecat cloud auth login`.
 3. Choose the exact organization, current region from
    `pipecat cloud regions list`, secret-set name, immutable registry tag,
-   scaling bounds, and agent profile. Voicekit chooses none of them.
+   scaling bounds, and agent profile. Voicey chooses none of them.
 4. For an unpublished checkout, build the repository wheel with
    `uv build --out-dir dist`.
 
-The local agent `.env` must contain `VOICEKIT_RELAY_CREDENTIAL` from the
-companion plus its model/carrier credentials. Voicekit sends only worker-owned
+The local agent `.env` must contain `VOICEY_RELAY_CREDENTIAL` from the
+companion plus its model/carrier credentials. Voicey sends only worker-owned
 values. Database, object-store, results-signing, and previous companion
 credentials are deliberately excluded.
 
@@ -32,29 +32,29 @@ credentials are deliberately excluded.
 Run this from the agent project:
 
 ```bash
-voicekit deploy pipecat-cloud \
+voicey deploy pipecat-cloud \
   --agent my-agent \
   --org my-org \
   --region us-west \
   --secret-set my-agent-secrets \
-  --image registry.example.com/voicekit/my-agent:git-sha \
+  --image registry.example.com/voicey/my-agent:git-sha \
   --min-agents 1 \
   --max-agents 4 \
   --profile agent-1x \
   --relay-url https://my-agent-results.fly.dev \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --prepare-only
 ```
 
 Published releases omit `--engine-wheel`. The command creates
-`.voicekit/deploy/pipecat-cloud/context`, filters every hidden/VCS/cache path,
+`.voicey/deploy/pipecat-cloud/context`, filters every hidden/VCS/cache path,
 rejects symlinks, copies no `.env`, and prints the exact next command:
 
 ```bash
 docker build \
-  -t registry.example.com/voicekit/my-agent:git-sha \
-  .voicekit/deploy/pipecat-cloud/context
-docker push registry.example.com/voicekit/my-agent:git-sha
+  -t registry.example.com/voicey/my-agent:git-sha \
+  .voicey/deploy/pipecat-cloud/context
+docker push registry.example.com/voicey/my-agent:git-sha
 ```
 
 The multi-stage image uses a glibc Python base and UID/GID 10001. The generated
@@ -67,21 +67,21 @@ conversation DSL.
 For a web-only project:
 
 ```bash
-voicekit deploy pipecat-cloud \
+voicey deploy pipecat-cloud \
   --agent my-agent \
   --org my-org \
   --region us-west \
   --secret-set my-agent-secrets \
-  --image registry.example.com/voicekit/my-agent:git-sha \
+  --image registry.example.com/voicey/my-agent:git-sha \
   --min-agents 1 \
   --max-agents 4 \
   --profile agent-1x \
   --relay-url https://my-agent-results.fly.dev \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
-Voicekit verifies signed relay readiness before any platform mutation,
+Voicey verifies signed relay readiness before any platform mutation,
 authenticates the CLI, validates the selected region, refuses an unledgered
 existing agent, syncs secrets through a temporary `0600` file, deploys the
 exact image, and requires ready status. It then starts a real Daily-backed
@@ -93,12 +93,12 @@ A phone project additionally requires a paid destination unless the operator
 explicitly passes `--skip-smoke`:
 
 ```bash
-voicekit deploy pipecat-cloud \
+voicey deploy pipecat-cloud \
   --agent my-agent \
   --org my-org \
   --region us-west \
   --secret-set my-agent-secrets \
-  --image registry.example.com/voicekit/my-agent:git-sha \
+  --image registry.example.com/voicey/my-agent:git-sha \
   --min-agents 1 \
   --max-agents 4 \
   --profile agent-1x \
@@ -120,13 +120,13 @@ https://<relay>/v1/pipecat-cloud/<region>/<org>/<agent>/<provider>/answer
 
 Twilio, Vobiz, and Plivo are cut over through their adapter. Telnyx owns a
 separate TeXML Application: configure that application's URL to the exact
-hosted-answer URL printed by voicekit, then pass `--telnyx-texml-ready`.
-Voicekit will not infer that external application setting.
+hosted-answer URL printed by voicey, then pass `--telnyx-texml-ready`.
+Voicey will not infer that external application setting.
 
 ## Ownership, resume, and rollback
 
 The owner-only nonsecret ledger is
-`.voicekit/deploy/pipecat-cloud-resources.json`. It records identity,
+`.voicey/deploy/pipecat-cloud-resources.json`. It records identity,
 fingerprints, artifact digest, created/adopted ownership, cutover rollback
 token, and smoke call id—never raw credentials.
 
@@ -137,12 +137,12 @@ Rerunning the same command resumes and revalidates each checkpoint.
 Rollback uses the same required identity flags:
 
 ```bash
-voicekit deploy pipecat-cloud \
+voicey deploy pipecat-cloud \
   --agent my-agent \
   --org my-org \
   --region us-west \
   --secret-set my-agent-secrets \
-  --image registry.example.com/voicekit/my-agent:git-sha \
+  --image registry.example.com/voicey/my-agent:git-sha \
   --min-agents 1 \
   --max-agents 4 \
   --profile agent-1x \
@@ -152,5 +152,5 @@ voicekit deploy pipecat-cloud \
 ```
 
 It first restores any ledgered carrier route, then deletes only an agent marked
-created by voicekit. Failed deployments are left checkpointed for inspection;
+created by voicey. Failed deployments are left checkpointed for inspection;
 there is no speculative automatic resource deletion.

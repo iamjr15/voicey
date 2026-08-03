@@ -10,16 +10,16 @@ import httpx
 import pytest
 from livekit.protocol import sip as lk_sip
 
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.sip import LiveKitSipAPI, ManagedSipResource
-from voicekit.runtimes.livekit.vobiz import (
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.sip import LiveKitSipAPI, ManagedSipResource
+from voicey.runtimes.livekit.vobiz import (
     VobizLiveKitSipConfig,
     VobizLiveKitSipProvisioner,
     VobizManagedTrunk,
     VobizSipBackend,
     VobizSipHTTPBackend,
 )
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.telephony.ledger import TelephonyLedger
 
 NUMBER = "+918071234567"
 
@@ -100,7 +100,7 @@ class FakeLiveKit:
         self.dispatch.remove(item)
         return item
 
-    async def delete_sip_trunk(
+    async def delete_trunk(
         self,
         request: lk_sip.DeleteSIPTrunkRequest,
     ) -> lk_sip.SIPTrunkInfo:
@@ -124,14 +124,18 @@ class FakeVobiz:
         self.restored: list[dict[str, object]] = []
         self.deleted: list[str] = []
         self.fail_at: str | None = None
-        self.fail_error: Exception = VoicekitError(
-            "VK-TEL-004",
+        self.fail_error: Exception = VoiceyError(
+            "VY-TEL-004",
             detail="definitive failure.",
         )
 
     def snapshot_number(self, number: str) -> dict[str, object]:
         assert number == NUMBER
-        return {"number": number, "trunk_group_id": self.number_trunk}
+        return {
+            "number": number,
+            "application_id": None,
+            "trunk_group_id": self.number_trunk,
+        }
 
     def require_credential(
         self,
@@ -141,7 +145,7 @@ class FakeVobiz:
     ) -> ManagedSipResource:
         self._fail("credential")
         assert credential_id == "credential-1"
-        assert username == "voicekituser"
+        assert username == "voiceyuser"
         return ManagedSipResource("vobiz_credential", credential_id, False)
 
     def ensure_trunk(
@@ -181,15 +185,28 @@ class FakeVobiz:
             self.outbound.sip_domain,
         )
 
-    def attach_number(self, *, trunk_id: str, number: str) -> ManagedSipResource:
+    def attach_number(
+        self,
+        *,
+        trunk_id: str,
+        number: str,
+        expected_snapshot: dict[str, object],
+    ) -> ManagedSipResource:
         self._fail("binding")
         assert number == NUMBER
+        assert expected_snapshot == self.snapshot_number(number)
         if self.number_trunk == trunk_id:
-            return ManagedSipResource("vobiz_number_binding", number, False)
+            return ManagedSipResource("vobiz_number_binding", trunk_id, False)
         self.number_trunk = trunk_id
-        return ManagedSipResource("vobiz_number_binding", number, True)
+        return ManagedSipResource("vobiz_number_binding", trunk_id, True)
 
-    def restore_number(self, snapshot: dict[str, object]) -> None:
+    def restore_number(
+        self,
+        snapshot: dict[str, object],
+        *,
+        applied_trunk_id: str,
+    ) -> None:
+        assert self.number_trunk in {applied_trunk_id, snapshot["trunk_group_id"]}
         self.restored.append(snapshot)
         self.number_trunk = cast("str", snapshot["trunk_group_id"])
 
@@ -211,7 +228,7 @@ def _config(**values: object) -> VobizLiveKitSipConfig:
         "agent_name": "booking",
         "livekit_sip_uri": "sip:project.sip.livekit.cloud",
         "credential_id": "credential-1",
-        "auth_username": "voicekituser",
+        "auth_username": "voiceyuser",
         "auth_password": "credential-secret",  # pragma: allowlist secret
     }
     return VobizLiveKitSipConfig(**cast("Any", {**defaults, **values}))
@@ -242,7 +259,7 @@ async def test_provisions_official_vobiz_livekit_udp_contract(tmp_path: Path) ->
         assert inbound.media_encryption == lk_sip.SIP_MEDIA_ENCRYPT_DISABLE
         assert outbound.address == "outbound.sip.vobiz.ai"
         assert outbound.transport == lk_sip.SIP_TRANSPORT_UDP
-        assert outbound.auth_username == "voicekituser"
+        assert outbound.auth_username == "voiceyuser"
         assert outbound.media_encryption == lk_sip.SIP_MEDIA_ENCRYPT_DISABLE
         assert dispatch.rule.dispatch_rule_individual.room_prefix == "call-"
         assert dispatch.room_config.agents[0].agent_name == "booking"
@@ -301,17 +318,17 @@ async def test_definitive_failure_rolls_back_and_ambiguous_failure_stops(
     )
     try:
         vobiz.fail_at = "binding"
-        with pytest.raises(VoicekitError) as definitive:
+        with pytest.raises(VoiceyError) as definitive:
             await provisioner.provision(_config())
-        assert definitive.value.code == "VK-TEL-004"
+        assert definitive.value.code == "VY-TEL-004"
         assert ledger.open_provisioning(provider="vobiz-livekit") == ()
         assert vobiz.inbound is None
         assert vobiz.outbound is None
 
-        vobiz.fail_error = VoicekitError("VK-TEL-011", detail="ambiguous")
-        with pytest.raises(VoicekitError) as ambiguous_error:
+        vobiz.fail_error = VoiceyError("VY-TEL-011", detail="ambiguous")
+        with pytest.raises(VoiceyError) as ambiguous_error:
             await provisioner.provision(_config())
-        assert ambiguous_error.value.code == "VK-TEL-006"
+        assert ambiguous_error.value.code == "VY-TEL-006"
         ambiguous = ledger.open_provisioning(provider="vobiz-livekit")
         assert len(ambiguous) == 1
         assert ambiguous[0].state == "ambiguous"
@@ -324,13 +341,14 @@ class FakeVobizHTTP:
         self.credentials = [
             {
                 "id": "credential-1",
-                "username": "voicekituser",
+                "username": "voiceyuser",
                 "enabled": True,
             }
         ]
         self.trunks: list[dict[str, object]] = []
         self.number: dict[str, object] = {
             "e164": NUMBER,
+            "application_id": None,
             "trunk_group_id": "old-trunk",
         }
         self.requests: list[tuple[str, str, dict[str, object] | None]] = []
@@ -344,10 +362,13 @@ class FakeVobizHTTP:
             body = cast("dict[str, object]", loaded)
         self.requests.append((request.method, path, body))
         account = "/api/v1/Account/MA_VOBIZ_TEST"
-        if request.method == "GET" and path == f"{account}/credentials":
-            return httpx.Response(200, json={"credentials": self.credentials})
+        if request.method == "GET" and path == f"{account}/trunks/credentials":
+            return httpx.Response(200, json={"objects": self.credentials})
         if request.method == "GET" and path == f"{account}/trunks":
-            return httpx.Response(200, json={"trunks": self.trunks})
+            return httpx.Response(
+                200,
+                json={"objects": self.trunks or None},
+            )
         if request.method == "GET" and path.startswith(f"{account}/trunks/"):
             trunk_id = path.rsplit("/", maxsplit=1)[-1]
             matching = [item for item in self.trunks if item["trunk_id"] == trunk_id]
@@ -367,16 +388,28 @@ class FakeVobizHTTP:
             self.trunks.append(item)
             return httpx.Response(201, json=item)
         if request.method == "GET" and path == f"{account}/numbers":
-            return httpx.Response(200, json={"numbers": [self.number]})
+            return httpx.Response(200, json={"items": [self.number]})
         number_path = f"{account}/numbers/{NUMBER}/assign"
         if request.method == "POST" and path == number_path:
             assert body is not None
             if self.apply_assignment:
+                self.number["application_id"] = None
                 self.number["trunk_group_id"] = body["trunk_group_id"]
-            return httpx.Response(200, json=self.number)
+            return httpx.Response(204)
         if request.method == "DELETE" and path == number_path:
             if self.apply_assignment:
                 self.number["trunk_group_id"] = None
+            return httpx.Response(204)
+        application_path = f"{account}/numbers/{NUMBER}/application"
+        if request.method == "POST" and path == application_path:
+            assert body is not None
+            if self.apply_assignment:
+                self.number["application_id"] = body["application_id"]
+                self.number["trunk_group_id"] = None
+            return httpx.Response(204)
+        if request.method == "DELETE" and path == application_path:
+            if self.apply_assignment:
+                self.number["application_id"] = None
             return httpx.Response(204)
         if request.method == "DELETE" and path.startswith(f"{account}/trunks/"):
             trunk_id = path.rsplit("/", maxsplit=1)[-1]
@@ -399,22 +432,22 @@ def test_vobiz_http_backend_uses_current_trunk_and_number_contract() -> None:
     snapshot = backend.snapshot_number(NUMBER)
     credential = backend.require_credential(
         credential_id="credential-1",
-        username="voicekituser",
+        username="voiceyuser",
     )
     inbound = backend.ensure_trunk(
-        name="voicekit-booking-in",
+        name="voicey-booking-in",
         direction="inbound",
         max_concurrent_calls=10,
         inbound_destination="project.sip.livekit.cloud",
     )
     outbound = backend.ensure_trunk(
-        name="voicekit-booking-out",
+        name="voicey-booking-out",
         direction="outbound",
         max_concurrent_calls=10,
         credential_id=credential.resource_id,
     )
     assert not backend.ensure_trunk(
-        name="voicekit-booking-in",
+        name="voicey-booking-in",
         direction="inbound",
         max_concurrent_calls=10,
         inbound_destination="project.sip.livekit.cloud",
@@ -422,6 +455,7 @@ def test_vobiz_http_backend_uses_current_trunk_and_number_contract() -> None:
     binding = backend.attach_number(
         trunk_id=inbound.resource.resource_id,
         number=NUMBER,
+        expected_snapshot=snapshot,
     )
     assert binding.created
     assert outbound.sip_domain == "outbound.sip.vobiz.ai"
@@ -431,7 +465,7 @@ def test_vobiz_http_backend_uses_current_trunk_and_number_contract() -> None:
         if method == "POST" and path.endswith("/trunks")
     ]
     assert create_bodies[0] == {
-        "name": "voicekit-booking-in",
+        "name": "voicey-booking-in",
         "trunk_direction": "inbound",
         "trunk_type": "INBOUND",
         "trunk_status": "enabled",
@@ -441,11 +475,40 @@ def test_vobiz_http_backend_uses_current_trunk_and_number_contract() -> None:
         "concurrent_calls_limit": 10,
         "inbound_destination": "project.sip.livekit.cloud",
     }
-    backend.restore_number(snapshot)
+    backend.restore_number(
+        snapshot,
+        applied_trunk_id=inbound.resource.resource_id,
+    )
     assert fake.number["trunk_group_id"] == "old-trunk"
     backend.delete_resource(outbound.resource)
     backend.delete_resource(inbound.resource)
     assert fake.trunks == []
+
+
+def test_vobiz_http_backend_restores_existing_voice_application_route() -> None:
+    fake = FakeVobizHTTP()
+    fake.number["application_id"] = "existing-application"
+    fake.number["trunk_group_id"] = None
+    backend, client = _http_backend(fake)
+    try:
+        snapshot = backend.snapshot_number(NUMBER)
+        binding = backend.attach_number(
+            trunk_id="temporary-trunk",
+            number=NUMBER,
+            expected_snapshot=snapshot,
+        )
+        assert binding.created
+        assert fake.number["application_id"] is None
+        assert fake.number["trunk_group_id"] == "temporary-trunk"
+
+        backend.restore_number(
+            snapshot,
+            applied_trunk_id="temporary-trunk",
+        )
+        assert fake.number["application_id"] == "existing-application"
+        assert fake.number["trunk_group_id"] is None
+    finally:
+        client.close()
 
 
 @pytest.mark.parametrize(
@@ -454,7 +517,7 @@ def test_vobiz_http_backend_uses_current_trunk_and_number_contract() -> None:
         {"livekit_sip_uri": "https://project.sip.livekit.cloud"},
         {"livekit_sip_uri": "sip:project.sip.livekit.cloud:5070"},
         {"agent_name": "Booking"},
-        {"resource_prefix": "Voicekit"},
+        {"resource_prefix": "Voicey"},
         {"credential_id": "bad credential"},
         {"auth_username": "not-valid"},
         {"auth_password": "short"},  # pragma: allowlist secret
@@ -466,9 +529,9 @@ def test_vobiz_http_backend_uses_current_trunk_and_number_contract() -> None:
     ],
 )
 def test_vobiz_livekit_config_rejects_unsafe_values(values: dict[str, object]) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         _config(**values)
-    assert caught.value.code == "VK-TEL-002"
+    assert caught.value.code == "VY-TEL-002"
 
 
 def test_vobiz_livekit_config_fingerprint_is_secret_safe_and_uri_is_revalidated() -> None:
@@ -478,7 +541,7 @@ def test_vobiz_livekit_config_fingerprint_is_secret_safe_and_uri_is_revalidated(
     assert "credential-secret" not in first.config_fingerprint
 
     object.__setattr__(first, "livekit_sip_uri", "not-sip")
-    with pytest.raises(VoicekitError, match="invalid"):
+    with pytest.raises(VoiceyError, match="invalid"):
         _ = first.livekit_sip_host
 
 
@@ -526,9 +589,9 @@ async def test_provisioner_rejects_livekit_drift_and_duplicate_managed_resources
             duplicate_dispatch.CopyFrom(livekit.dispatch[0])
             livekit.dispatch.append(duplicate_dispatch)
 
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             await provisioner.provision(_config())
-        assert caught.value.code == "VK-TEL-006"
+        assert caught.value.code == "VY-TEL-006"
     finally:
         ledger.close()
 
@@ -547,15 +610,15 @@ async def test_provisioner_catalogs_unexpected_failure_and_rollback_conflict(
     try:
         vobiz.fail_at = "credential"
         vobiz.fail_error = RuntimeError("unexpected")
-        with pytest.raises(VoicekitError) as unexpected:
+        with pytest.raises(VoiceyError) as unexpected:
             await provisioner.provision(_config())
-        assert unexpected.value.code == "VK-TEL-006"
+        assert unexpected.value.code == "VY-TEL-006"
         assert ledger.open_provisioning(provider="vobiz-livekit")[0].state == "ambiguous"
 
         vobiz.fail_at = None
         result = await provisioner.provision(_config())
         livekit.fail_delete = True
-        with pytest.raises(VoicekitError, match="rollback conflicted"):
+        with pytest.raises(VoiceyError, match="rollback conflicted"):
             await provisioner.rollback(result.operation_id)
         assert ledger.get_provisioning(result.operation_id).state == "conflict"
 
@@ -565,7 +628,7 @@ async def test_provisioner_catalogs_unexpected_failure_and_rollback_conflict(
             snapshot={},
             planned={},
         )
-        with pytest.raises(VoicekitError, match="another provider"):
+        with pytest.raises(VoiceyError, match="another provider"):
             await provisioner.rollback(foreign.operation_id)
     finally:
         ledger.close()
@@ -622,19 +685,19 @@ def test_vobiz_http_backend_rejects_credential_trunk_and_number_drift() -> None:
     backend, client = _http_backend(fake)
     try:
         fake.credentials.clear()
-        with pytest.raises(VoicekitError, match="not found uniquely"):
+        with pytest.raises(VoiceyError, match="not found uniquely"):
             backend.require_credential(
                 credential_id="credential-1",
-                username="voicekituser",
+                username="voiceyuser",
             )
         fake.credentials = [{"id": "credential-1", "username": "human", "enabled": True}]
-        with pytest.raises(VoicekitError, match="differs"):
+        with pytest.raises(VoiceyError, match="differs"):
             backend.require_credential(
                 credential_id="credential-1",
-                username="voicekituser",
+                username="voiceyuser",
             )
 
-        with pytest.raises(VoicekitError, match="direction"):
+        with pytest.raises(VoiceyError, match="direction"):
             backend.ensure_trunk(
                 name="bad",
                 direction="sideways",
@@ -652,7 +715,7 @@ def test_vobiz_http_backend_rejects_credential_trunk_and_number_drift() -> None:
                 "trunk_domain": "two.sip.vobiz.ai",
             },
         ]
-        with pytest.raises(VoicekitError, match="duplicate"):
+        with pytest.raises(VoiceyError, match="duplicate"):
             backend.ensure_trunk(
                 name="duplicate",
                 direction="inbound",
@@ -671,7 +734,7 @@ def test_vobiz_http_backend_rejects_credential_trunk_and_number_drift() -> None:
                 "concurrent_calls_limit": 10,
             }
         ]
-        with pytest.raises(VoicekitError, match="differs"):
+        with pytest.raises(VoiceyError, match="differs"):
             backend.ensure_trunk(
                 name="drift",
                 direction="inbound",
@@ -681,23 +744,45 @@ def test_vobiz_http_backend_rejects_credential_trunk_and_number_drift() -> None:
 
         fake.trunks.clear()
         fake.number["trunk_group_id"] = "already"
-        assert not backend.attach_number(trunk_id="already", number=NUMBER).created
+        already_snapshot = backend.snapshot_number(NUMBER)
+        assert not backend.attach_number(
+            trunk_id="already",
+            number=NUMBER,
+            expected_snapshot=already_snapshot,
+        ).created
         fake.number["trunk_group_id"] = "before"
         fake.apply_assignment = False
-        with pytest.raises(VoicekitError) as unconfirmed:
-            backend.attach_number(trunk_id="new", number=NUMBER)
-        assert unconfirmed.value.code == "VK-TEL-011"
+        with pytest.raises(VoiceyError) as unconfirmed:
+            backend.attach_number(
+                trunk_id="new",
+                number=NUMBER,
+                expected_snapshot=backend.snapshot_number(NUMBER),
+            )
+        assert unconfirmed.value.code == "VY-TEL-011"
 
+        fake.apply_assignment = True
+        fake.number["application_id"] = None
         fake.number["trunk_group_id"] = None
-        backend.restore_number({"number": NUMBER, "trunk_group_id": None})
+        backend.restore_number(
+            {"number": NUMBER, "application_id": None, "trunk_group_id": None},
+            applied_trunk_id="new",
+        )
         fake.number["trunk_group_id"] = "before"
-        with pytest.raises(VoicekitError, match="did not compare equal"):
-            backend.restore_number({"number": NUMBER, "trunk_group_id": "old"})
-        with pytest.raises(VoicekitError, match="unknown"):
+        fake.apply_assignment = False
+        with pytest.raises(VoiceyError, match="did not compare equal"):
+            backend.restore_number(
+                {
+                    "number": NUMBER,
+                    "application_id": None,
+                    "trunk_group_id": "old",
+                },
+                applied_trunk_id="before",
+            )
+        with pytest.raises(VoiceyError, match="unknown"):
             backend.delete_resource(ManagedSipResource("vobiz_credential", "credential-1", True))
 
         fake.number["e164"] = "+918071234500"
-        with pytest.raises(VoicekitError, match="0 exact"):
+        with pytest.raises(VoiceyError, match="0 exact"):
             backend.snapshot_number(NUMBER)
     finally:
         client.close()
@@ -706,10 +791,10 @@ def test_vobiz_http_backend_rejects_credential_trunk_and_number_drift() -> None:
 @pytest.mark.parametrize(
     ("document", "expected_code"),
     [
-        ({"credentials": "bad"}, "VK-TEL-011"),
-        ({"credentials": [1]}, "VK-TEL-011"),
-        ("bad", "VK-TEL-011"),
-        (b"{", "VK-TEL-011"),
+        ({"credentials": "bad"}, "VY-TEL-011"),
+        ({"credentials": [1]}, "VY-TEL-011"),
+        ("bad", "VY-TEL-011"),
+        (b"{", "VY-TEL-011"),
     ],
 )
 def test_vobiz_http_backend_rejects_malformed_envelopes(
@@ -731,10 +816,10 @@ def test_vobiz_http_backend_rejects_malformed_envelopes(
         client=client,
     )
     try:
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             backend.require_credential(
                 credential_id="credential-1",
-                username="voicekituser",
+                username="voiceyuser",
             )
         assert caught.value.code == expected_code
     finally:
@@ -743,7 +828,7 @@ def test_vobiz_http_backend_rejects_malformed_envelopes(
 
 @pytest.mark.parametrize(
     ("status", "expected_code"),
-    [(400, "VK-TEL-006"), (503, "VK-TEL-011")],
+    [(400, "VY-TEL-006"), (503, "VY-TEL-011")],
 )
 def test_vobiz_http_backend_distinguishes_definitive_and_ambiguous_http(
     status: int,
@@ -761,7 +846,7 @@ def test_vobiz_http_backend_distinguishes_definitive_and_ambiguous_http(
         client=client,
     )
     try:
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             backend.snapshot_number(NUMBER)
         assert caught.value.code == expected_code
     finally:
@@ -782,9 +867,9 @@ def test_vobiz_http_backend_network_and_object_shape_failures_are_ambiguous() ->
         client=network_client,
     )
     try:
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             backend.snapshot_number(NUMBER)
-        assert caught.value.code == "VK-TEL-011"
+        assert caught.value.code == "VY-TEL-011"
     finally:
         network_client.close()
 
@@ -805,14 +890,14 @@ def test_vobiz_http_backend_network_and_object_shape_failures_are_ambiguous() ->
         client=client,
     )
     try:
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             malformed.ensure_trunk(
                 name="new",
                 direction="outbound",
                 max_concurrent_calls=10,
                 credential_id="credential-1",
             )
-        assert caught.value.code == "VK-TEL-011"
+        assert caught.value.code == "VY-TEL-011"
     finally:
         client.close()
 
@@ -825,7 +910,7 @@ def test_vobiz_http_backend_accepts_a_direct_list_envelope() -> None:
                 json=[
                     {
                         "id": "credential-1",
-                        "username": "voicekituser",
+                        "username": "voiceyuser",
                         "enabled": True,
                     }
                 ],
@@ -841,7 +926,7 @@ def test_vobiz_http_backend_accepts_a_direct_list_envelope() -> None:
     try:
         credential = backend.require_credential(
             credential_id="credential-1",
-            username="voicekituser",
+            username="voiceyuser",
         )
         assert credential.resource_id == "credential-1"
     finally:
@@ -849,7 +934,7 @@ def test_vobiz_http_backend_accepts_a_direct_list_envelope() -> None:
 
 
 def test_vobiz_http_backend_requires_token_and_valid_sip_domain() -> None:
-    with pytest.raises(VoicekitError, match="AUTH_TOKEN"):
+    with pytest.raises(VoiceyError, match="AUTH_TOKEN"):
         VobizSipHTTPBackend(auth_id="MA_VOBIZ_TEST", auth_token="")
 
     fake = FakeVobizHTTP()
@@ -872,7 +957,7 @@ def test_vobiz_http_backend_requires_token_and_valid_sip_domain() -> None:
         client=client,
     )
     try:
-        with pytest.raises(VoicekitError, match="invalid SIP domain"):
+        with pytest.raises(VoiceyError, match="invalid SIP domain"):
             backend.ensure_trunk(
                 name="new",
                 direction="outbound",

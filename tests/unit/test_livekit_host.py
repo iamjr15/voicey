@@ -9,9 +9,9 @@ from typing import Any, cast
 import pytest
 from livekit import rtc
 
-from voicekit import Agent, Models, Results, Web
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.host import (
+from voicey import Agent, Models, Results, Web
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.host import (
     JobCallControl,
     LiveKitAdmissionGate,
     LiveKitHost,
@@ -22,7 +22,7 @@ from voicekit.runtimes.livekit.host import (
     _prewarm_process,  # pyright: ignore[reportPrivateUsage]
     _twilio_call_sid,  # pyright: ignore[reportPrivateUsage]
 )
-from voicekit.storage.sqlite import SQLiteRepository
+from voicey.storage.sqlite import SQLiteRepository
 
 
 def _agent() -> Agent:
@@ -40,7 +40,7 @@ def _agent() -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -142,19 +142,19 @@ class FakeJobContext:
 def test_livekit_host_settings_reject_invalid_values(
     settings: dict[str, object],
 ) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         LiveKitHostSettings(**settings)  # type: ignore[arg-type]
-    assert caught.value.code == "VK-RUN-002"
+    assert caught.value.code == "VY-RUN-002"
 
 
 def test_livekit_host_and_gate_reject_wrong_runtime_or_capacity() -> None:
-    with pytest.raises(VoicekitError, match="capacity"):
+    with pytest.raises(VoiceyError, match="capacity"):
         LiveKitAdmissionGate(0)
 
     async def repository_factory() -> Any:
         raise AssertionError("no job should run")
 
-    with pytest.raises(VoicekitError, match="requires runtime"):
+    with pytest.raises(VoiceyError, match="requires runtime"):
         LiveKitHost(
             agent=_agent().model_copy(update={"runtime": "pipecat"}),
             repository_factory=repository_factory,
@@ -178,7 +178,7 @@ async def test_livekit_admission_request_accept_reject_release_and_run() -> None
     assert server.registration["agent_name"] == _agent().name
 
     await host.gate.reserve("call-browser")
-    with pytest.raises(VoicekitError, match="duplicate call id"):
+    with pytest.raises(VoiceyError, match="duplicate call id"):
         await host.gate.reserve("call-browser")
     accepted = FakeJobRequest(
         "job-browser",
@@ -216,7 +216,7 @@ async def test_livekit_reload_drain_prewarm_and_optional_repository_close(
     assert not await host.reload_agent(_agent(), restart_runner=True)
     await host.gate.release("occupied")
     assert await host.reload_agent(_agent(), restart_runner=False)
-    with pytest.raises(VoicekitError, match="registered agent name"):
+    with pytest.raises(VoiceyError, match="registered agent name"):
         await host.reload_agent(
             _agent().model_copy(update={"name": "different"}),
             restart_runner=False,
@@ -228,12 +228,12 @@ async def test_livekit_reload_drain_prewarm_and_optional_repository_close(
     assert server.closed
 
     monkeypatch.setattr(
-        "voicekit.runtimes.livekit.host.silero.VAD.load",
+        "voicey.runtimes.livekit.host.silero.VAD.load",
         lambda: "prewarmed-vad",
     )
     process = SimpleNamespace(userdata={})
     _prewarm_process(cast(Any, process))
-    assert process.userdata["voicekit_vad"] == "prewarmed-vad"
+    assert process.userdata["voicey_vad"] == "prewarmed-vad"
 
     closed: list[str] = []
 
@@ -293,7 +293,7 @@ async def test_job_call_control_uses_native_transfer_and_dtmf(
     async def no_sleep(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr("voicekit.runtimes.livekit.host.asyncio.sleep", no_sleep)
+    monkeypatch.setattr("voicey.runtimes.livekit.host.asyncio.sleep", no_sleep)
     await control.cold_transfer("+14155550101")
     await control.send_dtmf("1#A")
     assert context.transfers == [
@@ -301,18 +301,18 @@ async def test_job_call_control_uses_native_transfer_and_dtmf(
     ]
     assert context.room.local_participant.dtmf == [(1, "1"), (11, "#"), (12, "A")]
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await control.send_dtmf("X")
-    assert caught.value.code == "VK-TEL-002"
+    assert caught.value.code == "VY-TEL-002"
 
 
 def test_livekit_metadata_and_job_mapping_are_strict() -> None:
     assert _metadata("") == {}
     assert _metadata('{"call_id":"call-1"}') == {"call_id": "call-1"}
     for raw in ("[]", '{"call_id":1}', "{"):
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             _metadata(raw)
-        assert caught.value.code == "VK-RUN-007"
+        assert caught.value.code == "VY-RUN-007"
 
     phone = FakeJobContext(
         metadata=json.dumps(
@@ -339,7 +339,7 @@ def test_livekit_metadata_and_job_mapping_are_strict() -> None:
     )
     assert _call_from_context(cast(Any, web)).channel == "web"
     invalid = FakeJobContext(metadata='{"channel":"video"}')
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         _call_from_context(cast(Any, invalid))
 
     web.job.participant.attributes = None
@@ -495,9 +495,9 @@ async def test_livekit_drain_rejects_new_work_but_honors_visible_reservation() -
     await gate.begin_drain()
 
     assert not gate.accepting
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await gate.reserve("new-browser-call")
-    assert caught.value.code == "VK-RUN-008"
+    assert caught.value.code == "VY-RUN-008"
     assert await gate.admit("existing-job", "visible-before-drain")
     assert not await gate.admit("new-sip-job", "unreserved-after-drain")
     await gate.release("existing-job")

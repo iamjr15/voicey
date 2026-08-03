@@ -13,12 +13,12 @@ from livekit.agents import function_tool, llm
 from pipecat.evals.scenario import EvalScenario
 from pipecat.evals.suite import EvalManifest
 
-from voicekit import results
-from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
-from voicekit.recipes.source import RECIPE_LOCK_NAME, install_recipe, recipe_files
-from voicekit.testing import JudgeConfig, discover_scenarios
-from voicekit.testing.livekit import compile_livekit
-from voicekit.testing.pipecat import compile_pipecat
+from voicey import results
+from voicey.recipes.registry import DEFAULT_RECIPE_REGISTRY
+from voicey.recipes.source import RECIPE_LOCK_NAME, install_recipe, recipe_files
+from voicey.testing import JudgeConfig, discover_scenarios
+from voicey.testing.livekit import compile_livekit
+from voicey.testing.pipecat import compile_pipecat
 
 ROOT = Path(__file__).parents[2]
 RECIPES = {
@@ -70,6 +70,32 @@ def test_p3_recipes_are_offline_dual_runtime_registry_entries() -> None:
         assert definition.version == "1.0.0"
         assert definition.runtimes == {"pipecat", "livekit"}
         assert definition.source_available is True
+
+
+@pytest.mark.parametrize("name", RECIPES)
+def test_p3_voicemail_prompts_switch_from_answering_to_leaving(name: str) -> None:
+    prompt = (ROOT / "recipes" / name / "prompts" / "voicemail.md").read_text(encoding="utf-8")
+    normalized = " ".join(prompt.split())
+
+    assert "you are leaving a message" in normalized
+    assert "do not ask the recipient to leave a message" in normalized
+    assert "End immediately" in normalized
+
+
+def test_front_desk_prompt_makes_successful_transfer_terminal() -> None:
+    prompt = (ROOT / "recipes/front-desk/prompts/system.md").read_text(encoding="utf-8")
+    normalized = " ".join(prompt.split())
+
+    assert "state that the handoff is complete and end the response" in normalized
+    assert "do not ask the caller to wait" in normalized
+
+
+def test_lead_prompt_qualifies_complete_facts_without_extra_confirmation() -> None:
+    prompt = (ROOT / "recipes/lead-intake/prompts/system.md").read_text(encoding="utf-8")
+    normalized = " ".join(prompt.split())
+
+    assert "call `qualify_inquiry` immediately" in normalized
+    assert "do not ask the caller to reconfirm" in normalized
 
 
 @pytest.mark.parametrize("name", RECIPES)
@@ -137,7 +163,7 @@ def test_p3_pipecat_entrypoints_return_native_nodes(
 ) -> None:
     flow = _load(
         ROOT / "recipes" / name / "pipecat" / "flow.py",
-        f"voicekit_test_{name.replace('-', '_')}_pipecat",
+        f"voicey_test_{name.replace('-', '_')}_pipecat",
     )
     node = flow.entry(None)
 
@@ -154,7 +180,7 @@ async def test_p3_livekit_entrypoints_use_native_handoffs_and_preserve_tools(
 ) -> None:
     flow = _load(
         ROOT / "recipes" / name / "livekit" / "flow.py",
-        f"voicekit_test_{name.replace('-', '_')}_livekit",
+        f"voicey_test_{name.replace('-', '_')}_livekit",
     )
 
     async def shared_lookup() -> str:
@@ -172,10 +198,29 @@ async def test_p3_livekit_entrypoints_use_native_handoffs_and_preserve_tools(
     assert specialist.chat_ctx.items == intake.chat_ctx.items
 
 
+@pytest.mark.asyncio
+async def test_restaurant_livekit_waitlist_mutation_is_specialist_owned() -> None:
+    flow = _load(
+        ROOT / "recipes/restaurant-reservations/livekit/flow.py",
+        "voicey_test_restaurant_waitlist_tool_owner",
+    )
+
+    async def join_waitlist() -> dict[str, str]:
+        """Return a deterministic waitlist result."""
+        return {"status": "waitlisted"}
+
+    waitlist_tool = function_tool(join_waitlist)
+    intake = cast(NativeLiveKitAgent, flow.entrypoint([waitlist_tool]))
+    specialist = await _native_function(intake, "discuss_waitlist")()
+
+    assert waitlist_tool not in intake.tools
+    assert waitlist_tool in specialist.tools
+
+
 def test_restaurant_stub_records_reservation_and_waitlist() -> None:
     tools = _load(
         ROOT / "recipes/restaurant-reservations/tools.py",
-        "voicekit_test_restaurant_tools",
+        "voicey_test_restaurant_tools",
     )
     buffer = results.CallResultBuffer(call_id="call_restaurant")
     assert tools.search_tables("2026-08-08", "19:00:00", "America/New_York", 10) == {
@@ -207,7 +252,7 @@ def test_restaurant_stub_records_reservation_and_waitlist() -> None:
 
 
 def test_front_desk_stub_is_fail_closed_and_records_messages() -> None:
-    tools = _load(ROOT / "recipes/front-desk/tools.py", "voicekit_test_front_desk_tools")
+    tools = _load(ROOT / "recipes/front-desk/tools.py", "voicey_test_front_desk_tools")
     buffer = results.CallResultBuffer(call_id="call_front_desk")
 
     assert tools.lookup_answer("office hours")["status"] == "found"
@@ -216,16 +261,17 @@ def test_front_desk_stub_is_fail_closed_and_records_messages() -> None:
         message = tools.take_message(
             "Jordan Lee",
             "+14155550143",
-            "billing",
+            " Billing ",
             "Please call about invoice 42.",
         )
 
     assert str(message["reference"]).startswith("MSG-")
+    assert message["department"] == "billing"
     assert buffer.outcome == "front_desk_message_taken"
 
 
 def test_lead_stub_requires_consent_and_records_followup() -> None:
-    tools = _load(ROOT / "recipes/lead-intake/tools.py", "voicekit_test_lead_tools")
+    tools = _load(ROOT / "recipes/lead-intake/tools.py", "voicey_test_lead_tools")
     buffer = results.CallResultBuffer(call_id="call_lead")
     qualification = tools.qualify_inquiry("call automation", "this week", "20k", 50)
 

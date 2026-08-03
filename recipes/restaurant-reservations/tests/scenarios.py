@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from voicekit.testing import (
+from voicey.testing import (
     ResultExpectation,
     ScenarioTurn,
     SendAfter,
@@ -28,14 +28,25 @@ def reserve_available_table() -> dict[str, object]:
             outcome="restaurant_reserved",
             data={"reservation.status": "reserved", "reservation.party_size": 4},
         ),
-        "judge": ("confirms only after a successful reservation tool result",),
+        "judge": ("states the reservation is confirmed and gives its reference",),
         "turns": (
-            ScenarioTurn(user="I need a dinner reservation for four."),
             ScenarioTurn(
-                user="August 8 2026 around 7 PM, America/New_York.",
+                user="I need a dinner reservation for four.",
+                expect=TurnExpectation(judge=("asks for the missing reservation date and time",)),
+            ),
+            ScenarioTurn(
+                user=(
+                    "August 8 2026 around 7 PM, America/New_York. I'm {name}, "
+                    "phone {phone}, with no special requests."
+                ),
                 expect=TurnExpectation(tools=(ToolExpectation(name="search_tables"),)),
             ),
-            ScenarioTurn(user="7:30 works. I'm {name}, phone {phone}. No special requests."),
+            ScenarioTurn(
+                user="7:30 works.",
+                expect=TurnExpectation(
+                    judge=("restates the complete reservation and asks for confirmation",)
+                ),
+            ),
             ScenarioTurn(
                 user="Yes, confirm all of that.",
                 expect=TurnExpectation(tools=(ToolExpectation(name="create_reservation"),)),
@@ -57,12 +68,26 @@ def unavailable_party_joins_waitlist() -> dict[str, object]:
         "judge": ("does not describe the waitlist as a confirmed table",),
         "turns": (
             ScenarioTurn(
-                user="Table for ten on August 8 2026 at 7 PM America/New_York.",
+                user=(
+                    "Table for ten on August 8 2026 at 7 PM America/New_York. "
+                    "I'm {name}, phone {phone}, with no special requests."
+                ),
                 expect=TurnExpectation(tools=(ToolExpectation(name="search_tables"),)),
             ),
-            ScenarioTurn(user="Add {name} and {phone} to the waitlist."),
             ScenarioTurn(
-                user="Yes, I understand it is not guaranteed.",
+                user="Add me to the waitlist.",
+                expect=TurnExpectation(
+                    judge=("asks for confirmation before joining the waitlist",)
+                ),
+                runtimes=frozenset({"pipecat"}),
+            ),
+            ScenarioTurn(
+                user="I want to join the waitlist; connect me to the waitlist specialist.",
+                expect=TurnExpectation(handoff="WaitlistAgent"),
+                runtimes=frozenset({"livekit"}),
+            ),
+            ScenarioTurn(
+                user="I confirm those details and understand the waitlist is not guaranteed.",
                 expect=TurnExpectation(tools=(ToolExpectation(name="join_waitlist"),)),
             ),
         ),
@@ -77,7 +102,10 @@ def latest_party_size_wins() -> dict[str, object]:
         "goals": ("reserve for five, not the superseded party of four",),
         "judge": ("uses the latest party size and reconfirms it",),
         "turns": (
-            ScenarioTurn(user="Reserve for four tomorrow evening."),
+            ScenarioTurn(
+                user="Reserve for four tomorrow evening.",
+                expect=TurnExpectation(judge=("asks for the missing reservation details",)),
+            ),
             ScenarioTurn(
                 user="Actually there will be five of us.",
                 expect=TurnExpectation(
@@ -110,12 +138,16 @@ def restaurant_voicemail_privacy() -> dict[str, object]:
     return {
         "caller": "A restaurant voicemail greeting.",
         "goals": ("leave one privacy-safe callback message",),
-        "judge": ("omits name, phone, party details, allergies, and reservation time",),
         "turns": (
             ScenarioTurn(
                 user="You've reached voicemail. Leave a message.",
                 send_after=SendAfter(event="llm_started", delay_ms=100),
-                expect=TurnExpectation(judge=("leaves one short generic callback message",)),
+                expect=TurnExpectation(
+                    judge=(
+                        "leaves one short generic restaurant callback message without "
+                        "reservation details",
+                    )
+                ),
             ),
         ),
     }

@@ -1,20 +1,20 @@
-# Voicekit — Product Specification (production-grade)
+# Voicey — Product Specification (production-grade)
 
 > **Status:** Design-complete, pre-build. Greenfield — nothing carried over from parley.
-> **Name:** "voicekit" is a placeholder throughout; final name TBD.
+> **Name:** Voicey, finalized 2026-07-31.
 > **Scope mandate:** This is NOT an MVP. Every surface below ships complete, hardened, tested, and documented, or it does not ship. Where breadth must be staged, integrations carry an honest certification tier (Certified / Beta) — never a half-working default path.
 
 ---
 
 ## 0. Product statement
 
-**The production toolchain around Pipecat and LiveKit.** A developer declares a voice agent with a thin typed config plus native framework flow code; voicekit supplies everything around the conversation that every team otherwise rebuilds badly: guided project creation, a browser playground, simulated-caller testing, telephony across carriers, deployment, and a signed results contract — identical on both runtimes.
+**The production toolchain around Pipecat and LiveKit.** A developer declares a voice agent with a thin typed config plus native framework flow code; voicey supplies everything around the conversation that every team otherwise rebuilds badly: guided project creation, a browser playground, simulated-caller testing, telephony across carriers, deployment, and a signed results contract — identical on both runtimes.
 
 One line: **choose your engine per project, keep your workflow forever.**
 
 ### Non-goals (hard boundaries)
 
-- **No custom flow DSL.** Conversation logic is 100% native `pipecat-flows` or native LiveKit agent workflows. Voicekit never sits between the user and the framework's conversation APIs.
+- **No custom flow DSL.** Conversation logic is 100% native `pipecat-flows` or native LiveKit agent workflows. Voicey never sits between the user and the framework's conversation APIs.
 - **No MCP** anywhere in the product. Tools are plain Python functions or HTTP endpoints.
 - **No hosted cloud, no no-code builder** in this repo/phase. (Future commercial layer; keep engine boundaries clean so it can exist later without relicensing.)
 - **No provider marketplace, no in-house STT/LLM/TTS.**
@@ -35,14 +35,14 @@ One line: **choose your engine per project, keep your workflow forever.**
 ## 1. System architecture
 
 ```
-user project (owned, git)                 engine (pip: voicekit, semver)
+user project (owned, git)                 engine (pip: voicey, semver)
 ├── agent.py      typed config      ┌── shared core ──────────────────────────┐
 ├── flow.py       NATIVE flows      │ config schema + validation              │
 ├── prompts/*.md                    │ provider catalog + key validation       │
 ├── tools.py      plain functions   │ telephony adapter layer                 │
 ├── tests/*.py    sim scenarios     │ results contract (sign/deliver/DLQ)     │
-├── voicekit.jsonc  manifest        │ playground dev server                   │
-└── voicekit.recipe-lock.json       │ sim-test runner                         │
+├── voicey.jsonc  manifest        │ playground dev server                   │
+└── voicey.recipe-lock.json       │ sim-test runner                         │
      exact recipe baseline          │ CLI (init/dev/test/deploy/doctor/…)     │
                                     │ observability (structured logs/metrics) │
                                     └─────────────────────────────────────────┘
@@ -56,10 +56,10 @@ Rules that keep this honest:
 
 1. **Bootstraps stay thin.** A bootstrap may assemble, register, and observe; it may never reinterpret conversation semantics. If a feature requires wrapping a runtime's conversation API, the feature is redesigned or dropped.
 2. **Everything in shared core is runtime-blind.** Shared core communicates with bootstraps only through defined interfaces (§5 telephony targets, §6 results events, §8 client session tokens).
-3. **The manifest (`voicekit.jsonc`)** records init choices (runtime, recipe + version, channels, carriers + selected E.164 phone number, deploy target) so every command is resumable.
-4. **The recipe baseline (`voicekit.recipe-lock.json`)** is committed, deterministic project metadata containing the exact upstream recipe source copied at the recorded version. It contains no secrets. `recipes update-check` compares this base with local project files and the installed upstream package, so upgrades never need to overwrite authored source.
+3. **The manifest (`voicey.jsonc`)** records init choices (runtime, recipe + version, channels, carriers + selected E.164 phone number, deploy target) so every command is resumable.
+4. **The recipe baseline (`voicey.recipe-lock.json`)** is committed, deterministic project metadata containing the exact upstream recipe source copied at the recorded version. It contains no secrets. `recipes update-check` compares this base with local project files and the installed upstream package, so upgrades never need to overwrite authored source.
 
-Packaging: single distribution `voicekit` with extras — `voicekit[pipecat]`, `voicekit[livekit]` (each pinning a tested version range of its runtime), `voicekit[twilio,telnyx,vobiz,plivo]`. `init` installs exactly what the wizard's answers require.
+Packaging: single distribution `voicey` with extras — `voicey[pipecat]`, `voicey[livekit]` (each pinning a tested version range of its runtime), `voicey[twilio,telnyx,vobiz,plivo]`. `init` installs exactly what the wizard's answers require.
 
 ---
 
@@ -68,7 +68,7 @@ Packaging: single distribution `voicekit` with extras — `voicekit[pipecat]`, `
 Pydantic models; typed code is canonical, serializes to JSON (the wire/storage form; what tests diff and a future UI edits). Full schema:
 
 ```python
-from voicekit import (
+from voicey import (
     Agent,
     Behavior,
     Limits,
@@ -118,7 +118,7 @@ agent = Agent(
 
     results=Results(
         webhook="https://api.sunrisedental.com/voice-results",
-        secret_env="VOICEKIT_WEBHOOK_SECRET",       # never inline secrets
+        secret_env="VOICEY_WEBHOOK_SECRET",       # never inline secrets
         previous_secret_env=None,                   # overlap window during rotation
         include=["transcript", "data", "recording", "metrics"],
         redact=["phone_number"],                    # field-level redaction before delivery
@@ -159,8 +159,8 @@ agent = Agent(
 
 - **Pipecat projects:** `flow.py` is `pipecat-flows` code — `FlowManager`, `NodeConfig`s, transition/record functions. Simple agents may use a single system prompt (recipe variant "prompt-only").
 - **LiveKit projects:** `flow.py` is native LiveKit Agents code — `Agent` subclasses per stage, `@function_tool` methods, handoffs, session userdata for state, prebuilt tasks where they fit (e.g. warm transfer).
-- Prompt text lives in `prompts/*.md`, loaded by flow code via `voicekit.prompts.load()` (a file-reader with variable interpolation — a utility, not an abstraction).
-- The ONLY engine touchpoint inside flow code is the results recorder: `from voicekit import results; results.set("slot", value)` (and `results.set_outcome("booked")`). One import, two functions; everything else in `flow.py` is pure framework code any Pipecat/LiveKit tutorial applies to.
+- Prompt text lives in `prompts/*.md`, loaded by flow code via `voicey.prompts.load()` (a file-reader with variable interpolation — a utility, not an abstraction).
+- The ONLY engine touchpoint inside flow code is the results recorder: `from voicey import results; results.set("slot", value)` (and `results.set_outcome("booked")`). One import, two functions; everything else in `flow.py` is pure framework code any Pipecat/LiveKit tutorial applies to.
 
 **Engine ↔ flow contract per runtime (bootstrap responsibilities):** register tools natively; install transcript + latency observers; enforce `limits`/`behavior` via native mechanisms (Pipecat: pipeline params, idle/duration processors; LiveKit: session options, tasks); flush `results` buffer into the call record at termination.
 
@@ -179,7 +179,7 @@ speculative carrier retry.
 A tool is a plain typed Python function:
 
 ```python
-from voicekit import tool
+from voicey import tool
 
 @tool(
     say_while_running="Let me check that for you…",      # optional filler line
@@ -231,7 +231,11 @@ contract: the number-scoped LiveKit inbound trunk has no username/password
 because Twilio cannot authenticate calls it originates; the LiveKit outbound
 trunk carries the Twilio termination credentials. Secure trunking uses TLS for
 both the Twilio origination URI and the LiveKit outbound transport. Rollback
-must restore the complete pre-trunk number route.
+must restore the complete pre-trunk number route. Before creating any trunk,
+credential list, or LiveKit resource, validate Twilio's live credential rule:
+the SIP password is at least 12 characters and contains a lowercase letter, an
+uppercase letter, and a number. A weak password is a local configuration error,
+not an ambiguous partially applied provisioning attempt.
 
 For Plivo Zentrunk, the current official LiveKit provider contract is also
 asymmetric: inbound Plivo origination targets
@@ -242,7 +246,7 @@ disabled because the published inbound procedure does not specify a secure
 media leg. Credential adoption must bind the write-only password through a
 secret-derived deterministic fingerprint without storing the password.
 
-Generic SIP is an explicit LiveKit-only Beta boundary. Voicekit provisions and
+Generic SIP is an explicit LiveKit-only Beta boundary. Voicey provisions and
 rolls back the LiveKit inbound trunk, dispatch rule, and outbound trunk; the
 operator owns the external PBX/carrier route, ACL, credentials, transport,
 media policy, and its rollback. The CLI must collect transport and media policy
@@ -257,7 +261,7 @@ unmanaged external route was provisioned or certified.
 | Telnyx | **Certified** | TeXML + streaming | SIP trunk | |
 | Vobiz | **Certified** | VobizXML + bidirectional PCMU WS | API-managed UDP SIP trunks | India wedge; credentialed/PSTN certification remains a release gate |
 | Plivo | Beta | Plivo XML + signed bidirectional PCMU streams | API-managed Zentrunk SIP | Inbound TCP; secure outbound TLS/media |
-| Generic SIP | Beta | — (use LiveKit path) | Operator-managed direct trunk | Voicekit owns only LiveKit resources |
+| Generic SIP | Beta | — (use LiveKit path) | Operator-managed direct trunk | Voicey owns only LiveKit resources |
 
 **Certification checklist (required for "Certified"; CI-enforced):** inbound + outbound live tests pass nightly; signature verification implemented and negative-tested; DTMF in/out; hangup semantics (both directions, all terminal reasons mapped); recording completion ingestion (signed callback when the carrier surface supports one, otherwise a documented bounded reconciliation keyed by an authenticated carrier call ID); transfer where capability-flagged; rollback-on-Ctrl-C proven; region/latency notes documented; runbook page for common carrier errors (mapped into the CLI error catalog §7.6).
 
@@ -300,9 +304,9 @@ The engine's promise: **every call has exactly one terminal event persisted once
 
 ### 6.2 Delivery
 
-- **Signing:** Standard Webhooks format verbatim. Requests carry `webhook-id`, `webhook-timestamp`, and `webhook-signature`. Each configured secret is serialized as `whsec_<base64-key>`; implementations remove `whsec_`, base64-decode the remainder, then compute `base64(HMAC-SHA256(key, "{id}.{timestamp}.{raw_body}"))`. The signature header contains space-separated `v1,<base64-signature>` values for the current and previous secrets during rotation. Receivers verify the raw body and reject timestamps outside a 5-minute window. `webhook-id` is the stable event id used for consumer deduplication. A `voicekit.verify_webhook()` helper, official-library interoperability vectors, and copy-paste snippets (Python/Node/Go) ship in docs.
-- **Retries:** the single canonical policy is the Standard Webhooks/Svix curve: attempts at 0s, 5s, 5m, 30m, 2h, 5h, 10h, and 10h, with ±20% jitter per delay relative to the preceding failure. After 8 failed attempts the delivery is visibly dead-lettered. Every retry and manual redelivery reuses the event id and immutable raw body, but uses a fresh timestamp/signature. `voicekit calls list --undelivered`, `voicekit calls redeliver <id>`, and replay-since-timestamp operate the queue. DLQ depth is exported as a metric and surfaced by `doctor`.
-- **Pull parity:** everything push-delivered is also pull-readable — `voicekit calls show <id>` (and the local API the playground uses) returns the identical payload. Push-only was a parley design bug; not repeated.
+- **Signing:** Standard Webhooks format verbatim. Requests carry `webhook-id`, `webhook-timestamp`, and `webhook-signature`. Each configured secret is serialized as `whsec_<base64-key>`; implementations remove `whsec_`, base64-decode the remainder, then compute `base64(HMAC-SHA256(key, "{id}.{timestamp}.{raw_body}"))`. The signature header contains space-separated `v1,<base64-signature>` values for the current and previous secrets during rotation. Receivers verify the raw body and reject timestamps outside a 5-minute window. `webhook-id` is the stable event id used for consumer deduplication. A `voicey.verify_webhook()` helper, official-library interoperability vectors, and copy-paste snippets (Python/Node/Go) ship in docs.
+- **Retries:** the single canonical policy is the Standard Webhooks/Svix curve: attempts at 0s, 5s, 5m, 30m, 2h, 5h, 10h, and 10h, with ±20% jitter per delay relative to the preceding failure. After 8 failed attempts the delivery is visibly dead-lettered. Every retry and manual redelivery reuses the event id and immutable raw body, but uses a fresh timestamp/signature. `voicey calls list --undelivered`, `voicey calls redeliver <id>`, and replay-since-timestamp operate the queue. DLQ depth is exported as a metric and surfaced by `doctor`.
+- **Pull parity:** everything push-delivered is also pull-readable — `voicey calls show <id>` (and the local API the playground uses) returns the identical payload. Push-only was a parley design bug; not repeated.
 - **Crash invariant:** a durable call row is created before any externally visible action. One fenced transaction CAS-transitions the call from active to terminal and inserts the immutable terminal envelope plus delivery rows. A partial unique index permits only one terminal event per call. Active owners hold generation/fencing tokens; stale owners cannot complete after takeover. Recovery reconciles provider state before terminalizing a stale call.
 
 ---
@@ -311,7 +315,7 @@ The engine's promise: **every call has exactly one terminal event persisted once
 
 ### 7.1 Principles (product requirements, not style)
 
-1. Rail, not toolbox: every command ends with the printed next step; bare `voicekit` = status + suggested next action.
+1. Rail, not toolbox: every command ends with the printed next step; bare `voicey` = status + suggested next action.
 2. Plain language, and **no option is ever pre-selected or badged "recommended" — every choice is the user's.** Guidance means each option carries a neutral, factual one-line description (what it is, cost class, language coverage), never a default we chose for them.
 3. Validate at entry: every key live-tested at paste time; nothing completes setup broken.
 4. Every completed wizard yields a working, talking agent — including the scratch path; wizard ≤ 5 questions, each an explicit selection; advanced options are flags only.
@@ -321,67 +325,67 @@ The engine's promise: **every call has exactly one terminal event persisted once
 ### 7.2 Command tree
 
 ```
-voicekit                     status + next step
-voicekit init                wizard (--recipe --runtime --models --phone-provider --yes --resume)
-voicekit dev                 run + browser playground (--phone --tunnel cloudflared|ngrok|url --port --no-open)
-voicekit call <e164>         outbound test call through the dev/deployed agent
-voicekit test                sim scenarios (--filter --audio --live --report junit|json)
-voicekit deploy [target]     docker|pipecat-cloud|livekit-cloud|fly|railway (--yes --skip-smoke)
-voicekit numbers             list | buy | release | point | restore
-voicekit keys                list | validate (re-runs live checks)
-voicekit calls               list | show <id> | redeliver <id> (--undelivered)
-voicekit recipes             list | add <name> | update-check
-voicekit doctor              full preflight (--fix applies safe fixes)
-voicekit upgrade             lockfile-only engine upgrade + recipe drift report (--pre|--stable --yes --json)
+voicey                     status + next step
+voicey init                wizard (--recipe --runtime --models --phone-provider --yes --resume)
+voicey dev                 run + browser playground (--phone --tunnel cloudflared|ngrok|url --port --no-open)
+voicey call <e164>         outbound test call through the dev/deployed agent
+voicey test                sim scenarios (--filter --audio --live --report junit|json)
+voicey deploy [target]     docker|pipecat-cloud|livekit-cloud|fly|railway (--yes --skip-smoke)
+voicey numbers             list | buy | release | point | restore
+voicey keys                list | validate (re-runs live checks)
+voicey calls               list | show <id> | redeliver <id> (--undelivered)
+voicey recipes             list | add <name> | update-check
+voicey doctor              full preflight (--fix applies safe fixes)
+voicey upgrade             lockfile-only engine upgrade + recipe drift report (--pre|--stable --yes --json)
 ```
 
 ### 7.3 Init wizard (fixed question set — every answer an explicit user selection)
 
 **Q1 — "What should your agent do?"** Recipe list from the registry, each with a one-line description, plus `Start from scratch` last.
-**The scratch path (fully defined):** a follow-up free-text question — *"Describe in a sentence or two what your agent should do."* The description is templated into `persona` and `prompts/system.md`, and the scaffold is a minimal but **working** single-prompt agent: greeting, system prompt seeded from the description, one example tool, one example sim test — all TODO-marked. `voicekit dev` produces a talking agent immediately even from scratch. After key setup, one explicit opt-in question (default No): *"Draft fuller starting prompts from your description using your configured LLM key? [y/N]"* — never runs unless selected.
+**The scratch path (fully defined):** a follow-up free-text question — *"Describe in a sentence or two what your agent should do."* The description is templated into `persona` and `prompts/system.md`, and the scaffold is a minimal but **working** single-prompt agent: greeting, system prompt seeded from the description, one example tool, one example sim test — all TODO-marked. `voicey dev` produces a talking agent immediately even from scratch. After key setup, one explicit opt-in question (default No): *"Draft fuller starting prompts from your description using your configured LLM key? [y/N]"* — never runs unless selected.
 
 **Q2 — "Where will people talk to it?"** **Multi-select** checkboxes: `[ ] Phone` `[ ] Website / app (browser)`. At least one required, both selectable. Phone → carrier selection + `phone` block scaffolded; Website → `web` block + embed snippet in the scaffold.
 
 **Q3 — "Which engine?"** Neutral list, nothing pre-selected:
 - `Pipecat — open-source Python pipeline framework (by Daily); phone audio via carrier media streams.`
 - `LiveKit Agents — open-source agent framework on LiveKit's WebRTC/SIP infrastructure.`
-Fixed footer line: *"Every voicekit command works identically with either."* User must pick.
+Fixed footer line: *"Every voicey command works identically with either."* User must pick.
 
 **Q4 — Models, one axis at a time.** Three explicit selections (STT → LLM → TTS) from the provider catalog for the chosen runtime; each option shows a factual one-liner (price class, language coverage, latency class). No pre-selected set. Flag twin: `--models stt=…,llm=…,tts=…`.
 
-Then guided keys for exactly the providers chosen (signup URL per provider, `o` opens browser, paste → live ✓/✗ with fix line), then scaffold + `Next: voicekit dev`.
+Then guided keys for exactly the providers chosen (signup URL per provider, `o` opens browser, paste → live ✓/✗ with fix line), then scaffold + `Next: voicey dev`.
 
 ### 7.4 Doctor checks (complete list)
 
-Keys valid + provider balances/credit where APIs expose it · runtime package versions within tested range · Python version · audio deps (ffmpeg) · port availability · tunnel reachability (self-request through tunnel) · carrier webhook agreement (fetch number's live config, diff vs expected) · LiveKit project reachable + SIP trunk/dispatch existence · webhook receiver reachable + signature round-trip (against a `voicekit`-hosted echo or user endpoint with `--send-test`) · DLQ depth · clock skew (breaks HMAC) · `.env` vs `.env.example` diff · disk space (recordings/DLQ). Each ✗ prints one fix line; `--fix` applies the safe subset.
+Keys valid + provider balances/credit where APIs expose it · runtime package versions within tested range · Python version · audio deps (ffmpeg) · port availability · tunnel reachability (self-request through tunnel) · carrier webhook agreement (fetch number's live config, diff vs expected) · LiveKit project reachable + SIP trunk/dispatch existence · webhook receiver reachable + signature round-trip (against a `voicey`-hosted echo or user endpoint with `--send-test`) · DLQ depth · clock skew (breaks HMAC) · `.env` vs `.env.example` diff · disk space (recordings/DLQ). Each ✗ prints one fix line; `--fix` applies the safe subset.
 
 ### 7.5 Guidance system
 
-Wizard/state machine reads and writes `voicekit.jsonc`; "next step" is computed from manifest + environment (keys present? phone configured? tests passing? deployed?), so guidance stays correct mid-journey, not just at init.
+Wizard/state machine reads and writes `voicey.jsonc`; "next step" is computed from manifest + environment (keys present? phone configured? tests passing? deployed?), so guidance stays correct mid-journey, not just at init.
 
 ### 7.6 Error catalog
 
-Every raised error carries a stable code (`VK-TEL-021`), a plain-language cause, and a copy-paste fix; carrier/provider error codes are mapped into the catalog (e.g. Twilio 21205 → "webhook not public — is `voicekit dev --phone` running?"). Catalog is a docs page; CLI links each error to its anchor. Unmapped errors print the raw cause plus a pre-filled GitHub issue link — an unmapped error is a bug by policy.
+Every raised error carries a stable code (`VY-TEL-021`), a plain-language cause, and a copy-paste fix; carrier/provider error codes are mapped into the catalog (e.g. Twilio 21205 → "webhook not public — is `voicey dev --phone` running?"). Catalog is a docs page; CLI links each error to its anchor. Unmapped errors print the raw cause plus a pre-filled GitHub issue link — an unmapped error is a bug by policy.
 
 ---
 
-## 8. Browser playground (`voicekit dev`)
+## 8. Browser playground (`voicey dev`)
 
 - Serves a local web app; **Pipecat projects** connect via RTVI client SDKs; **LiveKit projects** via livekit-client — internal detail, identical UX.
 - Uses two loopback listeners: `--port` is the public runtime/signaling listener and `--port + 1` is the admin playground/read-API listener. A tunnel may forward only the public listener; the admin listener is never a tunnel target. Non-local admin deployment requires an integrator authentication hook.
-- Browser session creation requires a short-lived, one-use **voicekit** bearer token bound to the agent, audience, session, and resulting peer/call. The voicekit token is sent in the `Authorization` header, never in a URL; origin/host policy, trusted-proxy reconstruction, issuance limits, and signaling rate limits are enforced server-side. On LiveKit, successful authenticated exchange returns a separate short-lived, least-privilege room credential to the pinned official client. The client may carry that provider credential using LiveKit's native signaling protocol; it is not a voicekit session token or a provider API key.
+- Browser session creation requires a short-lived, one-use **voicey** bearer token bound to the agent, audience, session, and resulting peer/call. The voicey token is sent in the `Authorization` header, never in a URL; origin/host policy, trusted-proxy reconstruction, issuance limits, and signaling rate limits are enforced server-side. On LiveKit, successful authenticated exchange returns a separate short-lived, least-privilege room credential to the pinned official client. The client may carry that provider credential using LiveKit's native signaling protocol; it is not a voicey session token or a provider API key.
 - Surface: mic button + live conversation; streaming transcript with per-turn latency badges; event feed (tool calls with args/results/duration, state transitions, interruptions); captured `data` panel updating live; the exact webhook payload preview at call end ("what your server will receive"); latency breakdown per subsystem (STT/LLM/TTS/e2e) per turn.
 - Hot reload: prompts and config apply next session; flow code restarts the runtime worker between calls with a visible "reloaded" marker.
 - Also serves the local read API used by `calls show` — playground and CLI read the same store.
 
 ---
 
-## 9. Simulated-caller testing (`voicekit test`)
+## 9. Simulated-caller testing (`voicey test`)
 
 Scenario file (owned code, `tests/`):
 
 ```python
-from voicekit.testing import scenario
+from voicey.testing import scenario
 
 @scenario
 def changes_mind():
@@ -395,10 +399,10 @@ def changes_mind():
 ```
 
 - **Tiers:** `test` (default) = text-mode — sim-caller LLM ↔ agent LLM+flow with tools live or mocked; fast, cheap, CI-default. `--audio` = full pipeline — caller turns synthesized via TTS, pushed as audio through the real STT→LLM→TTS path; catches pronunciation, endpointing, barge-in issues. `--live` = real PSTN loopback — engine places an actual call to the agent's number with the sim caller on the line; nightly CI, pre-deploy smoke. The live tier is black-box: it judges caller-visible transcript and carrier terminal evidence, never claims access to the target agent's hidden tool state. It fails before caller planning or dialing unless the operator supplies the exact paid-PSTN acknowledgement, a bounded call budget covering the selected cases and all three allowed reruns, the target number, and complete path credentials. Pipecat uses a native caller pipeline over a signed Twilio Media Stream; LiveKit uses a native caller `AgentSession` and an outbound SIP participant.
-- **Assertions:** hard checks on `outcome`/`data`/turn-count/latency budgets + LLM-judge criteria (must cite transcript lines; judge model configurable).
+- **Assertions:** hard checks on `outcome`/`data`/turn-count/latency budgets + LLM-judge criteria (must cite transcript lines; judge model configurable). `ScenarioTurn.runtimes` defaults to both engines and may narrow an interaction turn only where the pinned native frameworks require distinct primitives (for example, LiveKit's prebuilt contact-confirmation tasks); scenario goals, hard outcomes, and final business assertions remain shared and both compiled branches stay release-gated.
 - Deterministic seeds where providers allow; flake policy: a scenario failing <100% reruns 3× and reports stability %, never silently passes.
 - Output: terminal table, `--report junit` for CI. Live JUnit includes secret-free provider/path/call identifiers and terminal status; it never includes credentials. **Recipes ship with their sim suites passing in both runtimes — enforced by release CI (§17).**
-- **Reliability soak API:** `voicekit.testing.SoakConfig`,
+- **Reliability soak API:** `voicey.testing.SoakConfig`,
   `run_engine_soak()`, and `SoakReport` drive deterministic simulated
   caller/agent turns through the shared fenced lifecycle at the selected
   runtimes' `max_concurrent`. Reports fail closed on incomplete/duplicate
@@ -411,8 +415,8 @@ def changes_mind():
 ## 10. Recipe registry
 
 - **A recipe =** `recipe.jsonc` (metadata, version, min-engine) + per-runtime `pipecat/flow.py` + `livekit/flow.py` + shared `prompts/`, `tools.py` stubs (TODO-marked integration points), `tests/` sim suite, and a README (what it does, what to customize, integration points).
-- **Distribution:** shadcn-model — `voicekit recipes add <name>` copies source into the project (runtime-matching variant), records its version in the manifest, and writes the deterministic `voicekit.recipe-lock.json` base. `recipes update-check` performs a read-only three-way comparison of base/local/installed-upstream content, reports SHA-256 digests and `unchanged` / `local-only` / `upstream-only` / `converged` / `conflict`, and emits explicit hunk-level AI-merge guidance. It never emits source contents in JSON and **never auto-overwrites**.
-- **Engine upgrades:** `voicekit upgrade` requires `uv >=0.11,<1`, changes only the `voicekit` resolution in `uv.lock`, runs `uv sync --locked`, and invokes `recipes update-check --json` through the newly locked environment. Stable mode permits prerelease-tagged transitive packages only when resolution requires or explicitly names them, then rejects a prerelease `voicekit` version before sync; `--pre` allows the canary channel. `pyproject.toml` and recipe-owned project source are byte-checked before/after; failures restore the prior lockfile and resync when possible.
+- **Distribution:** shadcn-model — `voicey recipes add <name>` copies source into the project (runtime-matching variant), records its version in the manifest, and writes the deterministic `voicey.recipe-lock.json` base. `recipes update-check` performs a read-only three-way comparison of base/local/installed-upstream content, reports SHA-256 digests and `unchanged` / `local-only` / `upstream-only` / `converged` / `conflict`, and emits explicit hunk-level AI-merge guidance. It never emits source contents in JSON and **never auto-overwrites**.
+- **Engine upgrades:** `voicey upgrade` requires `uv >=0.11,<1`, changes only the `voicey` resolution in `uv.lock`, runs `uv sync --locked`, and invokes `recipes update-check --json` through the newly locked environment. Stable mode permits prerelease-tagged transitive packages only when resolution requires or explicitly names them, then rejects a prerelease `voicey` version before sync; `--pre` allows the canary channel. `pyproject.toml` and recipe-owned project source are byte-checked before/after; failures restore the prior lockfile and resync when possible.
 - **Launch set (each: both runtimes, sim-tested, production conversation design — voicemail, barge-in, "actually, change that", human-transfer, graceful failure):**
   1. `appointment-booking` (book/reschedule/cancel; calendar-API stub)
   2. `restaurant-reservations` (party size/time/special requests; waitlist fallback)
@@ -423,7 +427,7 @@ def changes_mind():
 
 ---
 
-## 11. Deployment (`voicekit deploy`)
+## 11. Deployment (`voicey deploy`)
 
 Deploy = generate artifacts → drive the platform's own CLI/API → sync secrets → cut telephony over → smoke-verify. Targets:
 
@@ -438,7 +442,7 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 - **Smoke verification** (default on): one real test call post-cutover; reports answer latency, greeting match, webhook delivery; failure offers instant rollback (`numbers restore`). On the canonical Docker target, `--smoke <url> --to <E.164>` first proves the public ready/storage/admission health contract and then places the explicitly confirmed paid phone call. Pipecat Cloud first starts and stops a real platform session and proves begin/terminal relay persistence; LiveKit Cloud creates a real room with named dispatch and proves begin/terminal relay persistence. Fly and Railway are durable results companions rather than media workers: promotion first requires their two-replica platform release, real managed-storage preflight, unsigned liveness, and signed relay readiness, then a paired cloud-worker paid call with an acknowledged terminal result. Phone projects additionally require `--smoke-to <E.164>` for a paid carrier/SIP call unless the operator explicitly uses `--skip-smoke`. A web-only target still requires a real browser conversation for media evidence and cannot substitute the platform control-plane smoke for speech.
 - Zero-downtime redeploys documented per target (drain: stop accepting new calls, let active calls finish — engine exposes a drain signal handler).
 - **Storage repository:** lifecycle, call-record, and outbox persistence use one repository contract and one logical schema. Docker/self-host uses SQLite WAL on one local persistent volume; same-host multi-process handover is supported, while network-volume or cross-replica SQLite is rejected. Fly and Railway use platform-managed Postgres. Backend contract tests, startup schema validation, migration locks, and expand/contract migrations ensure overlapping generations share the schema safely.
-- **Cloud-worker relay:** ephemeral Pipecat Cloud and LiveKit Cloud workers use an authenticated results relay backed by the same repository contract. The durable relay must acknowledge `begin_call` before a worker accepts a call, issue a fencing token, accept an ordered idempotent update stream, acknowledge terminal persistence, recover stale calls server-side, rotate credentials, and prevent replay. Workers fail closed when the relay is unreachable. The certified companion is voicekit in results-service mode on user-owned Fly or Railway compute with platform-managed Postgres and private object storage; `--relay-url` supports an equivalently validated user-owned relay.
+- **Cloud-worker relay:** ephemeral Pipecat Cloud and LiveKit Cloud workers use an authenticated results relay backed by the same repository contract. The durable relay must acknowledge `begin_call` before a worker accepts a call, issue a fencing token, accept an ordered idempotent update stream, acknowledge terminal persistence, recover stale calls server-side, rotate credentials, and prevent replay. Workers fail closed when the relay is unreachable. The certified companion is voicey in results-service mode on user-owned Fly or Railway compute with platform-managed Postgres and private object storage; `--relay-url` supports an equivalently validated user-owned relay.
 - **Artifacts:** recordings use an artifact-store contract. Docker/self-host uses a protected local filesystem; Fly/Railway and cloud-relay deployments use durable object storage. The durable side owns authenticated carrier download, access control, `call.recording.ready`, and retention deletion.
 - **Artifact access:** an engine recording URL never embeds a bearer or carrier URL. `GET` requires `Authorization: Bearer <current-or-previous Results webhook secret>`, returns `Cache-Control: private, no-store`, and accepts the previous secret during the same rotation overlap as result verification.
 
@@ -449,10 +453,10 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 - **Structured JSON logs** (call_id-correlated) with a human-pretty dev renderer; levels documented; no PII at info level.
 - **Per-call record** (repository-backed SQLite or Postgres): config_hash, timeline, transcript, tool calls, latency series, terminal reason, webhook delivery status.
 - **Latency instrumentation** per subsystem per turn (STT partial/final, LLM TTFT, TTS TTFB, mouth-to-ear e2e) — powers playground badges, test budgets, and the smoke report.
-- **Prometheus endpoint** (opt-in): `voicekit_active_calls`,
-  `voicekit_calls_total` (call rate via PromQL `rate()`),
-  `voicekit_errors_total{code}`, `voicekit_results_dlq_depth`, and
-  `voicekit_turn_latency_ms` histograms. It is a separate listener, binds
+- **Prometheus endpoint** (opt-in): `voicey_active_calls`,
+  `voicey_calls_total` (call rate via PromQL `rate()`),
+  `voicey_errors_total{code}`, `voicey_results_dlq_depth`, and
+  `voicey_turn_latency_ms` histograms. It is a separate listener, binds
   loopback by default, carries no transcript/tool payloads, and is enabled with
   `Observability(prometheus_enabled=True)`.
 - Optional OTLP/HTTP protobuf export (one root span per call and child spans per
@@ -467,7 +471,7 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 
 ## 13. Security
 
-- **Inbound:** carrier signature verification mandatory per adapter (negative-tested in certification); playground/local API bound to localhost by default; web client session exchange uses short-lived voicekit tokens and exposes no provider API keys (LiveKit's official client receives only a scoped room credential for its native signaling protocol); `web.allowed_origins` enforced.
+- **Inbound:** carrier signature verification mandatory per adapter (negative-tested in certification); playground/local API bound to localhost by default; web client session exchange uses short-lived voicey tokens and exposes no provider API keys (LiveKit's official client receives only a scoped room credential for its native signaling protocol); `web.allowed_origins` enforced.
 - **Outbound:** results webhook HMAC (two-secret rotation, §6.2); HTTPS-only enforcement.
 - **Secrets:** env-only (`_env`-suffixed config fields); webhook secrets use `whsec_` serialization and support current+previous env names; secrets are never serialized into config JSON, logs, call records, or images; deploy syncs to target secret stores; `doctor` flags secrets found in files.
 - **PII:** `results.redact` field-level redaction pre-delivery; recording on/off per agent; transcript retention window config (`purge_after_days`); purge spans database rows, SQLite WAL, outbox/dead-letters, recordings, and backups on both repository backends and artifact stores; a documented data-map (what is stored where) for users' own compliance work.
@@ -488,12 +492,12 @@ Deploy = generate artifacts → drive the platform's own CLI/API → sync secret
 
 ## 15. Versioning & release engineering
 
-- **SemVer** on the `voicekit` package; public API = `agent.py` schema, `tool`/`results`/`testing` APIs, webhook payload, CLI commands/flags, adapter Protocol.
+- **SemVer** on the `voicey` package; public API = `agent.py` schema, `tool`/`results`/`testing` APIs, webhook payload, CLI commands/flags, adapter Protocol.
 - **Runtime compatibility:** each release pins tested ranges of `pipecat-ai`/`livekit-agents`; the initial empirically certified windows are Pipecat `>=1.6.0,<1.6.1` and LiveKit Agents `>=1.6.7,<1.6.8`, while generated project extras remain exact at the tested versions. A compatibility table lives in docs; CI installs every declared edge on Python 3.11 and 3.14 and exercises all first-party recipes. Out-of-range installs warn loudly (not fail) with the table link; a missing runtime remains a setup failure.
-- **Project upgrade transaction:** supported projects use `uv >=0.11,<1` and declare `voicekit` directly in `project.dependencies`. The built-in upgrader executes `uv lock --upgrade-package voicekit --prerelease <mode>`, validates the selected voicekit channel, then passes the same mode to `uv sync --locked` and `uv run --locked`; it never rewrites the dependency declaration or recipe source.
+- **Project upgrade transaction:** supported projects use `uv >=0.11,<1` and declare `voicey` directly in `project.dependencies`. The built-in upgrader executes `uv lock --upgrade-package voicey --prerelease <mode>`, validates the selected voicey channel, then passes the same mode to `uv sync --locked` and `uv run --locked`; it never rewrites the dependency declaration or recipe source.
 - **Deprecation policy:** nothing public removed with less than 2 minor versions of runtime warnings + changelog + migration note.
 - **Webhook payload versioning:** additive-only within a major; envelope carries no version field until v2 is ever needed (then explicit).
-- Release cadence target: minor every 4–6 weeks; canary channel (`pip install voicekit --pre`) exercised from an installed wheel by every first-party recipe on both native runtimes before stable. Stable artifact preparation requires a green canary report for the same release line. Automated workflows build private artifacts only; name selection and public publishing are human-only.
+- Release cadence target: minor every 4–6 weeks; canary channel (`pip install voicey --pre`) exercised from an installed wheel by every first-party recipe on both native runtimes before stable. Stable artifact preparation requires a green canary report for the same release line. Automated workflows build private artifacts only; name selection and public publishing are human-only.
 
 ---
 
@@ -529,8 +533,8 @@ Ship-blocking acceptance criteria, measured in CI or scripted checks:
 ## 18. Repo layout
 
 ```
-voicekit/
-├── src/voicekit/
+voicey/
+├── src/voicey/
 │   ├── config/        # schema, validation, manifest
 │   ├── telephony/     # adapter protocol + twilio/ telnyx/ vobiz/ plivo/ sip/
 │   ├── results/       # contract, signing, delivery, DLQ
@@ -575,15 +579,26 @@ Estimate honestly: this is roughly 4–6 months for a small senior team (2–3 e
 
 ## 21. Open decisions (need Jigyansu)
 
-1. **Name** (and therefore package/CLI/registry names) — everything above uses `voicekit` as placeholder.
-2. Hosting org for repo + docs domain.
-3. Judge-model default for sim tests (quality vs cost).
-4. P1 reference model set (Deepgram/Claude/Cartesia assumed above).
+1. Hosting org for repo + docs domain.
+
+Resolved decisions: the public name is **Voicey**; the simulator judge defaults
+to tool-capable local Ollama `qwen3:8b` with an explicit native-Anthropic or
+OpenAI-compatible cloud override; and the P1 reference stack is Deepgram
+Nova-3, Anthropic Claude, and Cartesia Sonic 3.5. A cloud override stores only
+the credential environment-variable name. Anthropic uses its native Messages
+API; it is never routed through an assumed OpenAI compatibility endpoint.
 
 Vobiz LiveKit feasibility was resolved positively in P3: Vobiz documents
-inbound and outbound LiveKit SIP interconnects. Voicekit provisions the current
+inbound and outbound LiveKit SIP interconnects. Voicey provisions the current
 Vobiz and LiveKit control planes with UDP/5060, the documented Vobiz gateway
 allowlist, explicit existing Vobiz credentials, deterministic reuse, and
 reverse rollback. The credentialed/PSTN commands remain a truthful release
-gate in `docs/GAPS.md`.
+gate in `docs/GAPS.md`. Credentialed verification pins the current Vobiz SIP
+control-plane shape: existing credentials are listed under
+`/trunks/credentials`/`objects`, and owned numbers under `items`; adoption
+remains exact and fail-closed. Vobiz represents an empty trunk list as
+`objects: null`, which is treated only as an empty documented list envelope.
+Number-route mutation snapshots both the current Voice API application and SIP
+trunk, records rollback ownership first, and restores the exact prior route by
+compare-and-swap after the temporary LiveKit binding.
 ```

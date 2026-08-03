@@ -16,7 +16,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.serializers.plivo import PlivoFrameSerializer
 
-from voicekit.telephony.twilio import (
+from voicey.telephony.twilio import (
     decode_mulaw,
     dominant_frequency,
     rms_energy,

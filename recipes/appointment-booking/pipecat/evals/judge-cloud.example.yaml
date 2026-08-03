@@ -1,5 +1,5 @@
 # Example private overlay. Select a supported service/model and inject its key
-# with `voicekit keys add <provider>`; never put the key in this file.
+# with `voicey keys add <provider>`; never put the key in this file.
 modality: text
 eval:
   service: openai

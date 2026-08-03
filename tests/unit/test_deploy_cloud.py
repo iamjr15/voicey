@@ -13,8 +13,8 @@ from typing import cast
 
 import pytest
 
-from voicekit.config.manifest import ManifestStore, ProjectManifest
-from voicekit.deploy.cloud import (
+from voicey.config.manifest import ManifestStore, ProjectManifest
+from voicey.deploy.cloud import (
     CloudArtifactGenerator,
     CloudCommandResult,
     CloudResourceState,
@@ -38,8 +38,8 @@ from voicekit.deploy.cloud import (
     _stage_wheel,
     _wait_relay_call,
 )
-from voicekit.errors import VoicekitError
-from voicekit.relay.auth import RelayCredential
+from voicey.errors import VoiceyError
+from voicey.relay.auth import RelayCredential
 
 
 class FakeRelayClient:
@@ -91,9 +91,9 @@ class FakePipecatCloudRunner:
             return _result("us-west Oregon\nus-east Virginia")
         if command[:3] == ("cloud", "agent", "status"):
             if not self.exists:
-                return _result("No deployment data found for agent with name 'voicekit-agent'")
+                return _result("No deployment data found for agent with name 'voicey-agent'")
             health = "Ready" if self.ready else "Stopped"
-            return _result(f"Status for agent voicekit-agent\nHealth: {health}")
+            return _result(f"Status for agent voicey-agent\nHealth: {health}")
         if command[:3] == ("cloud", "secrets", "set"):
             path = Path(command[command.index("--file") + 1])
             assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -108,7 +108,7 @@ class FakePipecatCloudRunner:
         if command[:2] == ("cloud", "deploy"):
             self.exists = True
             self.ready = True
-            return _result("Agent deployment 'voicekit-agent' is ready")
+            return _result("Agent deployment 'voicey-agent' is ready")
         if command[:3] == ("cloud", "agent", "start"):
             return _result("Agent started\nSession ID: session_123")
         if command[:3] == ("cloud", "agent", "stop"):
@@ -141,7 +141,7 @@ class FakeLiveKitCloudRunner:
         command = tuple(arguments)
         self.commands.append(command)
         if command[:2] == ("project", "list"):
-            return _result('[{"name":"voicekit-test"}]')
+            return _result('[{"name":"voicey-test"}]')
         if command[:2] == ("agent", "config"):
             (cwd / "livekit.toml").write_text(
                 f'agent_id = "{self.agent_id}"\n',
@@ -185,7 +185,7 @@ def _result(stdout: str, *, returncode: int = 0) -> CloudCommandResult:
 
 
 def _wheel(path: Path) -> Path:
-    wheel = path / "voicekit-0.0.0.dev0-py3-none-any.whl"
+    wheel = path / "voicey-0.0.0.dev0-py3-none-any.whl"
     wheel.write_bytes(b"wheel")
     return wheel
 
@@ -193,10 +193,10 @@ def _wheel(path: Path) -> Path:
 def _project(path: Path, runtime: str) -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / "agent.py").write_text(
-        f"""from voicekit import Agent, Models, Results, Web
+        f"""from voicey import Agent, Models, Results, Web
 
 agent = Agent(
-    name="voicekit-agent",
+    name="voicey-agent",
     runtime={runtime!r},
     models=Models(
         stt="deepgram/nova-3",
@@ -209,7 +209,7 @@ agent = Agent(
     web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
     results=Results(
         webhook="https://receiver.example.test/results",
-        secret_env="VOICEKIT_WEBHOOK_SECRET",
+        secret_env="VOICEY_WEBHOOK_SECRET",
     ),
 )
 """,
@@ -221,14 +221,14 @@ agent = Agent(
         f"""[project]
 name = "cloud-fixture"
 version = "0.1.0"
-dependencies = ["voicekit[{runtime}]", "httpx>=0.28,<1"]
+dependencies = ["voicey[{runtime}]", "httpx>=0.28,<1"]
 """,
         encoding="utf-8",
     )
-    ManifestStore(path / "voicekit.jsonc").save(
+    ManifestStore(path / "voicey.jsonc").save(
         ProjectManifest.model_validate(
             {
-                "project_name": "voicekit-agent",
+                "project_name": "voicey-agent",
                 "runtime": runtime,
                 "recipe": {"name": "scratch", "version": "1.0.0"},
                 "carriers": [],
@@ -247,13 +247,13 @@ dependencies = ["voicekit[{runtime}]", "httpx>=0.28,<1"]
     (path / ".env").write_text(
         "\n".join(
             (
-                f"VOICEKIT_RELAY_CREDENTIAL={relay}",
+                f"VOICEY_RELAY_CREDENTIAL={relay}",
                 "DEEPGRAM_API_KEY=deepgram-test",
                 "ANTHROPIC_API_KEY=anthropic-test",
                 "CARTESIA_API_KEY=cartesia-test",
                 "CUSTOM_TOOL_TOKEN=tool-test",
-                "VOICEKIT_WEBHOOK_SECRET=whsec_not_for_worker",
-                "VOICEKIT_RESULTS_SECRET=whsec_not_for_worker",
+                "VOICEY_WEBHOOK_SECRET=whsec_not_for_worker",
+                "VOICEY_RESULTS_SECRET=whsec_not_for_worker",
                 "",
             )
         ),
@@ -264,12 +264,12 @@ dependencies = ["voicekit[{runtime}]", "httpx>=0.28,<1"]
 
 def _pcc_plan() -> PipecatCloudPlan:
     return PipecatCloudPlan(
-        agent_name="voicekit-agent",
-        organization="voicekit-test",
+        agent_name="voicey-agent",
+        organization="voicey-test",
         region="us-west",
-        secret_set="voicekit-agent-secrets",
-        image="registry.example.test/voicekit/agent:sha-123",
-        relay_url="https://voicekit-results.fly.dev",
+        secret_set="voicey-agent-secrets",
+        image="registry.example.test/voicey/agent:sha-123",
+        relay_url="https://voicey-results.fly.dev",
         min_agents=1,
         max_agents=4,
         profile="agent-1x",
@@ -278,10 +278,10 @@ def _pcc_plan() -> PipecatCloudPlan:
 
 def _lk_plan(*, agent_id: str | None = None) -> LiveKitCloudPlan:
     return LiveKitCloudPlan(
-        agent_name="voicekit-agent",
-        project="voicekit-test",
+        agent_name="voicey-agent",
+        project="voicey-test",
         region="us-west",
-        relay_url="https://voicekit-results.fly.dev",
+        relay_url="https://voicey-results.fly.dev",
         agent_id=agent_id,
     )
 
@@ -294,9 +294,9 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     artifacts = CloudArtifactGenerator(project).generate(
         "pipecat-cloud",
         engine_wheel=_wheel(tmp_path),
-        agent_name="voicekit-agent",
-        secret_set="voicekit-agent-secrets",
-        image="registry.example.test/voicekit/agent:sha-123",
+        agent_name="voicey-agent",
+        secret_set="voicey-agent-secrets",
+        image="registry.example.test/voicey/agent:sha-123",
         region="us-west",
         min_agents=1,
         max_agents=4,
@@ -307,15 +307,15 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     config = artifacts.platform_config.read_text(encoding="utf-8")  # type: ignore[union-attr]
     bot = artifacts.bot.read_text(encoding="utf-8")  # type: ignore[union-attr]
     assert "USER 10001:10001" in dockerfile
-    assert "voicekit.deploy.cloud_runtime" in bot
-    assert 'agent_name = "voicekit-agent"' in config
+    assert "voicey.deploy.cloud_runtime" in bot
+    assert 'agent_name = "voicey-agent"' in config
     assert "CUSTOM_TOOL_TOKEN" not in _context_text(artifacts.context)
     assert "do-not-copy" not in _context_text(artifacts.context)
     assert ".env" not in {path.name for path in artifacts.context.rglob("*")}
     assert "httpx>=0.28,<1" in (artifacts.context / "project-requirements.txt").read_text(
         encoding="utf-8"
     )
-    assert "voicekit[pipecat]" not in (artifacts.context / "project-requirements.txt").read_text(
+    assert "voicey[pipecat]" not in (artifacts.context / "project-requirements.txt").read_text(
         encoding="utf-8"
     )
     assert len(artifacts.digest) == 64
@@ -325,12 +325,12 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     lk_artifacts = CloudArtifactGenerator(livekit).generate(
         "livekit-cloud",
         engine_wheel=_wheel(tmp_path),
-        agent_name="voicekit-agent",
+        agent_name="voicey-agent",
         region="us-west",
     )
     assert lk_artifacts.bot is None
     assert lk_artifacts.platform_config is None
-    assert '"voicekit.deploy.cloud_runtime", "livekit"' in (
+    assert '"voicey.deploy.cloud_runtime", "livekit"' in (
         lk_artifacts.dockerfile.read_text(encoding="utf-8")
     )
 
@@ -340,24 +340,24 @@ def test_cloud_artifact_rejects_symlink_and_bad_plan(tmp_path: Path) -> None:
     _project(project, "pipecat")
     (project / "outside.txt").write_text("outside", encoding="utf-8")
     (project / "linked.py").symlink_to(project / "outside.txt")
-    with pytest.raises(VoicekitError, match="rejects symlink"):
+    with pytest.raises(VoiceyError, match="rejects symlink"):
         CloudArtifactGenerator(project).generate(
             "pipecat-cloud",
             engine_wheel=_wheel(tmp_path),
-            agent_name="voicekit-agent",
-            secret_set="voicekit-agent-secrets",
-            image="registry.example.test/voicekit/agent:sha-123",
+            agent_name="voicey-agent",
+            secret_set="voicey-agent-secrets",
+            image="registry.example.test/voicey/agent:sha-123",
             region="us-west",
             min_agents=1,
             max_agents=4,
             profile="agent-1x",
         )
-    with pytest.raises(VoicekitError, match="VK-DEP-008"):
+    with pytest.raises(VoiceyError, match="VY-DEP-008"):
         PipecatCloudPlan(
             agent_name="Bad_Name",
-            organization="voicekit-test",
+            organization="voicey-test",
             region="us-west",
-            secret_set="voicekit-agent-secrets",
+            secret_set="voicey-agent-secrets",
             image="latest",
             relay_url="http://public.example.test",
             min_agents=5,
@@ -373,8 +373,8 @@ def test_platform_runner_maps_missing_failure_and_timeout_without_output_leak(
     def missing_executable(_name: str) -> None:
         return None
 
-    monkeypatch.setattr("voicekit.deploy.cloud.shutil.which", missing_executable)
-    with pytest.raises(VoicekitError, match="VK-DEP-009"):
+    monkeypatch.setattr("voicey.deploy.cloud.shutil.which", missing_executable)
+    with pytest.raises(VoiceyError, match="VY-DEP-009"):
         PlatformCliRunner("pipecat")
 
     runner = PlatformCliRunner.__new__(PlatformCliRunner)
@@ -383,15 +383,15 @@ def test_platform_runner_maps_missing_failure_and_timeout_without_output_leak(
     failed = subprocess.CompletedProcess(
         args=["pipecat"],
         returncode=1,
-        stdout="VOICEKIT_RELAY_CREDENTIAL=vkr_secret",
+        stdout="VOICEY_RELAY_CREDENTIAL=vkr_secret",
         stderr="ANTHROPIC_API_KEY=secret",
     )
 
     def failed_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return failed
 
-    monkeypatch.setattr("voicekit.deploy.cloud.subprocess.run", failed_run)
-    with pytest.raises(VoicekitError, match="exit 1") as caught:
+    monkeypatch.setattr("voicey.deploy.cloud.subprocess.run", failed_run)
+    with pytest.raises(VoiceyError, match="exit 1") as caught:
         runner.run(["cloud", "auth", "whoami"], cwd=tmp_path)
     assert "vkr_secret" not in str(caught.value)
     assert "ANTHROPIC_API_KEY" not in str(caught.value)
@@ -399,8 +399,8 @@ def test_platform_runner_maps_missing_failure_and_timeout_without_output_leak(
     def timeout(*_args: object, **_kwargs: object) -> object:
         raise subprocess.TimeoutExpired(["pipecat"], 1)
 
-    monkeypatch.setattr("voicekit.deploy.cloud.subprocess.run", timeout)
-    with pytest.raises(VoicekitError, match="TimeoutExpired"):
+    monkeypatch.setattr("voicey.deploy.cloud.subprocess.run", timeout)
+    with pytest.raises(VoiceyError, match="TimeoutExpired"):
         runner.run(["cloud"], cwd=tmp_path)
 
     def unchecked_run(
@@ -411,7 +411,7 @@ def test_platform_runner_maps_missing_failure_and_timeout_without_output_leak(
             args=["pipecat"], returncode=7, stdout="diagnostic", stderr=""
         )
 
-    monkeypatch.setattr("voicekit.deploy.cloud.subprocess.run", unchecked_run)
+    monkeypatch.setattr("voicey.deploy.cloud.subprocess.run", unchecked_run)
     result = runner.run(["cloud"], cwd=tmp_path, check=False)
     assert result.returncode == 7
     assert result.stdout == "diagnostic"
@@ -453,17 +453,17 @@ async def test_pipecat_cloud_deploy_syncs_without_argv_secrets_smokes_and_resume
     assert FakeRelayClient.opens == 3
     assert all(not path.exists() for path in runner.secret_file_paths)
     assert all("vkr_" not in " ".join(command) for command in runner.commands)
-    assert "VOICEKIT_RELAY_CREDENTIAL" in runner.secret_names
+    assert "VOICEY_RELAY_CREDENTIAL" in runner.secret_names
     assert "CUSTOM_TOOL_TOKEN" in runner.secret_names
-    assert "VOICEKIT_WEBHOOK_SECRET" not in runner.secret_names
-    assert "VOICEKIT_RESULTS_SECRET" not in runner.secret_names
+    assert "VOICEY_WEBHOOK_SECRET" not in runner.secret_names
+    assert "VOICEY_RESULTS_SECRET" not in runner.secret_names
     assert sum(command[:2] == ("cloud", "deploy") for command in runner.commands) == 2
     ledger = manager.store.path.read_text(encoding="utf-8")
     dotenv = (project / ".env").read_text(encoding="utf-8")
     relay_value = next(
         line.split("=", maxsplit=1)[1]
         for line in dotenv.splitlines()
-        if line.startswith("VOICEKIT_RELAY_CREDENTIAL=")
+        if line.startswith("VOICEY_RELAY_CREDENTIAL=")
     )
     assert relay_value not in ledger
 
@@ -481,7 +481,7 @@ async def test_pipecat_cloud_requires_adoption_and_never_deletes_adopted_agent(
         relay_client_factory=cast("object", FakeRelayClient),  # type: ignore[arg-type]
     )
     sys.modules.pop("agent", None)
-    with pytest.raises(VoicekitError, match="use --adopt"):
+    with pytest.raises(VoiceyError, match="use --adopt"):
         await manager.deploy(
             _pcc_plan(),
             environment={},
@@ -497,7 +497,7 @@ async def test_pipecat_cloud_requires_adoption_and_never_deletes_adopted_agent(
         skip_session_smoke=True,
     )
     assert report.state.agent_adopted
-    with pytest.raises(VoicekitError, match="cannot be deleted"):
+    with pytest.raises(VoiceyError, match="cannot be deleted"):
         manager.rollback_created(_pcc_plan())
 
 
@@ -578,7 +578,7 @@ async def test_livekit_adoption_is_explicit_and_created_first_version_deletes(
         relay_client_factory=cast("object", FakeRelayClient),  # type: ignore[arg-type]
     )
     sys.modules.pop("agent", None)
-    with pytest.raises(VoicekitError, match="explicit --adopt"):
+    with pytest.raises(VoiceyError, match="explicit --adopt"):
         await adopted.deploy(
             _lk_plan(agent_id=runner.agent_id),
             environment={},
@@ -612,8 +612,8 @@ def test_cloud_resource_store_rejects_permissions_symlink_and_drift(
     credential = RelayCredential.issue("ledger-key")
     state = CloudResourceState.initial(
         platform="pipecat-cloud",
-        agent_name="voicekit-agent",
-        account_scope="voicekit-test",
+        agent_name="voicey-agent",
+        account_scope="voicey-test",
         region="us-west",
         relay_url="https://relay.example.test",
         relay=credential,
@@ -624,23 +624,23 @@ def test_cloud_resource_store_rejects_permissions_symlink_and_drift(
     store.save(state)
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
     store.path.chmod(0o644)
-    with pytest.raises(VoicekitError, match="VK-SEC-001"):
+    with pytest.raises(VoiceyError, match="VY-SEC-001"):
         store.load()
     store.path.unlink()
     target = tmp_path / "target.json"
     target.write_text("{}\n", encoding="utf-8")
     store.path.symlink_to(target)
-    with pytest.raises(VoicekitError, match="VK-SEC-002"):
+    with pytest.raises(VoiceyError, match="VY-SEC-002"):
         store.load()
-    with pytest.raises(VoicekitError, match="not an object"):
+    with pytest.raises(VoiceyError, match="not an object"):
         CloudResourceState.from_payload([])
-    with pytest.raises(VoicekitError, match="fields are invalid"):
+    with pytest.raises(VoiceyError, match="fields are invalid"):
         CloudResourceState.from_payload({"schema_version": 1})
-    with pytest.raises(VoicekitError, match="drifted"):
+    with pytest.raises(VoiceyError, match="drifted"):
         state.validate(
             platform="pipecat-cloud",
             agent_name="other-agent",
-            account_scope="voicekit-test",
+            account_scope="voicey-test",
             region="us-west",
             relay_url="https://relay.example.test",
             relay_fingerprint="a" * 64,
@@ -648,18 +648,18 @@ def test_cloud_resource_store_rejects_permissions_symlink_and_drift(
 
 
 def test_cloud_validation_and_parsing_fail_closed(tmp_path: Path) -> None:
-    with pytest.raises(VoicekitError, match="LiveKit Cloud project"):
+    with pytest.raises(VoiceyError, match="LiveKit Cloud project"):
         LiveKitCloudPlan(
-            agent_name="voicekit-agent",
+            agent_name="voicey-agent",
             project="Bad_Project",
             region="us-west",
             relay_url="https://relay.example.test",
             agent_id="bad",
         )
-    with pytest.raises(VoicekitError, match="relay URL"):
+    with pytest.raises(VoiceyError, match="relay URL"):
         LiveKitCloudPlan(
-            agent_name="voicekit-agent",
-            project="voicekit-test",
+            agent_name="voicey-agent",
+            project="voicey-test",
             region="us-west",
             relay_url="https://user:pass@relay.example.test?token=secret",
         )
@@ -668,25 +668,25 @@ def test_cloud_validation_and_parsing_fail_closed(tmp_path: Path) -> None:
     store.path.parent.mkdir(parents=True)
     store.path.write_text("{broken", encoding="utf-8")
     store.path.chmod(0o600)
-    with pytest.raises(VoicekitError, match="cannot be read"):
+    with pytest.raises(VoiceyError, match="cannot be read"):
         store.load()
 
     credential = RelayCredential.issue("rolled-key")
     rolled = CloudResourceState.initial(
         platform="livekit-cloud",
-        agent_name="voicekit-agent",
-        account_scope="voicekit-test",
+        agent_name="voicey-agent",
+        account_scope="voicey-test",
         region="us-west",
         relay_url="https://relay.example.test",
         relay=credential,
         relay_fingerprint="a" * 64,
         artifact_digest="b" * 64,
     ).checkpoint(rolled_back=True)
-    with pytest.raises(VoicekitError, match="already rolled back"):
+    with pytest.raises(VoiceyError, match="already rolled back"):
         rolled.validate(
             platform="livekit-cloud",
-            agent_name="voicekit-agent",
-            account_scope="voicekit-test",
+            agent_name="voicey-agent",
+            account_scope="voicey-test",
             region="us-west",
             relay_url="https://relay.example.test",
             relay_fingerprint="a" * 64,
@@ -699,20 +699,20 @@ def test_cloud_artifact_error_and_replacement_paths(tmp_path: Path) -> None:
     generator = CloudArtifactGenerator(pipecat)
     wheel = _wheel(tmp_path)
 
-    with pytest.raises(VoicekitError, match="inputs are incomplete"):
+    with pytest.raises(VoiceyError, match="inputs are incomplete"):
         generator.generate(
             "pipecat-cloud",
             engine_wheel=wheel,
-            agent_name="voicekit-agent",
+            agent_name="voicey-agent",
             region="us-west",
         )
 
     first = generator.generate(
         "pipecat-cloud",
         engine_wheel=wheel,
-        agent_name="voicekit-agent",
-        secret_set="voicekit-agent-secrets",
-        image="registry.example.test/voicekit/agent:sha-123",
+        agent_name="voicey-agent",
+        secret_set="voicey-agent-secrets",
+        image="registry.example.test/voicey/agent:sha-123",
         region="us-west",
         min_agents=1,
         max_agents=4,
@@ -723,9 +723,9 @@ def test_cloud_artifact_error_and_replacement_paths(tmp_path: Path) -> None:
     second = generator.generate(
         "pipecat-cloud",
         engine_wheel=wheel,
-        agent_name="voicekit-agent",
-        secret_set="voicekit-agent-secrets",
-        image="registry.example.test/voicekit/agent:sha-124",
+        agent_name="voicey-agent",
+        secret_set="voicey-agent-secrets",
+        image="registry.example.test/voicey/agent:sha-124",
         region="us-west",
         min_agents=0,
         max_agents=2,
@@ -735,13 +735,13 @@ def test_cloud_artifact_error_and_replacement_paths(tmp_path: Path) -> None:
 
     livekit = tmp_path / "livekit"
     _project(livekit, "livekit")
-    with pytest.raises(VoicekitError, match="requires a pipecat project"):
+    with pytest.raises(VoiceyError, match="requires a pipecat project"):
         CloudArtifactGenerator(livekit).generate(
             "pipecat-cloud",
             engine_wheel=wheel,
-            agent_name="voicekit-agent",
-            secret_set="voicekit-agent-secrets",
-            image="registry.example.test/voicekit/agent:sha-123",
+            agent_name="voicey-agent",
+            secret_set="voicey-agent-secrets",
+            image="registry.example.test/voicey/agent:sha-123",
             region="us-west",
             min_agents=1,
             max_agents=4,
@@ -759,33 +759,33 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
     assert not _pipecat_agent_exists(_result("No deployment data found for agent demo"))
 
     _require_ready("Status: RUNNING", platform="test")
-    with pytest.raises(VoicekitError, match="did not report ready"):
+    with pytest.raises(VoiceyError, match="did not report ready"):
         _require_ready("Status: stopped", platform="test")
     _require_region("us-west Oregon", "us-west", platform="test")
-    with pytest.raises(VoicekitError, match="does not expose region"):
+    with pytest.raises(VoiceyError, match="does not expose region"):
         _require_region("us-east", "us-west", platform="test")
     _require_secret_names("A\nB\n", {"A", "B"})
-    with pytest.raises(VoicekitError, match="lacks C"):
+    with pytest.raises(VoiceyError, match="lacks C"):
         _require_secret_names("A\nB\n", {"A", "C"})
 
-    _require_livekit_project('["voicekit-test"]', "voicekit-test")
-    _require_livekit_project('{"projects":[{"name":"voicekit-test"}]}', "voicekit-test")
-    with pytest.raises(VoicekitError, match="did not return JSON"):
-        _require_livekit_project("not json", "voicekit-test")
-    with pytest.raises(VoicekitError, match="does not contain project"):
-        _require_livekit_project('{"unexpected":[]}', "voicekit-test")
-    with pytest.raises(VoicekitError, match="does not contain project"):
-        _require_livekit_project("null", "voicekit-test")
+    _require_livekit_project('["voicey-test"]', "voicey-test")
+    _require_livekit_project('{"projects":[{"name":"voicey-test"}]}', "voicey-test")
+    with pytest.raises(VoiceyError, match="did not return JSON"):
+        _require_livekit_project("not json", "voicey-test")
+    with pytest.raises(VoiceyError, match="does not contain project"):
+        _require_livekit_project('{"unexpected":[]}', "voicey-test")
+    with pytest.raises(VoiceyError, match="does not contain project"):
+        _require_livekit_project("null", "voicey-test")
 
     config = tmp_path / "livekit.toml"
     config.write_text('[agent]\nid = "agent_nested123"\n', encoding="utf-8")
     assert _livekit_agent_id(config, "") == "agent_nested123"
     config.write_text("{broken", encoding="utf-8")
-    with pytest.raises(VoicekitError, match=r"livekit\.toml is invalid"):
+    with pytest.raises(VoiceyError, match=r"livekit\.toml is invalid"):
         _livekit_agent_id(config, "")
     config.unlink()
     assert _livekit_agent_id(config, "Created agent_output123456") == "agent_output123456"
-    with pytest.raises(VoicekitError, match="did not persist or report"):
+    with pytest.raises(VoiceyError, match="did not persist or report"):
         _livekit_agent_id(config, "created")
 
     manifest = SimpleNamespace(runtime="livekit", carriers=["sip", "twilio"])
@@ -795,26 +795,26 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
 def test_cloud_wheel_requirements_and_secret_file_validation(tmp_path: Path) -> None:
     destination = tmp_path / "stage"
     destination.mkdir()
-    with pytest.raises(VoicekitError, match="unpublished builds require"):
+    with pytest.raises(VoiceyError, match="unpublished builds require"):
         _stage_wheel(None, destination)
     wrong = tmp_path / "package.whl"
     wrong.write_bytes(b"wrong")
-    with pytest.raises(VoicekitError, match="engine wheel is invalid"):
+    with pytest.raises(VoiceyError, match="engine wheel is invalid"):
         _stage_wheel(wrong, destination)
 
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("[project]\ndependencies = 'bad'\n", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="dependencies are invalid"):
+    with pytest.raises(VoiceyError, match="dependencies are invalid"):
         _project_requirements(pyproject)
     pyproject.write_text("[project\ndependencies=[]\n", encoding="utf-8")
-    with pytest.raises(VoicekitError, match=r"pyproject\.toml is invalid"):
+    with pytest.raises(VoiceyError, match=r"pyproject\.toml is invalid"):
         _project_requirements(pyproject)
     pyproject.write_text("[project]\ndependencies = [1]\n", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="dependencies are invalid"):
+    with pytest.raises(VoiceyError, match="dependencies are invalid"):
         _project_requirements(pyproject)
 
     holder = _secret_file({"GOOD": "value", "BAD": "two\nlines"})
-    with pytest.raises(VoicekitError, match="contains a line break"), holder:
+    with pytest.raises(VoiceyError, match="contains a line break"), holder:
         pass
     assert holder.path is not None
     assert not holder.path.exists()
@@ -829,7 +829,7 @@ async def test_wait_relay_call_retries_absence_and_propagates_other_errors() -> 
         async def get_call(self, _call_id: str) -> object:
             self.calls += 1
             if self.calls == 1:
-                raise VoicekitError("VK-OBS-003")
+                raise VoiceyError("VY-OBS-003")
             return SimpleNamespace(ended_at=datetime.now(UTC))
 
     client = Client()
@@ -845,9 +845,9 @@ async def test_wait_relay_call_retries_absence_and_propagates_other_errors() -> 
 
     class Broken:
         async def get_call(self, _call_id: str) -> object:
-            raise VoicekitError("VK-DEP-004", detail="relay rejected")
+            raise VoiceyError("VY-DEP-004", detail="relay rejected")
 
-    with pytest.raises(VoicekitError, match="relay rejected"):
+    with pytest.raises(VoiceyError, match="relay rejected"):
         await _wait_relay_call(
             cast("object", Broken()),  # type: ignore[arg-type]
             "call_test",

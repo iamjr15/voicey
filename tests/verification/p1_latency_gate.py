@@ -17,8 +17,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from voicekit.config.models import Agent
-from voicekit.obs import LatencySeries, LatencySummary
+from voicey.config.models import Agent
+from voicey.obs import LatencySeries, LatencySummary
 
 _REQUIRED_ENV = (
     "DEEPGRAM_API_KEY",
@@ -41,7 +41,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p1-latency-report.json"),
+        default=Path(".voicey/verification/p1-latency-report.json"),
     )
     args = parser.parse_args()
     project = args.project.expanduser().resolve()
@@ -60,7 +60,7 @@ def main() -> int:
         return 2
 
     if not project.is_dir():
-        parser.error("--project must be a generated voicekit project directory")
+        parser.error("--project must be a generated voicey project directory")
     actual_models = _load_models(project)
     if actual_models != _REFERENCE_MODELS:
         report = {
@@ -74,7 +74,7 @@ def main() -> int:
         print(json.dumps(report, sort_keys=True))
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="voicekit-p1-latency-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="voicey-p1-latency-") as temporary:
         copied_project = Path(temporary) / "project"
         shutil.copytree(
             project,
@@ -83,7 +83,7 @@ def main() -> int:
                 ".env",
                 ".env.*",
                 ".git",
-                ".voicekit",
+                ".voicey",
                 "eval-runs",
                 "__pycache__",
                 "*.pyc",
@@ -107,7 +107,7 @@ def main() -> int:
             cwd=copied_project,
             check=False,
         )
-        database = copied_project / ".voicekit" / "evals.db"
+        database = copied_project / ".voicey" / "evals.db"
         samples = _read_e2e_samples(database) if database.is_file() else []
 
     summary = summarize_latency(samples)
@@ -142,7 +142,7 @@ def main() -> int:
 
 def _load_models(project: Path) -> dict[str, str]:
     module_path = project / "agent.py"
-    spec = importlib.util.spec_from_file_location("voicekit_p1_latency_agent", module_path)
+    spec = importlib.util.spec_from_file_location("voicey_p1_latency_agent", module_path)
     if spec is None or spec.loader is None:
         return {}
     module = importlib.util.module_from_spec(spec)
@@ -158,7 +158,7 @@ def _load_models(project: Path) -> dict[str, str]:
 def _module_agent(module: ModuleType) -> Agent:
     candidate = cast(Any, module).agent
     if not isinstance(candidate, Agent):
-        raise TypeError("agent.py must expose a voicekit Agent as `agent`")
+        raise TypeError("agent.py must expose a voicey Agent as `agent`")
     return candidate
 
 

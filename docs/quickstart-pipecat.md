@@ -6,25 +6,25 @@ are installed.
 
 ## 1. Install the CLI
 
-Until the package has its final public name, install the reviewed wheel from a
-private release artifact:
+Until Voicey is published to PyPI, install the reviewed wheel from a private
+release artifact:
 
 ```bash
-uv tool install --from "./voicekit-0.0.0.dev0-py3-none-any.whl[pipecat]" voicekit
+uv tool install --from "./voicey-0.0.0.dev0-py3-none-any.whl[pipecat]" voicey
 ```
 
-After the human publishes the renamed package, replace the local wheel path
-with its pinned package version.
+After the Python distribution is published, replace the local wheel path with
+its pinned package version.
 
 ## 2. Create the project
 
 The command supplies product choices but no credentials. In an interactive
-terminal, voicekit asks for each missing Deepgram, Anthropic, and Cartesia key,
+terminal, voicey asks for each missing Deepgram, Anthropic, and Cartesia key,
 validates it immediately, and writes the project `.env` itself.
 
-<!-- voicekit-doc-test:start -->
+<!-- voicey-doc-test:start -->
 ```bash
-voicekit init ./hello-pipecat \
+voicey init ./hello-pipecat \
   --name hello-pipecat \
   --recipe scratch \
   --description "Answer concise product questions and confirm uncertainty." \
@@ -34,18 +34,18 @@ voicekit init ./hello-pipecat \
   --no-draft-prompts \
   --yes
 ```
-<!-- voicekit-doc-test:end -->
+<!-- voicey-doc-test:end -->
 
 The generated `flow.py` imports `NodeConfig` from `pipecat.flows`; there is no
-voicekit flow DSL. `tools.py` contains a typed placeholder function and
+voicey flow DSL. `tools.py` contains a typed placeholder function and
 `agent.py` contains only the shared engine configuration.
 
 ## 3. Verify and talk
 
 ```bash
 cd hello-pipecat
-voicekit doctor
-voicekit dev
+voicey doctor
+voicey dev
 ```
 
 Open the printed admin playground URL, allow microphone access, and speak. The
@@ -53,7 +53,7 @@ public media/signaling listener and protected admin listener are different
 ports. Stop with Ctrl-C; the process closes admission, drains active calls, and
 prints the next command.
 
-CI runs the exact marked `voicekit init` command from a freshly installed
+CI runs the exact marked `voicey init` command from a freshly installed
 wheel, imports and executes the generated native flow and typed tool, connects
 a provider-mocked SmallWebRTC browser peer, and verifies the terminal signed
 result under the five-minute budget. A real provider conversation remains a

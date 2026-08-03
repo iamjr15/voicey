@@ -31,7 +31,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p3-gate-report.json"),
+        default=Path(".voicey/verification/p3-gate-report.json"),
     )
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()
@@ -153,12 +153,12 @@ def main() -> int:
 
 
 def _managed_storage_gate(pytest: list[str]) -> GateResult:
-    if not os.environ.get("VOICEKIT_TEST_POSTGRES_DSN"):
+    if not os.environ.get("VOICEY_TEST_POSTGRES_DSN"):
         return GateResult(
             name="managed_postgres_and_results_service",
             status="pending-local-environment",
             command=(
-                "VOICEKIT_TEST_POSTGRES_DSN=postgresql://... "
+                "VOICEY_TEST_POSTGRES_DSN=postgresql://... "
                 "uv run pytest --no-cov -q tests/integration/test_postgres_repository.py "
                 "tests/integration/test_repository_backends.py "
                 "tests/integration/test_managed_results_service.py"
@@ -215,8 +215,11 @@ def _pending_external_results() -> list[GateResult]:
         GateResult(
             name="p3_recipe_conversations",
             status="pending-live",
-            command="run the six recipe/runtime text, audio, and JUnit loops in docs/GAPS.md",
-            detail="requires reference-provider keys, Ollama, and live integrations",
+            command="run the six recipe/runtime audio and JUnit loops in docs/GAPS.md",
+            detail=(
+                "all 34 provider text cases are green through the Anthropic API override; "
+                "audio/report and human warm-transfer evidence remain"
+            ),
         ),
         GateResult(
             name="vobiz_and_plivo_both_paths",
@@ -249,7 +252,7 @@ def _pending_external_results() -> list[GateResult]:
         GateResult(
             name="pipecat_twilio_warm_transfer",
             status="pending-human",
-            command="run the P3.6 two-handset `voicekit dev --phone` checklist in docs/GAPS.md",
+            command="run the P3.6 two-handset `voicey dev --phone` checklist in docs/GAPS.md",
             detail="requires funded Twilio, a public host, and two physical endpoints",
         ),
     ]

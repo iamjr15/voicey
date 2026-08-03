@@ -226,7 +226,7 @@ describe("App", () => {
       return jsonResponse(
         {
           error: {
-            code: "VK-WEB-003",
+            code: "VY-WEB-003",
             detail: "retry after 8s.",
             fix: "Wait and try again.",
           },
@@ -239,7 +239,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Start talking" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("VK-WEB-003");
+    expect(alert).toHaveTextContent("VY-WEB-003");
     expect(alert).toHaveTextContent("retry after 8s.");
     expect(alert).toHaveTextContent("Wait and try again.");
   });
@@ -255,6 +255,6 @@ describe("App", () => {
       await screen.findByRole("button", { name: "Retry session" }),
     ).toBeEnabled();
     expect(screen.queryByRole("button", { name: "End session" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("VK-WEB-005");
+    expect(await screen.findByRole("alert")).toHaveTextContent("VY-WEB-005");
   });
 });

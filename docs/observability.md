@@ -1,6 +1,6 @@
 # Observability and call records
 
-Voicekit separates operator logs from protected call records. Logs are safe for
+Voicey separates operator logs from protected call records. Logs are safe for
 central collection at the default level; call records intentionally contain
 transcripts and telephony identifiers and remain in protected storage.
 
@@ -9,7 +9,7 @@ transcripts and telephony identifiers and remain in protected storage.
 Production uses newline-delimited JSON:
 
 ```python
-from voicekit.obs import call_context, configure_logging, get_logger
+from voicey.obs import call_context, configure_logging, get_logger
 
 configure_logging(format="json", level="info")
 
@@ -31,7 +31,7 @@ select `format="pretty"` for the same structured events.
 |---|---|
 | `debug` | Local diagnostics; PII fields may be present, so do not enable in production |
 | `info` | Lifecycle names, stable ids, counts, states, and durations; no PII |
-| `warning` | Recoverable degradation with a stable `VK-*` code and safe metadata |
+| `warning` | Recoverable degradation with a stable `VY-*` code and safe metadata |
 | `error` / `critical` | Failed operation and operator action; no raw customer data |
 
 At info and higher, known PII fields are replaced with `[REDACTED]`, including
@@ -92,7 +92,7 @@ repository operation.
 | Call database / WAL | Yes | No | Private path; configured retention |
 | Results webhook | After configured field redaction only | No | Standard Webhooks signature |
 
-Next step after diagnosing a call: use `voicekit calls show <call-id>` once the
+Next step after diagnosing a call: use `voicey calls show <call-id>` once the
 P1.3 pull surface is installed.
 
 ## Prometheus
@@ -100,7 +100,7 @@ P1.3 pull surface is installed.
 Prometheus export is explicit and disabled by default:
 
 ```python
-from voicekit import Observability
+from voicey import Observability
 
 observability = Observability(prometheus_enabled=True)
 ```
@@ -118,17 +118,17 @@ The stable metric surface is:
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `voicekit_active_calls` | gauge | `runtime`, `agent` | currently admitted process-local calls |
-| `voicekit_calls_total` | counter | `runtime`, `agent` | durably admitted calls |
-| `voicekit_errors_total` | counter | `runtime`, `agent`, `code` | failures by bounded `VK-*` catalog code |
-| `voicekit_results_dlq_depth` | gauge | `runtime`, `agent` | current durable dead-letter count |
-| `voicekit_turn_latency_ms` | histogram | `runtime`, `agent`, `metric` | STT/LLM/TTS/e2e latency |
+| `voicey_active_calls` | gauge | `runtime`, `agent` | currently admitted process-local calls |
+| `voicey_calls_total` | counter | `runtime`, `agent` | durably admitted calls |
+| `voicey_errors_total` | counter | `runtime`, `agent`, `code` | failures by bounded `VY-*` catalog code |
+| `voicey_results_dlq_depth` | gauge | `runtime`, `agent` | current durable dead-letter count |
+| `voicey_turn_latency_ms` | histogram | `runtime`, `agent`, `metric` | STT/LLM/TTS/e2e latency |
 
 Call and error rates are derived without another unbounded metric:
 
 ```promql
-rate(voicekit_calls_total[5m])
-rate(voicekit_errors_total[5m])
+rate(voicey_calls_total[5m])
+rate(voicey_errors_total[5m])
 ```
 
 No call id, telephone number, transcript, tool arguments, or result value is a
@@ -144,9 +144,9 @@ observability = Observability(
 )
 ```
 
-Voicekit uses the pinned OpenTelemetry Python SDK and HTTP exporter. It creates
-one server-kind `voicekit.call` root span and `voicekit.turn` /
-`voicekit.tool` child spans. Attributes are bounded to stable ids, runtime,
+Voicey uses the pinned OpenTelemetry Python SDK and HTTP exporter. It creates
+one server-kind `voicey.call` root span and `voicey.turn` /
+`voicey.tool` child spans. Attributes are bounded to stable ids, runtime,
 channel, direction, provider, role, tool name, status, and duration. Protected
 payloads and exception messages are excluded.
 
@@ -155,11 +155,11 @@ For authenticated collectors, keep the header value in the environment:
 ```python
 observability = Observability(
     otlp_endpoint="https://collector.example/v1/traces",
-    otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+    otlp_headers_env="VOICEY_OTLP_HEADERS",
 )
 ```
 
-`VOICEKIT_OTLP_HEADERS` uses `name=value,name2=value2` syntax. It is parsed
+`VOICEY_OTLP_HEADERS` uses `name=value,name2=value2` syntax. It is parsed
 only while constructing the exporter and is never emitted. Exporters are
 initialized before admission, recreated safely in LiveKit job processes, and
 force-flushed during graceful shutdown.

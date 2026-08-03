@@ -12,8 +12,8 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "playground-web"
-OUTPUT = ROOT / "src" / "voicekit" / "_frontend"
-SKIP_ENV = "VOICEKIT_SKIP_FRONTEND_BUILD"
+OUTPUT = ROOT / "src" / "voicey" / "_frontend"
+SKIP_ENV = "VOICEY_SKIP_FRONTEND_BUILD"
 
 
 class CustomBuildHook(BuildHookInterface):
@@ -29,9 +29,9 @@ class CustomBuildHook(BuildHookInterface):
         npm = shutil.which("npm")
         if npm is None:
             msg = (
-                "VK-WEB-005: npm is required to build voicekit from source. "
+                "VY-WEB-005: npm is required to build voicey from source. "
                 "Install Node.js 22+, or build from a checkout with bundled assets and "
-                f"{SKIP_ENV}=1. See docs/errors.md#vk-web-005."
+                f"{SKIP_ENV}=1. See docs/errors.md#vy-web-005."
             )
             raise RuntimeError(msg)
         try:
@@ -39,9 +39,9 @@ class CustomBuildHook(BuildHookInterface):
             subprocess.run([npm, "run", "build"], cwd=WEB, check=True)
         except subprocess.CalledProcessError as exc:
             msg = (
-                f"VK-WEB-005: playground build failed with exit {exc.returncode}. "
+                f"VY-WEB-005: playground build failed with exit {exc.returncode}. "
                 "Run `cd playground-web && npm ci && npm run build`. "
-                "See docs/errors.md#vk-web-005."
+                "See docs/errors.md#vy-web-005."
             )
             raise RuntimeError(msg) from exc
         self._verify_output(reason="npm build")
@@ -50,8 +50,8 @@ class CustomBuildHook(BuildHookInterface):
     def _verify_output(*, reason: str) -> None:
         if not (OUTPUT / "index.html").is_file():
             msg = (
-                f"VK-WEB-005: {reason} did not produce {OUTPUT / 'index.html'}. "
+                f"VY-WEB-005: {reason} did not produce {OUTPUT / 'index.html'}. "
                 "Run `cd playground-web && npm ci && npm run build`. "
-                "See docs/errors.md#vk-web-005."
+                "See docs/errors.md#vy-web-005."
             )
             raise RuntimeError(msg)

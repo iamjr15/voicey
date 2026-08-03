@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
-from voicekit.testing.soak import (
+from voicey.testing.soak import (
     SoakConfig,
     SoakRuntime,
     run_engine_soak,
@@ -31,7 +31,7 @@ async def _main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-soak-report.json"),
+        default=Path(".voicey/verification/p4-soak-report.json"),
     )
     args = parser.parse_args()
     runtimes = cast(

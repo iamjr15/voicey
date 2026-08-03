@@ -9,11 +9,11 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-from voicekit import Agent, Models, Results, Web, tool
-from voicekit.obs import NewCall
-from voicekit.playground import PlaygroundService, PlaygroundSettings, SessionTokenManager
-from voicekit.results.signing import encode_secret
-from voicekit.storage import ResultDeliveryConfig, SQLiteRepository
+from voicey import Agent, Models, Results, Web, tool
+from voicey.obs import NewCall
+from voicey.playground import PlaygroundService, PlaygroundSettings, SessionTokenManager
+from voicey.results.signing import encode_secret
+from voicey.storage import ResultDeliveryConfig, SQLiteRepository
 
 
 @tool
@@ -40,7 +40,7 @@ agent = Agent(
     ),
 )
 public = FastAPI()
-repository = SQLiteRepository(Path(".voicekit/manual-playground.sqlite3"))
+repository = SQLiteRepository(Path(".voicey/manual-playground.sqlite3"))
 tokens = SessionTokenManager(
     encode_secret(b"manual-playground-fixture-secret"),
     audience="http://127.0.0.1:7870",
@@ -81,7 +81,7 @@ service = PlaygroundService(
     settings=PlaygroundSettings(
         admin_origin="http://127.0.0.1:7871",
         public_origin="http://127.0.0.1:7870",
-        frontend_dir=Path("src/voicekit/_frontend").resolve(),
+        frontend_dir=Path("src/voicey/_frontend").resolve(),
     ),
     reserve_web_call=reserve_web_call,
     reload_status=lambda: {

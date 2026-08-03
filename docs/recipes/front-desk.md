@@ -5,7 +5,7 @@ without diagnosing, takes confirmed callback messages, and asks for consent
 before warm transfer. Immediate safety emergencies are directed to local
 emergency services without a hold or transfer.
 
-The Pipecat runtime uses voicekit's Twilio conference bridge for warm transfer;
+The Pipecat runtime uses voicey's Twilio conference bridge for warm transfer;
 LiveKit uses its native warm-transfer task. Replace `TodoFrontDeskGateway`,
 configure the transfer destination, approved corpus, emergency language, and
 Results receiver.
@@ -24,7 +24,7 @@ system speech is not provider or latency evidence.
 ## Create the project
 
 ```bash
-voicekit init ./front-desk \
+voicey init ./front-desk \
   --name front-desk \
   --recipe front-desk \
   --runtime livekit \
@@ -43,14 +43,17 @@ voicekit init ./front-desk \
 | `prompts/system.md` | Supply the approved knowledge boundary, departments, hours, and non-diagnostic language. |
 | `prompts/failure.md` | Define callback and outage language without fabricating availability. |
 | `prompts/voicemail.md` | Keep the message under 20 seconds and free of sensitive detail. |
-| `VOICEKIT_TRANSFER_NUMBER` | Inject the reviewed E.164 transfer destination at runtime. |
+| `VOICEY_TRANSFER_NUMBER` | Inject the reviewed E.164 transfer destination at runtime. |
 | `agent.py:Results` | Configure the verified receiver and redaction policy. |
 
 ## Verification
 
-`voicekit test` covers approved-knowledge refusal, confirmed message capture,
+`voicey test` covers approved-knowledge refusal, confirmed message capture,
 emergency language, transfer consent, decline, and native handoff compilation
-on both runtimes.
+on both runtimes. After a successful warm-transfer tool result, the caller is
+told the handoff is complete and the response ends rather than contradicting
+the terminal status. The 2026-08-03 Anthropic API text certification passed all
+six cases first attempt on each runtime; it did not place a phone call.
 
-Next: run `voicekit test`, then certify the conference-bridge checklist in
+Next: run `voicey test`, then certify the conference-bridge checklist in
 `docs/GAPS.md` on a funded Twilio account.

@@ -11,15 +11,15 @@ from typing import ClassVar, Literal
 import pytest
 from typer.testing import CliRunner
 
-from voicekit import __version__
-from voicekit.cli.app import app
-from voicekit.cli.doctor import DoctorCheck, DoctorReport
-from voicekit.cli.keys import KeyCheck
-from voicekit.cli.wizard import InitResult
-from voicekit.config.catalog import ProviderKind
-from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.deploy.cloud import (
+from voicey import __version__
+from voicey.cli.app import app
+from voicey.cli.doctor import DoctorCheck, DoctorReport
+from voicey.cli.keys import KeyCheck
+from voicey.cli.wizard import InitResult
+from voicey.config.catalog import ProviderKind
+from voicey.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.deploy.cloud import (
     CloudArtifacts,
     CloudDeploymentReport,
     CloudResourceState,
@@ -27,22 +27,22 @@ from voicekit.deploy.cloud import (
     LiveKitCloudPlan,
     PipecatCloudPlan,
 )
-from voicekit.deploy.docker import DockerSmokeResult
-from voicekit.deploy.fly import FlyArtifacts, FlyPlan, FlyResourceState, FlySmokeReport
-from voicekit.deploy.railway import (
+from voicey.deploy.docker import DockerSmokeResult
+from voicey.deploy.fly import FlyArtifacts, FlyPlan, FlyResourceState, FlySmokeReport
+from voicey.deploy.railway import (
     RailwayArtifacts,
     RailwayPlan,
     RailwayResourceState,
     RailwaySmokeReport,
 )
-from voicekit.errors import VoicekitError
-from voicekit.obs.records import NewCall
-from voicekit.recipes.drift import RecipeDriftReport, RecipeFileDrift
-from voicekit.relay.auth import RelayCredential
-from voicekit.storage.models import ResultDeliveryConfig, TerminalRequest
-from voicekit.storage.sqlite import SQLiteRepository
-from voicekit.telephony.models import NumberInfo, PipecatTarget, RollbackToken
-from voicekit.upgrade import UpgradeReport
+from voicey.errors import VoiceyError
+from voicey.obs.records import NewCall
+from voicey.recipes.drift import RecipeDriftReport, RecipeFileDrift
+from voicey.relay.auth import RelayCredential
+from voicey.storage.models import ResultDeliveryConfig, TerminalRequest
+from voicey.storage.sqlite import SQLiteRepository
+from voicey.telephony.models import NumberInfo, PipecatTarget, RollbackToken
+from voicey.upgrade import UpgradeReport
 
 runner = CliRunner()
 
@@ -51,7 +51,7 @@ def test_bare_command_prints_status_and_next_step() -> None:
     result = runner.invoke(app)
 
     assert result.exit_code == 0
-    assert "voicekit is installed" in result.stdout
+    assert "voicey is installed" in result.stdout
     assert "Next:" in result.stdout
 
 
@@ -75,12 +75,12 @@ def _project(path: Path) -> ProjectManifest:
         channels=frozenset({"web"}),
         models=models,
     )
-    ManifestStore(path / "voicekit.jsonc").save(manifest)
+    ManifestStore(path / "voicey.jsonc").save(manifest)
     (path / ".env").write_text(
         'DEEPGRAM_API_KEY="dg"\n'  # pragma: allowlist secret
         'ANTHROPIC_API_KEY="ant"\n'  # pragma: allowlist secret
         'CARTESIA_API_KEY="car"\n'  # pragma: allowlist secret
-        'VOICEKIT_WEBHOOK_SECRET="whsec_dGVzdA=="\n',  # pragma: allowlist secret
+        'VOICEY_WEBHOOK_SECRET="whsec_dGVzdA=="\n',  # pragma: allowlist secret
         encoding="utf-8",
     )
     (path / ".env").chmod(0o600)
@@ -231,11 +231,11 @@ def _phone_project(
         carriers=[carrier],
         phone_number="+14155550123",
     )
-    ManifestStore(path / "voicekit.jsonc").save(manifest)
+    ManifestStore(path / "voicey.jsonc").save(manifest)
     (path / "agent.py").write_text(
         "\n".join(
             [
-                "from voicekit import Agent, Models, Phone, Results, Web",
+                "from voicey import Agent, Models, Phone, Results, Web",
                 "",
                 "agent = Agent(",
                 "    name='phone-agent',",
@@ -255,7 +255,7 @@ def _phone_project(
                 "    web=Web(enabled=True, allowed_origins=['https://app.example.test']),",
                 "    results=Results(",
                 "        webhook='https://receiver.example.test/results',",
-                "        secret_env='VOICEKIT_WEBHOOK_SECRET',",  # pragma: allowlist secret
+                "        secret_env='VOICEY_WEBHOOK_SECRET',",  # pragma: allowlist secret
                 "    ),",
                 ")",
                 "",
@@ -268,7 +268,7 @@ def _phone_project(
 
 async def _seed_call(path: Path) -> tuple[str, str]:
     call_id = "call_cli_test"
-    async with SQLiteRepository(path / ".voicekit" / "calls.sqlite3") as repository:
+    async with SQLiteRepository(path / ".voicey" / "calls.sqlite3") as repository:
         lease = await repository.begin_call(
             NewCall(
                 call_id=call_id,
@@ -301,7 +301,7 @@ def test_bare_json_status_is_parseable(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["project"] is None
-    assert payload["next_step"] == "voicekit init"
+    assert payload["next_step"] == "voicey init"
 
 
 def test_command_tree_and_flag_twins_are_exposed() -> None:
@@ -457,9 +457,9 @@ def test_noninteractive_init_never_chooses_missing_answer(
     )
 
     assert result.exit_code == 1
-    assert "VK-CLI-001" in result.stderr
-    assert (project / "voicekit.jsonc").exists()
-    assert "init-checkpoint" in (project / "voicekit.jsonc").read_text(encoding="utf-8")
+    assert "VY-CLI-001" in result.stderr
+    assert (project / "voicey.jsonc").exists()
+    assert "init-checkpoint" in (project / "voicey.jsonc").read_text(encoding="utf-8")
 
 
 def test_read_commands_have_json_paths(
@@ -468,9 +468,9 @@ def test_read_commands_have_json_paths(
 ) -> None:
     _project(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.ProviderKeyValidator", AlwaysValidKeys)
-    monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
-    monkeypatch.setattr("voicekit.cli.app.Doctor", FakeDoctor)
+    monkeypatch.setattr("voicey.cli.app.ProviderKeyValidator", AlwaysValidKeys)
+    monkeypatch.setattr("voicey.cli.app._twilio", _fake_twilio)
+    monkeypatch.setattr("voicey.cli.app.Doctor", FakeDoctor)
 
     commands = (
         ["--json"],
@@ -489,7 +489,7 @@ def test_read_commands_have_json_paths(
 
     missing_call = runner.invoke(app, ["calls", "show", "missing", "--json"])
     assert missing_call.exit_code == 1
-    assert json.loads(missing_call.stdout)["error"]["code"] == "VK-OBS-003"
+    assert json.loads(missing_call.stdout)["error"]["code"] == "VY-OBS-003"
 
 
 def test_money_and_live_mutations_require_confirmation(
@@ -502,7 +502,7 @@ def test_money_and_live_mutations_require_confirmation(
     result = runner.invoke(app, ["numbers", "buy", "US"])
 
     assert result.exit_code == 1
-    assert "VK-CLI-008" in result.stderr
+    assert "VY-CLI-008" in result.stderr
 
 
 def test_upgrade_requires_confirmation_and_emits_json(
@@ -535,16 +535,16 @@ def test_upgrade_requires_confirmation_and_emits_json(
                 recipe_drift={
                     "status": "current",
                     "conflicts": 0,
-                    "next_step": "voicekit doctor",
+                    "next_step": "voicey doctor",
                 },
-                next_step="voicekit doctor",
+                next_step="voicey doctor",
             )
 
-    monkeypatch.setattr("voicekit.cli.app.UpgradeManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.UpgradeManager", Manager)
 
     denied = runner.invoke(app, ["upgrade"])
     assert denied.exit_code == 1
-    assert "VK-CLI-008" in denied.stderr
+    assert "VY-CLI-008" in denied.stderr
     assert calls == []
 
     result = runner.invoke(app, ["upgrade", "--pre", "--yes", "--json"])
@@ -552,7 +552,7 @@ def test_upgrade_requires_confirmation_and_emits_json(
     payload = json.loads(result.stdout)
     assert payload["to_version"] == "0.2.0rc1"
     assert payload["recipe_drift"]["status"] == "current"
-    assert payload["next_step"] == "voicekit doctor"
+    assert payload["next_step"] == "voicey doctor"
     assert calls == [(manifest, True)]
 
 
@@ -588,17 +588,17 @@ def test_recipe_update_check_prints_conflicts_and_merge_guidance(
                 upstream_changes=1,
                 conflicts=1,
                 ai_merge_prompt="Merge each hunk; never overwrite project code.",
-                next_step="voicekit test",
+                next_step="voicey test",
             )
 
-    monkeypatch.setattr("voicekit.cli.app.RecipeDriftAnalyzer", Analyzer)
+    monkeypatch.setattr("voicey.cli.app.RecipeDriftAnalyzer", Analyzer)
     result = runner.invoke(app, ["recipes", "update-check"])
 
     assert result.exit_code == 0
     assert "flow.py" in result.stdout
     assert "conflict" in result.stdout
     assert "AI merge guidance" in result.stdout
-    assert "Next: voicekit test" in result.stdout
+    assert "Next: voicey test" in result.stdout
 
 
 def test_upgrade_human_output_prints_next_step(
@@ -628,16 +628,16 @@ def test_upgrade_human_output_prints_next_step(
                 pyproject_unchanged=True,
                 recipe_sources_unchanged=True,
                 recipe_drift={"status": "current"},
-                next_step="voicekit doctor",
+                next_step="voicey doctor",
             )
 
-    monkeypatch.setattr("voicekit.cli.app.UpgradeManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.UpgradeManager", Manager)
     result = runner.invoke(app, ["upgrade", "--stable", "--yes"])
 
     assert result.exit_code == 0
     assert "already current" in result.stdout
     assert "Project source preserved" in result.stdout
-    assert "Next: voicekit doctor" in result.stdout
+    assert "Next: voicey doctor" in result.stdout
 
 
 def test_docker_deploy_generates_validates_updates_manifest_and_prints_next_step(
@@ -652,21 +652,21 @@ def test_docker_deploy_generates_validates_updates_manifest_and_prints_next_step
             assert root == tmp_path
 
         def generate(self, *, engine_wheel: Path | None = None) -> object:
-            assert engine_wheel == tmp_path / "voicekit.whl"
+            assert engine_wheel == tmp_path / "voicey.whl"
             calls.append("generate")
             return SimpleNamespace(
-                dockerfile=tmp_path / "Dockerfile.voicekit",
-                compose=tmp_path / "compose.voicekit.yaml",
+                dockerfile=tmp_path / "Dockerfile.voicey",
+                compose=tmp_path / "compose.voicey.yaml",
                 dockerignore=tmp_path / ".dockerignore",
                 environment_example=tmp_path / "docker.env.example",
-                engine_wheel=tmp_path / ".voicekit" / "deploy" / "voicekit.whl",
+                engine_wheel=tmp_path / ".voicey" / "deploy" / "voicey.whl",
             )
 
         def validate(self, _artifacts: object) -> None:
             calls.append("validate")
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.DockerDeploymentGenerator", Generator)
+    monkeypatch.setattr("voicey.cli.app.DockerDeploymentGenerator", Generator)
 
     result = runner.invoke(
         app,
@@ -674,16 +674,16 @@ def test_docker_deploy_generates_validates_updates_manifest_and_prints_next_step
             "deploy",
             "docker",
             "--engine-wheel",
-            str(tmp_path / "voicekit.whl"),
+            str(tmp_path / "voicey.whl"),
         ],
     )
 
     assert result.exit_code == 0, result.stderr
     assert calls == ["generate", "validate"]
-    assert "docker compose -f compose.voicekit.yaml up -d --build" in result.stdout
+    assert "docker compose -f compose.voicey.yaml up -d --build" in result.stdout
     assert "--engine-wheel" in result.stdout
-    assert "voicekit.whl" in result.stdout
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == "docker"
+    assert "voicey.whl" in result.stdout
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target == "docker"
 
 
 def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
@@ -703,8 +703,8 @@ def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
         def generate(self, *, engine_wheel: Path | None = None) -> object:
             del engine_wheel
             return SimpleNamespace(
-                dockerfile=tmp_path / "Dockerfile.voicekit",
-                compose=tmp_path / "compose.voicekit.yaml",
+                dockerfile=tmp_path / "Dockerfile.voicey",
+                compose=tmp_path / "compose.voicey.yaml",
                 dockerignore=tmp_path / ".dockerignore",
                 environment_example=tmp_path / "docker.env.example",
                 engine_wheel=None,
@@ -724,9 +724,9 @@ def test_docker_deploy_json_smoke_places_explicit_confirmed_phone_call(
             )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.DockerDeploymentGenerator", Generator)
-    monkeypatch.setattr("voicekit.cli.app.DockerSmokeVerifier", Smoke)
-    monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
+    monkeypatch.setattr("voicey.cli.app.DockerDeploymentGenerator", Generator)
+    monkeypatch.setattr("voicey.cli.app.DockerSmokeVerifier", Smoke)
+    monkeypatch.setattr("voicey.cli.app._twilio", _fake_twilio)
     FakeTwilio.events = []
     FakeTwilio.call_options = []
 
@@ -764,7 +764,7 @@ def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_
         def __init__(self, root: Path) -> None:
             assert root == tmp_path
             self.store = SimpleNamespace(
-                path=tmp_path / ".voicekit" / "deploy" / "fly-resources.json"
+                path=tmp_path / ".voicey" / "deploy" / "fly-resources.json"
             )
 
         async def deploy(self, plan: FlyPlan, **options: object) -> object:
@@ -780,7 +780,7 @@ def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_
                 deployed=True,
                 smoke_green=True,
             )
-            directory = tmp_path / ".voicekit" / "deploy" / "fly"
+            directory = tmp_path / ".voicey" / "deploy" / "fly"
             return SimpleNamespace(
                 state=state,
                 artifacts=FlyArtifacts(
@@ -788,7 +788,7 @@ def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_
                     dockerfile=directory / "Dockerfile.results",
                     config=directory / "fly.results.toml",
                     dockerignore=directory / "dockerignore",
-                    engine_wheel=tmp_path / "voicekit.whl",
+                    engine_wheel=tmp_path / "voicey.whl",
                     digest="a" * 64,
                 ),
                 smoke=FlySmokeReport(
@@ -801,7 +801,7 @@ def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_
             )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.FlyDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.FlyDeploymentManager", Manager)
     result = runner.invoke(
         app,
         [
@@ -822,7 +822,7 @@ def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_
             "--postgres-volume-gb",
             "10",
             "--engine-wheel",
-            str(tmp_path / "voicekit.whl"),
+            str(tmp_path / "voicey.whl"),
             "--yes",
             "--json",
         ],
@@ -838,10 +838,10 @@ def test_fly_deploy_maps_phone_callbacks_updates_manifest_and_prints_cloud_next_
     assert payload["resources"]["postgres_id"] == "mpg_123"
     assert payload["smoke"]["signed_readiness"] is True
     assert payload["next_step"] == (
-        "voicekit deploy pipecat-cloud --relay-url https://test-results.fly.dev --yes"
+        "voicey deploy pipecat-cloud --relay-url https://test-results.fly.dev --yes"
     )
     assert "vkr_" not in result.stdout
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == "fly"
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target == "fly"
 
 
 def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
@@ -849,7 +849,7 @@ def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
     tmp_path: Path,
 ) -> None:
     manifest = _project(tmp_path)
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"deploy_target": "fly"})
     )
     rolled_back: list[str] = []
@@ -857,7 +857,7 @@ def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
     class Manager:
         def __init__(self, _root: Path) -> None:
             self.store = SimpleNamespace(
-                path=tmp_path / ".voicekit" / "deploy" / "fly-resources.json"
+                path=tmp_path / ".voicey" / "deploy" / "fly-resources.json"
             )
 
         def rollback_created(self, plan: FlyPlan) -> FlyResourceState:
@@ -865,7 +865,7 @@ def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
             return FlyResourceState.initial(plan).checkpoint(rolled_back=True)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.FlyDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.FlyDeploymentManager", Manager)
     command = [
         "deploy",
         "fly",
@@ -887,14 +887,14 @@ def test_fly_rollback_requires_confirmation_and_clears_manifest_target(
     ]
     denied = runner.invoke(app, command)
     assert denied.exit_code == 1
-    assert "VK-CLI-008" in denied.stderr
+    assert "VY-CLI-008" in denied.stderr
     assert rolled_back == []
 
     accepted = runner.invoke(app, [*command, "--yes", "--json"])
     assert accepted.exit_code == 0, accepted.stderr
     assert json.loads(accepted.stdout)["rolled_back"] is True
     assert rolled_back == ["test-results"]
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target is None
 
 
 def _railway_args() -> list[str]:
@@ -929,12 +929,12 @@ def test_railway_deploy_updates_manifest_and_prints_cloud_next_step(
         def __init__(self, root: Path) -> None:
             assert root == tmp_path
             self.store = SimpleNamespace(
-                path=tmp_path / ".voicekit" / "deploy" / "railway-resources.json"
+                path=tmp_path / ".voicey" / "deploy" / "railway-resources.json"
             )
 
         async def deploy(self, plan: RailwayPlan, **options: object) -> object:
             captured.append((plan, options))
-            directory = tmp_path / ".voicekit" / "deploy" / "railway"
+            directory = tmp_path / ".voicey" / "deploy" / "railway"
             state = RailwayResourceState.initial(plan).checkpoint(
                 project_id="project_123",
                 environment_id="environment_123",
@@ -955,7 +955,7 @@ def test_railway_deploy_updates_manifest_and_prints_cloud_next_step(
                     dockerfile=directory / "Dockerfile.results",
                     config=directory / "railway.json",
                     ignore=directory / ".railwayignore",
-                    engine_wheel=tmp_path / "voicekit.whl",
+                    engine_wheel=tmp_path / "voicey.whl",
                     digest="a" * 64,
                 ),
                 smoke=RailwaySmokeReport(
@@ -972,13 +972,13 @@ def test_railway_deploy_updates_manifest_and_prints_cloud_next_step(
             )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.RailwayDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.RailwayDeploymentManager", Manager)
     result = runner.invoke(
         app,
         [
             *_railway_args(),
             "--engine-wheel",
-            str(tmp_path / "voicekit.whl"),
+            str(tmp_path / "voicey.whl"),
             "--yes",
             "--json",
         ],
@@ -991,9 +991,9 @@ def test_railway_deploy_updates_manifest_and_prints_cloud_next_step(
     assert options["rotate_credentials"] is False
     assert payload["smoke"]["migration_preflight"] is True
     assert payload["next_step"] == (
-        "voicekit deploy pipecat-cloud --relay-url https://test-results.up.railway.app --yes"
+        "voicey deploy pipecat-cloud --relay-url https://test-results.up.railway.app --yes"
     )
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == "railway"
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target == "railway"
 
 
 def test_railway_adoption_and_rollback_confirmation_contract(
@@ -1001,7 +1001,7 @@ def test_railway_adoption_and_rollback_confirmation_contract(
     tmp_path: Path,
 ) -> None:
     manifest = _project(tmp_path)
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"deploy_target": "railway"})
     )
     rolled_back: list[str] = []
@@ -1009,7 +1009,7 @@ def test_railway_adoption_and_rollback_confirmation_contract(
     class Manager:
         def __init__(self, _root: Path) -> None:
             self.store = SimpleNamespace(
-                path=tmp_path / ".voicekit" / "deploy" / "railway-resources.json"
+                path=tmp_path / ".voicey" / "deploy" / "railway-resources.json"
             )
 
         def rollback_created(self, plan: RailwayPlan) -> RailwayResourceState:
@@ -1017,20 +1017,20 @@ def test_railway_adoption_and_rollback_confirmation_contract(
             return RailwayResourceState.initial(plan).checkpoint(rolled_back=True)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.RailwayDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.RailwayDeploymentManager", Manager)
     invalid_adopt = runner.invoke(app, [*_railway_args(), "--adopt", "--yes"])
     assert invalid_adopt.exit_code == 1
-    assert "VK-CLI-010" in invalid_adopt.stderr
+    assert "VY-CLI-010" in invalid_adopt.stderr
 
     command = [*_railway_args(), "--rollback-created"]
     denied = runner.invoke(app, command)
     assert denied.exit_code == 1
-    assert "VK-CLI-008" in denied.stderr
+    assert "VY-CLI-008" in denied.stderr
     accepted = runner.invoke(app, [*command, "--yes", "--json"])
     assert accepted.exit_code == 0, accepted.stderr
     assert json.loads(accepted.stdout)["rolled_back"] is True
     assert rolled_back == ["test-results"]
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target is None
 
 
 def _cloud_state(
@@ -1061,7 +1061,7 @@ def _cloud_artifacts(
     root: Path,
     platform: Literal["pipecat-cloud", "livekit-cloud"],
 ) -> CloudArtifacts:
-    context = root / ".voicekit" / "deploy" / platform / "context"
+    context = root / ".voicey" / "deploy" / platform / "context"
     return CloudArtifacts(
         platform=platform,
         directory=context.parent,
@@ -1087,7 +1087,7 @@ def _pipecat_cloud_args(*, agent_name: str = "test-agent") -> list[str]:
         "--secret-set",
         f"{agent_name}-secrets",
         "--image",
-        "registry.example.test/voicekit/agent:sha-123",
+        "registry.example.test/voicey/agent:sha-123",
         "--min-agents",
         "1",
         "--max-agents",
@@ -1130,12 +1130,12 @@ def test_pipecat_cloud_prepare_only_prints_exact_build_and_push(
             *,
             engine_wheel: Path | None,
         ) -> CloudArtifacts:
-            assert plan.image == "registry.example.test/voicekit/agent:sha-123"
+            assert plan.image == "registry.example.test/voicey/agent:sha-123"
             assert engine_wheel is None
             return _cloud_artifacts(tmp_path, "pipecat-cloud")
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.PipecatCloudDeploymentManager", Manager)
     result = runner.invoke(
         app,
         [
@@ -1150,7 +1150,7 @@ def test_pipecat_cloud_prepare_only_prints_exact_build_and_push(
             "--secret-set",
             "test-agent-secrets",
             "--image",
-            "registry.example.test/voicekit/agent:sha-123",
+            "registry.example.test/voicey/agent:sha-123",
             "--min-agents",
             "1",
             "--max-agents",
@@ -1167,8 +1167,8 @@ def test_pipecat_cloud_prepare_only_prints_exact_build_and_push(
     assert result.exit_code == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["prepared"] is True
-    assert "docker build -t registry.example.test/voicekit/agent:sha-123" in payload["next_step"]
-    assert "docker push registry.example.test/voicekit/agent:sha-123" in payload["next_step"]
+    assert "docker build -t registry.example.test/voicey/agent:sha-123" in payload["next_step"]
+    assert "docker push registry.example.test/voicey/agent:sha-123" in payload["next_step"]
 
     text_result = runner.invoke(app, [*_pipecat_cloud_args(), "--prepare-only"])
     assert text_result.exit_code == 0, text_result.stderr
@@ -1187,7 +1187,7 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
     verified: list[str] = []
 
     class Store:
-        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+        path = tmp_path / ".voicey" / "deploy" / "pipecat-cloud-resources.json"
 
         def load(self) -> CloudResourceState:
             return saved[-1] if saved else state
@@ -1231,9 +1231,9 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
         return carrier
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
-    monkeypatch.setattr("voicekit.cli.app._carrier", carrier_factory)
-    monkeypatch.setattr("voicekit.cli.app._verify_cloud_phone_smoke", verify)
+    monkeypatch.setattr("voicey.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app._carrier", carrier_factory)
+    monkeypatch.setattr("voicey.cli.app._verify_cloud_phone_smoke", verify)
     FakeTwilio.events = []
     result = runner.invoke(
         app,
@@ -1249,7 +1249,7 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
             "--secret-set",
             "phone-agent-secrets",
             "--image",
-            "registry.example.test/voicekit/agent:sha-123",
+            "registry.example.test/voicey/agent:sha-123",
             "--min-agents",
             "1",
             "--max-agents",
@@ -1273,7 +1273,7 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
     assert saved[-1].cutover_provider == "twilio"
     assert saved[-1].cutover_token == "route_cli"
     assert saved[-1].smoke_call_id == "CA" + "1" * 32
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == ("pipecat-cloud")
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target == ("pipecat-cloud")
 
 
 def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
@@ -1281,7 +1281,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
     tmp_path: Path,
 ) -> None:
     manifest = _project(tmp_path)
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"runtime": "livekit"})
     )
     captured: list[tuple[LiveKitCloudPlan, dict[str, object]]] = []
@@ -1291,7 +1291,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
         def __init__(self, root: Path) -> None:
             assert root == tmp_path
             self.store = SimpleNamespace(
-                path=tmp_path / ".voicekit" / "deploy" / "livekit-cloud-resources.json"
+                path=tmp_path / ".voicey" / "deploy" / "livekit-cloud-resources.json"
             )
 
         async def deploy(
@@ -1313,7 +1313,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
             )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.LiveKitCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.LiveKitCloudDeploymentManager", Manager)
     result = runner.invoke(
         app,
         [
@@ -1338,7 +1338,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
     assert payload["target"] == "livekit-cloud"
     assert captured[0][1]["skip_session_smoke"] is True
     assert captured[0][1]["smoke_to"] is None
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target == ("livekit-cloud")
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target == ("livekit-cloud")
 
     text_result = runner.invoke(
         app,
@@ -1346,7 +1346,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
     )
     assert text_result.exit_code == 0, text_result.stderr
     assert "LiveKit Cloud deployment completed." in text_result.stdout
-    assert "Next: voicekit calls list" in text_result.stdout
+    assert "Next: voicey calls list" in text_result.stdout
 
 
 def test_cloud_cli_validation_guards_are_cataloged(
@@ -1358,8 +1358,8 @@ def test_cloud_cli_validation_guards_are_cataloged(
             return
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
-    monkeypatch.setattr("voicekit.cli.app.LiveKitCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.LiveKitCloudDeploymentManager", Manager)
 
     manifest = _project(tmp_path)
     wrong_livekit = runner.invoke(
@@ -1367,7 +1367,7 @@ def test_cloud_cli_validation_guards_are_cataloged(
         [*_livekit_cloud_args(), "--skip-smoke", "--yes"],
     )
     assert wrong_livekit.exit_code == 1
-    assert "VK-DEP-008" in wrong_livekit.stderr
+    assert "VY-DEP-008" in wrong_livekit.stderr
 
     prepare_conflict = runner.invoke(
         app,
@@ -1384,14 +1384,14 @@ def test_cloud_cli_validation_guards_are_cataloged(
         ],
     )
     assert prepare_conflict.exit_code == 1
-    assert "VK-CLI-010" in prepare_conflict.stderr
+    assert "VY-CLI-010" in prepare_conflict.stderr
     assert smoke_conflict.exit_code == 1
-    assert "VK-CLI-010" in smoke_conflict.stderr
+    assert "VY-CLI-010" in smoke_conflict.stderr
 
     phone = _phone_project(tmp_path)
     missing_pipecat_smoke = runner.invoke(app, [*_pipecat_cloud_args(agent_name="phone-agent")])
     assert missing_pipecat_smoke.exit_code == 1
-    assert "VK-DEP-004" in missing_pipecat_smoke.stderr
+    assert "VY-DEP-004" in missing_pipecat_smoke.stderr
 
     telnyx = _phone_project(tmp_path, carrier="telnyx")
     missing_texml_ack = runner.invoke(
@@ -1401,7 +1401,7 @@ def test_cloud_cli_validation_guards_are_cataloged(
     assert missing_texml_ack.exit_code == 1
     assert "--telnyx-texml-ready" in missing_texml_ack.stderr
 
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"runtime": "livekit"})
     )
     wrong_pipecat = runner.invoke(
@@ -1409,9 +1409,9 @@ def test_cloud_cli_validation_guards_are_cataloged(
         [*_pipecat_cloud_args(), "--skip-smoke", "--yes"],
     )
     assert wrong_pipecat.exit_code == 1
-    assert "VK-DEP-008" in wrong_pipecat.stderr
+    assert "VY-DEP-008" in wrong_pipecat.stderr
 
-    ManifestStore(tmp_path / "voicekit.jsonc").save(phone.model_copy(update={"runtime": "livekit"}))
+    ManifestStore(tmp_path / "voicey.jsonc").save(phone.model_copy(update={"runtime": "livekit"}))
     missing_livekit_smoke = runner.invoke(app, [*_livekit_cloud_args()])
     livekit_smoke_conflict = runner.invoke(
         app,
@@ -1424,9 +1424,9 @@ def test_cloud_cli_validation_guards_are_cataloged(
         ],
     )
     assert missing_livekit_smoke.exit_code == 1
-    assert "VK-DEP-004" in missing_livekit_smoke.stderr
+    assert "VY-DEP-004" in missing_livekit_smoke.stderr
     assert livekit_smoke_conflict.exit_code == 1
-    assert "VK-CLI-010" in livekit_smoke_conflict.stderr
+    assert "VY-CLI-010" in livekit_smoke_conflict.stderr
 
     del telnyx
 
@@ -1436,7 +1436,7 @@ def test_pipecat_cloud_rollback_restores_ledgered_cutover(
     tmp_path: Path,
 ) -> None:
     manifest = _phone_project(tmp_path)
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"deploy_target": "pipecat-cloud"})
     )
     initial = _cloud_state("pipecat-cloud", agent_name="phone-agent").checkpoint(
@@ -1447,7 +1447,7 @@ def test_pipecat_cloud_rollback_restores_ledgered_cutover(
     carrier = FakeTwilio()
 
     class Store:
-        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+        path = tmp_path / ".voicey" / "deploy" / "pipecat-cloud-resources.json"
 
         def load(self) -> CloudResourceState:
             return saved[-1] if saved else initial
@@ -1466,12 +1466,12 @@ def test_pipecat_cloud_rollback_restores_ledgered_cutover(
             )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.PipecatCloudDeploymentManager", Manager)
 
     def carrier_factory(*_args: object, **_kwargs: object) -> FakeTwilio:
         return carrier
 
-    monkeypatch.setattr("voicekit.cli.app._carrier", carrier_factory)
+    monkeypatch.setattr("voicey.cli.app._carrier", carrier_factory)
     FakeTwilio.events = []
 
     result = runner.invoke(
@@ -1483,7 +1483,7 @@ def test_pipecat_cloud_rollback_restores_ledgered_cutover(
     assert json.loads(result.stdout)["rolled_back"] is True
     assert FakeTwilio.events == ["restore:route_previous"]
     assert saved[-1].cutover_token is None
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target is None
 
 
 def test_pipecat_cloud_smoke_failure_restores_new_cutover(
@@ -1496,7 +1496,7 @@ def test_pipecat_cloud_smoke_failure_restores_new_cutover(
     carrier = FakeTwilio()
 
     class Store:
-        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+        path = tmp_path / ".voicey" / "deploy" / "pipecat-cloud-resources.json"
 
         def save(self, value: CloudResourceState) -> None:
             saved.append(value)
@@ -1527,16 +1527,16 @@ def test_pipecat_cloud_smoke_failure_restores_new_cutover(
         _environment: Mapping[str, str],
         _call_id: str,
     ) -> None:
-        raise VoicekitError("VK-DEP-004", detail="expected smoke failure")
+        raise VoiceyError("VY-DEP-004", detail="expected smoke failure")
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", Manager)
+    monkeypatch.setattr("voicey.cli.app.PipecatCloudDeploymentManager", Manager)
 
     def carrier_factory(*_args: object, **_kwargs: object) -> FakeTwilio:
         return carrier
 
-    monkeypatch.setattr("voicekit.cli.app._carrier", carrier_factory)
-    monkeypatch.setattr("voicekit.cli.app._verify_cloud_phone_smoke", fail_smoke)
+    monkeypatch.setattr("voicey.cli.app._carrier", carrier_factory)
+    monkeypatch.setattr("voicey.cli.app._verify_cloud_phone_smoke", fail_smoke)
     FakeTwilio.events = []
 
     result = runner.invoke(
@@ -1564,7 +1564,7 @@ def test_cloud_rollback_and_web_deploy_text_paths(
     livekit_state = _cloud_state("livekit-cloud")
 
     class PipecatStore:
-        path = tmp_path / ".voicekit" / "deploy" / "pipecat-cloud-resources.json"
+        path = tmp_path / ".voicey" / "deploy" / "pipecat-cloud-resources.json"
 
         def load(self) -> CloudResourceState:
             return pipecat_state
@@ -1596,14 +1596,14 @@ def test_cloud_rollback_and_web_deploy_text_paths(
     class LiveKitManager:
         def __init__(self, _root: Path) -> None:
             self.store = SimpleNamespace(
-                path=tmp_path / ".voicekit" / "deploy" / "livekit-cloud-resources.json"
+                path=tmp_path / ".voicey" / "deploy" / "livekit-cloud-resources.json"
             )
 
         def rollback(self, _plan: LiveKitCloudPlan) -> CloudResourceState:
             return livekit_state.checkpoint(rolled_back=True)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.PipecatCloudDeploymentManager", PipecatManager)
+    monkeypatch.setattr("voicey.cli.app.PipecatCloudDeploymentManager", PipecatManager)
     web = runner.invoke(
         app,
         [*_pipecat_cloud_args(), "--skip-smoke", "--yes"],
@@ -1612,24 +1612,24 @@ def test_cloud_rollback_and_web_deploy_text_paths(
     assert "Pipecat Cloud deployment completed." in web.stdout
     assert "Hosted carrier answer" not in web.stdout
 
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"runtime": "livekit", "deploy_target": "livekit-cloud"})
     )
-    monkeypatch.setattr("voicekit.cli.app.LiveKitCloudDeploymentManager", LiveKitManager)
+    monkeypatch.setattr("voicey.cli.app.LiveKitCloudDeploymentManager", LiveKitManager)
     rollback = runner.invoke(
         app,
         [*_livekit_cloud_args(), "--rollback", "--yes"],
     )
     assert rollback.exit_code == 0, rollback.stderr
     assert "LiveKit Cloud rollback completed." in rollback.stdout
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().deploy_target is None
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target is None
 
     invalid_rollback = runner.invoke(
         app,
         [*_livekit_cloud_args(), "--rollback", "--adopt", "--yes"],
     )
     assert invalid_rollback.exit_code == 1
-    assert "VK-CLI-010" in invalid_rollback.stderr
+    assert "VY-CLI-010" in invalid_rollback.stderr
 
 
 def test_project_status_and_non_json_read_tables(
@@ -1638,8 +1638,8 @@ def test_project_status_and_non_json_read_tables(
 ) -> None:
     _project(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.ProviderKeyValidator", AlwaysValidKeys)
-    monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
+    monkeypatch.setattr("voicey.cli.app.ProviderKeyValidator", AlwaysValidKeys)
+    monkeypatch.setattr("voicey.cli.app._twilio", _fake_twilio)
 
     status = runner.invoke(app)
     recipes = runner.invoke(app, ["recipes", "list"])
@@ -1662,7 +1662,7 @@ def test_mutating_phone_commands_execute_only_with_yes(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC" + "1" * 32)
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token")
-    monkeypatch.setattr("voicekit.cli.app._twilio", _fake_twilio)
+    monkeypatch.setattr("voicey.cli.app._twilio", _fake_twilio)
     FakeTwilio.events.clear()
     FakeTwilio.call_options.clear()
 
@@ -1707,7 +1707,7 @@ def test_telnyx_phone_commands_use_telnyx_media_and_event_routes(
 ) -> None:
     _phone_project(tmp_path, carrier="telnyx")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app._carrier", _fake_telnyx)
+    monkeypatch.setattr("voicey.cli.app._carrier", _fake_telnyx)
     FakeTelnyx.events.clear()
     FakeTelnyx.call_options.clear()
 
@@ -1749,7 +1749,7 @@ def test_keys_add_uses_injected_value_and_recipe_add_copies_source(
     _project(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DEEPGRAM_API_KEY", "injected")
-    monkeypatch.setattr("voicekit.cli.app.ProviderKeyValidator", AlwaysValidKeys)
+    monkeypatch.setattr("voicey.cli.app.ProviderKeyValidator", AlwaysValidKeys)
 
     added = runner.invoke(app, ["keys", "add", "deepgram", "--yes"])
     recipe = runner.invoke(app, ["recipes", "add", "appointment-booking"])
@@ -1760,7 +1760,7 @@ def test_keys_add_uses_injected_value_and_recipe_add_copies_source(
     assert recipe.exit_code == 0
     assert "Next:" in recipe.stdout
     assert (tmp_path / "flow.py").is_file()
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().recipe.name == ("appointment-booking")
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().recipe.name == ("appointment-booking")
     assert unknown.exit_code == 1
     assert "unknown provider" in unknown.stderr
 
@@ -1770,7 +1770,7 @@ def test_livekit_keys_are_listed_validated_and_runtime_scoped(
     tmp_path: Path,
 ) -> None:
     manifest = _project(tmp_path).model_copy(update={"runtime": "livekit"})
-    ManifestStore(tmp_path / "voicekit.jsonc").save(manifest)
+    ManifestStore(tmp_path / "voicey.jsonc").save(manifest)
     with (tmp_path / ".env").open("a", encoding="utf-8") as env:
         env.write(
             'LIVEKIT_URL="wss://project.livekit.cloud"\n'
@@ -1778,8 +1778,8 @@ def test_livekit_keys_are_listed_validated_and_runtime_scoped(
             'LIVEKIT_API_SECRET="livekit-secret"\n'  # pragma: allowlist secret
         )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.ProviderKeyValidator", AlwaysValidKeys)
-    monkeypatch.setattr("voicekit.cli.app.LiveKitKeyValidator", AlwaysValidLiveKit)
+    monkeypatch.setattr("voicey.cli.app.ProviderKeyValidator", AlwaysValidKeys)
+    monkeypatch.setattr("voicey.cli.app.LiveKitKeyValidator", AlwaysValidLiveKit)
 
     listed = runner.invoke(app, ["keys", "list", "--json"])
     added = runner.invoke(app, ["keys", "add", "livekit", "--yes"])
@@ -1791,7 +1791,7 @@ def test_livekit_keys_are_listed_validated_and_runtime_scoped(
     assert added.exit_code == 0
     assert "livekit credentials validated" in added.stdout
 
-    ManifestStore(tmp_path / "voicekit.jsonc").save(
+    ManifestStore(tmp_path / "voicey.jsonc").save(
         manifest.model_copy(update={"runtime": "pipecat"})
     )
     wrong_runtime = runner.invoke(app, ["keys", "add", "livekit", "--yes"])
@@ -1848,7 +1848,7 @@ def test_cli_model_assignment_validation_and_cataloged_unmapped_error(
     )
 
     assert malformed.exit_code == 1
-    assert "VK-CLI-010" in malformed.stderr
+    assert "VY-CLI-010" in malformed.stderr
     assert duplicate.exit_code == 1
     assert "duplicate" in duplicate.stderr
 
@@ -1881,15 +1881,15 @@ def test_successful_init_and_dev_command_adapters(
                 project_dir=path,
                 manifest=manifest,
                 written=(path / "agent.py",),
-                next_step="voicekit dev",
+                next_step="voicey dev",
             )
 
     async def fake_dev(*_args: object, **kwargs: object) -> None:
         dev_calls.append(dict(kwargs))
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("voicekit.cli.app.InitWizard", FakeWizard)
-    monkeypatch.setattr("voicekit.cli.dev.run_dev", fake_dev)
+    monkeypatch.setattr("voicey.cli.app.InitWizard", FakeWizard)
+    monkeypatch.setattr("voicey.cli.dev.run_dev", fake_dev)
 
     initialized = runner.invoke(
         app,
@@ -1918,7 +1918,7 @@ def test_successful_init_and_dev_command_adapters(
     )
 
     assert initialized.exit_code == 0
-    assert "voicekit dev" in initialized.stdout
+    assert "voicey dev" in initialized.stdout
     assert developed.exit_code == 0
     assert dev_calls[0]["port"] == 9000
     assert dev_calls[0]["open_browser"] is False

@@ -4,8 +4,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from voicekit.errors import VoicekitError
-from voicekit.relay.cloud_answer import (
+from voicey.errors import VoiceyError
+from voicey.relay.cloud_answer import (
     add_pipecat_cloud_answer_routes,
     pipecat_cloud_answer_path,
     pipecat_cloud_answer_xml,
@@ -28,13 +28,13 @@ def test_pipecat_cloud_answer_xml_matches_provider_contract(
 ) -> None:
     xml = pipecat_cloud_answer_xml(
         region="eu-central",
-        organization="voicekit-org",
-        agent_name="voicekit-agent",
+        organization="voicey-org",
+        agent_name="voicey-agent",
         provider=provider,  # type: ignore[arg-type]
     )
     assert xml.startswith('<?xml version="1.0" encoding="UTF-8"?>')
     assert expected in xml
-    assert "voicekit-agent.voicekit-org" in xml
+    assert "voicey-agent.voicey-org" in xml
     assert "wss://eu-central.api.pipecat.daily.co/ws/" in xml
     assert ("ws/plivo" in xml) is (provider in {"vobiz", "plivo"})
 
@@ -42,28 +42,28 @@ def test_pipecat_cloud_answer_xml_matches_provider_contract(
 def test_us_west_cloud_answer_uses_default_endpoint_and_safe_path() -> None:
     path = pipecat_cloud_answer_path(
         region="us-west",
-        organization="voicekit-org",
-        agent_name="voicekit-agent",
+        organization="voicey-org",
+        agent_name="voicey-agent",
         provider="twilio",
     )
     xml = pipecat_cloud_answer_xml(
         region="us-west",
-        organization="voicekit-org",
-        agent_name="voicekit-agent",
+        organization="voicey-org",
+        agent_name="voicey-agent",
         provider="twilio",
     )
-    assert path == ("/v1/pipecat-cloud/us-west/voicekit-org/voicekit-agent/twilio/answer")
+    assert path == ("/v1/pipecat-cloud/us-west/voicey-org/voicey-agent/twilio/answer")
     assert "wss://api.pipecat.daily.co/ws/twilio" in xml
     assert "us-west.api" not in xml
     assert (
         pipecat_cloud_websocket_url(
             region="us-west",
-            organization="voicekit-org",
-            agent_name="voicekit-agent",
+            organization="voicey-org",
+            agent_name="voicey-agent",
             provider="telnyx",
         )
         == "wss://api.pipecat.daily.co/ws/telnyx"
-        "?serviceHost=voicekit-agent.voicekit-org"
+        "?serviceHost=voicey-agent.voicey-org"
     )
 
 
@@ -71,7 +71,7 @@ def test_us_west_cloud_answer_uses_default_endpoint_and_safe_path() -> None:
 async def test_cloud_answer_route_supports_provider_get_and_post() -> None:
     app = FastAPI()
     add_pipecat_cloud_answer_routes(app)
-    path = "/v1/pipecat-cloud/us-west/voicekit-org/voicekit-agent/telnyx/answer"
+    path = "/v1/pipecat-cloud/us-west/voicey-org/voicey-agent/telnyx/answer"
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://results.example.test",
@@ -86,17 +86,17 @@ async def test_cloud_answer_route_supports_provider_get_and_post() -> None:
 
 
 def test_cloud_answer_rejects_untrusted_path_values() -> None:
-    with pytest.raises(VoicekitError, match="identity is invalid"):
+    with pytest.raises(VoiceyError, match="identity is invalid"):
         pipecat_cloud_answer_path(
             region="us-west",
             organization="Bad.Org",
-            agent_name="voicekit-agent",
+            agent_name="voicey-agent",
             provider="twilio",
         )
-    with pytest.raises(VoicekitError, match="provider"):
+    with pytest.raises(VoiceyError, match="provider"):
         pipecat_cloud_answer_xml(
             region="us-west",
-            organization="voicekit-org",
-            agent_name="voicekit-agent",
+            organization="voicey-org",
+            agent_name="voicey-agent",
             provider="unknown",  # type: ignore[arg-type]
         )

@@ -13,12 +13,12 @@ from typing import Protocol, cast
 from livekit.agents import Agent as LiveKitAgent
 from pipecat.flows import NodeConfig
 
-from voicekit.config.models import RuntimeName
-from voicekit.recipes.registry import DEFAULT_RECIPE_REGISTRY
-from voicekit.recipes.source import recipe_files
-from voicekit.testing import JudgeConfig, discover_scenarios
-from voicekit.testing.livekit import compile_livekit
-from voicekit.testing.pipecat import compile_pipecat
+from voicey.config.models import RuntimeName
+from voicey.recipes.registry import DEFAULT_RECIPE_REGISTRY
+from voicey.recipes.source import recipe_files
+from voicey.testing import JudgeConfig, discover_scenarios
+from voicey.testing.livekit import compile_livekit
+from voicey.testing.pipecat import compile_pipecat
 
 
 class PipecatRecipeModule(Protocol):
@@ -41,7 +41,7 @@ def main() -> int:
     args = parser.parse_args()
     runtimes: tuple[RuntimeName, ...] = tuple(args.runtimes or ("pipecat", "livekit"))
     evidence: list[dict[str, object]] = []
-    with tempfile.TemporaryDirectory(prefix="voicekit-canary-recipes-") as directory:
+    with tempfile.TemporaryDirectory(prefix="voicey-canary-recipes-") as directory:
         workspace = Path(directory)
         for recipe in DEFAULT_RECIPE_REGISTRY.list(include_unavailable=False):
             for runtime in runtimes:

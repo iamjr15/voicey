@@ -8,13 +8,13 @@ from typing import Any, cast
 import pytest
 from livekit.agents.inference import TurnDetector
 
-from voicekit import Agent, Behavior, Limits, Models, Observability, Phone, Results, Voice, Web
-from voicekit.config.models import RuntimeName
-from voicekit.runtimes.livekit.mapping import (
+from voicey import Agent, Behavior, Limits, Models, Observability, Phone, Results, Voice, Web
+from voicey.config.models import RuntimeName
+from voicey.runtimes.livekit.mapping import (
     LIVEKIT_CONFIG_MAPPINGS,
     LiveKitPolicy,
 )
-from voicekit.runtimes.pipecat.mapping import (
+from voicey.runtimes.pipecat.mapping import (
     PIPECAT_CONFIG_MAPPINGS,
     PipecatPolicy,
 )
@@ -54,7 +54,7 @@ def _agent(runtime: RuntimeName) -> Agent:
         web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
         limits=Limits(
             max_duration_s=90,
@@ -68,7 +68,7 @@ def _agent(runtime: RuntimeName) -> Agent:
             prometheus_port=9465,
             prometheus_path="/internal/metrics",
             otlp_endpoint="https://collector.example.test/v1/traces",
-            otlp_headers_env="VOICEKIT_OTLP_HEADERS",
+            otlp_headers_env="VOICEY_OTLP_HEADERS",
         ),
         behavior=Behavior(
             allow_interruptions=False,
@@ -137,7 +137,7 @@ def test_config_field_mapping(runtime: RuntimeName, field: str) -> None:
         "observability.prometheus_port": 9465,
         "observability.prometheus_path": "/internal/metrics",
         "observability.otlp_endpoint": "https://collector.example.test/v1/traces",
-        "observability.otlp_headers_env": "VOICEKIT_OTLP_HEADERS",
+        "observability.otlp_headers_env": "VOICEY_OTLP_HEADERS",
     }[field]
     assert getattr(policy, attribute) == expected
 

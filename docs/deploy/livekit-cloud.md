@@ -16,12 +16,12 @@ The implementation is verified against `lk==2.16.2`,
 2. Authenticate the LiveKit CLI with `lk cloud auth` and confirm the exact
    project appears in `lk project list --json`.
 3. Set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, model
-   credentials, and `VOICEKIT_RELAY_CREDENTIAL` in the agent project's
+   credentials, and `VOICEY_RELAY_CREDENTIAL` in the agent project's
    owner-only `.env`.
-4. Choose the exact project, region, and registered agent name. Voicekit has no
+4. Choose the exact project, region, and registered agent name. Voicey has no
    recommended default.
 5. For a phone smoke, provision the carrier/LiveKit trunks first and set
-   `VOICEKIT_LIVEKIT_OUTBOUND_TRUNK_ID`.
+   `VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID`.
 
 For an unpublished checkout, build the engine wheel with
 `uv build --out-dir dist`.
@@ -31,16 +31,16 @@ For an unpublished checkout, build the engine wheel with
 Run from a LiveKit-runtime agent project:
 
 ```bash
-voicekit deploy livekit-cloud \
+voicey deploy livekit-cloud \
   --agent my-agent \
   --project my-livekit-project \
   --region us-west \
   --relay-url https://my-agent-results.fly.dev \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
-Published releases omit `--engine-wheel`. Voicekit generates a secret-free,
+Published releases omit `--engine-wheel`. Voicey generates a secret-free,
 multi-stage glibc/non-root context, validates signed relay readiness, verifies
 the exact authenticated project, and refuses unledgered LiveKit agent state.
 It sends worker-only secrets through a temporary `0600` file that is removed
@@ -57,32 +57,32 @@ A project whose manifest includes `phone` must provide a paid destination
 unless the operator explicitly uses `--skip-smoke`:
 
 ```bash
-voicekit deploy livekit-cloud \
+voicey deploy livekit-cloud \
   --agent my-agent \
   --project my-livekit-project \
   --region us-west \
   --relay-url https://my-agent-results.fly.dev \
   --smoke-to +15551234567 \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
 That path creates an isolated named-dispatch room, calls the destination with
 the exact outbound trunk and `wait_until_answered=True`, then requires durable
 admission and terminal persistence before deleting the room. It is a real paid
-SIP call. Voicekit does not create or silently select a trunk in this command.
+SIP call. Voicey does not create or silently select a trunk in this command.
 
 ## Adoption, resume, and rollback
 
 The owner-only nonsecret ledger is
-`.voicekit/deploy/livekit-cloud-resources.json`. It stores the exact project,
+`.voicey/deploy/livekit-cloud-resources.json`. It stores the exact project,
 region, agent id, created/adopted ownership, previous version, relay
 fingerprint, artifact digest, and smoke status. It contains no secret values.
 
 To adopt an exact existing agent, supply both its id and explicit permission:
 
 ```bash
-voicekit deploy livekit-cloud \
+voicey deploy livekit-cloud \
   --agent my-agent \
   --project my-livekit-project \
   --region us-west \
@@ -100,7 +100,7 @@ closed.
 Rollback is explicit:
 
 ```bash
-voicekit deploy livekit-cloud \
+voicey deploy livekit-cloud \
   --agent my-agent \
   --project my-livekit-project \
   --region us-west \
@@ -109,7 +109,7 @@ voicekit deploy livekit-cloud \
   --yes
 ```
 
-A first version created by voicekit is deleted. A later deployment rolls back
+A first version created by voicey is deleted. A later deployment rolls back
 to the ledgered previous version. An adopted agent without a ledgered previous
 version is left untouched. Do not combine rollback with adoption, wheel, or
 smoke flags.

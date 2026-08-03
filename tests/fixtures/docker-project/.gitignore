@@ -1,7 +1,7 @@
 .env*
 !.env.example
-.voicekit/
-Dockerfile.voicekit
-compose.voicekit.yaml
+.voicey/
+Dockerfile.voicey
+compose.voicey.yaml
 docker.env.example
 .dockerignore

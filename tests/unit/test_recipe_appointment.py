@@ -16,21 +16,21 @@ from pipecat.evals.suite import EvalManifest
 from pipecat.evals.transport import EvalTransportParams
 from pipecat.runner.types import EvalRunnerArguments
 
-from voicekit import Agent, Behavior, Models, Phone, Results, Web, results
-from voicekit.cli.scaffold import ScaffoldWriter, ScratchScaffold
-from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
-from voicekit.errors import VoicekitError
-from voicekit.recipes.source import (
+from voicey import Agent, Behavior, Models, Phone, Results, Web, results
+from voicey.cli.scaffold import ScaffoldWriter, ScratchScaffold
+from voicey.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
+from voicey.errors import VoiceyError
+from voicey.recipes.source import (
     RECIPE_LOCK_NAME,
     RecipeBaselineStore,
     install_recipe,
     recipe_files,
 )
-from voicekit.runtimes.pipecat.evals import run_eval_agent
-from voicekit.storage.sqlite import SQLiteRepository
-from voicekit.testing import JudgeConfig, discover_scenarios
-from voicekit.testing.livekit import compile_livekit
-from voicekit.testing.pipecat import compile_pipecat
+from voicey.runtimes.pipecat.evals import run_eval_agent
+from voicey.storage.sqlite import SQLiteRepository
+from voicey.testing import JudgeConfig, discover_scenarios
+from voicey.testing.livekit import compile_livekit
+from voicey.testing.pipecat import compile_pipecat
 
 ROOT = Path(__file__).parents[2]
 RECIPE = ROOT / "recipes" / "appointment-booking"
@@ -61,13 +61,13 @@ def _agent(*, runtime: str = "pipecat") -> Agent:
         ),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
 
 def _load_recipe_tools() -> ModuleType:
-    name = "voicekit_test_appointment_tools"
+    name = "voicey_test_appointment_tools"
     spec = importlib.util.spec_from_file_location(name, RECIPE / "tools.py")
     assert spec is not None
     assert spec.loader is not None
@@ -128,23 +128,23 @@ def test_recipe_source_selects_native_variant_and_never_overwrites(tmp_path: Pat
     )
 
     (tmp_path / "flow.py").write_text("# user-owned\n", encoding="utf-8")
-    with pytest.raises(VoicekitError) as conflict:
+    with pytest.raises(VoiceyError) as conflict:
         install_recipe(
             tmp_path,
             name="appointment-booking",
             version="1.0.0",
             runtime="pipecat",
         )
-    assert conflict.value.code == "VK-CLI-003"
+    assert conflict.value.code == "VY-CLI-003"
     assert (tmp_path / "flow.py").read_text(encoding="utf-8") == "# user-owned\n"
 
-    with pytest.raises(VoicekitError) as missing_recipe:
+    with pytest.raises(VoiceyError) as missing_recipe:
         recipe_files("missing-recipe", "pipecat")
-    assert missing_recipe.value.code == "VK-CLI-005"
+    assert missing_recipe.value.code == "VY-CLI-005"
 
-    with pytest.raises(VoicekitError) as missing_runtime:
+    with pytest.raises(VoiceyError) as missing_runtime:
         recipe_files("appointment-booking", cast(Any, "missing-runtime"))
-    assert missing_runtime.value.code == "VK-CLI-005"
+    assert missing_runtime.value.code == "VY-CLI-005"
 
 
 def test_recipe_shared_suite_compiles_to_both_native_evaluators(tmp_path: Path) -> None:
@@ -159,6 +159,40 @@ def test_recipe_shared_suite_compiles_to_both_native_evaluators(tmp_path: Path) 
         "human_transfer",
         "voicemail_privacy",
     }
+    scenario_turns = {
+        definition.name: {turn.user: turn for turn in definition.turns} for definition in scenarios
+    }
+    for scenario_name in (
+        "book_appointment",
+        "change_mind_reschedule",
+        "cancel_appointment",
+    ):
+        confirmation = scenario_turns[scenario_name]["Yes, that email address is correct."]
+        assert confirmation.runtimes == frozenset({"livekit"})
+    name_confirmation = scenario_turns["book_appointment"][
+        "Yes, the spelling of my name is correct."
+    ]
+    assert name_confirmation.runtimes == frozenset({"livekit"})
+    assert scenario_turns["book_appointment"]["My name is {name}."].runtimes == frozenset(
+        {"livekit"}
+    )
+    assert scenario_turns["book_appointment"]["My email is {email}."].runtimes == frozenset(
+        {"livekit"}
+    )
+    pipecat_booking_turns = [
+        turn
+        for turn in next(
+            definition for definition in scenarios if definition.name == "book_appointment"
+        ).turns
+        if "pipecat" in turn.runtimes
+    ]
+    assert any(
+        turn.user is not None and "Show me all available times that day" in turn.user
+        for turn in pipecat_booking_turns
+    )
+    system_prompt = (RECIPE / "prompts" / "system.md").read_text(encoding="utf-8")
+    assert "call that function before producing conversational text" in system_prompt
+    assert "final appointment date and time with" in system_prompt
     pipecat = compile_pipecat(
         scenarios,
         output_dir=tmp_path / "pipecat",
@@ -173,6 +207,18 @@ def test_recipe_shared_suite_compiles_to_both_native_evaluators(tmp_path: Path) 
     assert all(EvalScenario.load(path).turns for path in pipecat.scenarios)
     assert len(livekit) == 7
     assert all(case.turns for case in livekit)
+    booking_pipecat = EvalScenario.load(
+        next(path for path in pipecat.scenarios if "book_appointment" in path.name)
+    )
+    assert len(booking_pipecat.turns) == 4
+    booking_livekit = next(case for case in livekit if case.name.startswith("book_appointment"))
+    assert len(booking_livekit.turns) == 8
+    barge_pipecat = EvalScenario.load(
+        next(path for path in pipecat.scenarios if "barge_in_to_cancel" in path.name)
+    )
+    assert len(barge_pipecat.turns) == 2
+    barge_livekit = next(case for case in livekit if case.name.startswith("barge_in_to_cancel"))
+    assert len(barge_livekit.turns) == 5
 
 
 def test_recipe_scaffold_is_complete_native_and_manifested(tmp_path: Path) -> None:
@@ -206,8 +252,8 @@ def test_recipe_scaffold_is_complete_native_and_manifested(tmp_path: Path) -> No
     for relative in ("agent.py", "flow.py", "tools.py", "eval_bot.py"):
         compile((tmp_path / relative).read_text(encoding="utf-8"), relative, "exec")
     assert "Behavior(" in (tmp_path / "agent.py").read_text(encoding="utf-8")
-    assert "VOICEKIT_TRANSFER_NUMBER=" in (tmp_path / ".env.example").read_text(encoding="utf-8")
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().recipe.name == ("appointment-booking")
+    assert "VOICEY_TRANSFER_NUMBER=" in (tmp_path / ".env.example").read_text(encoding="utf-8")
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().recipe.name == ("appointment-booking")
 
 
 def test_livekit_recipe_scaffold_is_native_and_runtime_selected(tmp_path: Path) -> None:
@@ -247,7 +293,7 @@ def test_livekit_recipe_scaffold_is_native_and_runtime_selected(tmp_path: Path) 
     assert "class AppointmentIntakeAgent" in flow_source
     assert "GetNameTask" in flow_source
     assert not (tmp_path / "eval_bot.py").exists()
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load().runtime == "livekit"
+    assert ManifestStore(tmp_path / "voicey.jsonc").load().runtime == "livekit"
 
 
 def _native_function(
@@ -264,7 +310,7 @@ def _native_function(
 async def test_livekit_recipe_uses_native_handoffs_and_preserves_shared_tools() -> None:
     flow = _load_recipe_module(
         "livekit/flow.py",
-        "voicekit_test_appointment_livekit_flow",
+        "voicey_test_appointment_livekit_flow",
     )
 
     async def shared_lookup() -> str:
@@ -302,7 +348,7 @@ async def test_livekit_booking_awaits_pinned_prebuilt_contact_tasks(
 ) -> None:
     flow = _load_recipe_module(
         "livekit/flow.py",
-        "voicekit_test_appointment_livekit_contact_flow",
+        "voicey_test_appointment_livekit_contact_flow",
     )
     calls: list[tuple[str, dict[str, object]]] = []
     replies: list[str] = []
@@ -322,8 +368,8 @@ async def test_livekit_booking_awaits_pinned_prebuilt_contact_tasks(
         return completed(SimpleNamespace(email_address="alex@example.com"))
 
     class FakeSession:
-        def generate_reply(self, *, instructions: str) -> None:
-            replies.append(instructions)
+        def say(self, text: str) -> None:
+            replies.append(text)
 
     fake_session = FakeSession()
     monkeypatch.setattr(flow, "GetNameTask", fake_name)
@@ -340,9 +386,9 @@ async def test_livekit_booking_awaits_pinned_prebuilt_contact_tasks(
     assert [name for name, _kwargs in calls] == ["name", "email"]
     assert all(kwargs["require_confirmation"] is True for _name, kwargs in calls)
     assert all(kwargs["require_explicit_ask"] is True for _name, kwargs in calls)
-    assert "Alex Rivera" in replies[-1]
-    assert "alex@example.com" in replies[-1]
-    assert "untrusted caller-data" in replies[-1]
+    assert replies == [
+        "Thanks. What date and time would you prefer, and what timezone should I use?"
+    ]
 
 
 def test_calendar_stub_is_typed_deterministic_and_records_outcomes() -> None:
@@ -445,6 +491,14 @@ async def test_eval_runtime_uses_native_transport_and_terminal_lifecycle(
     repository = await SQLiteRepository(tmp_path / "evals.sqlite3").open()
     observed: dict[str, Any] = {}
 
+    class FakeTransport:
+        def event_handler(self, name: str) -> Any:
+            def register(handler: Any) -> Any:
+                observed[f"handler:{name}"] = handler
+                return handler
+
+            return register
+
     async def fake_create_transport(
         runner_args: EvalRunnerArguments,
         params: dict[str, Any],
@@ -452,11 +506,15 @@ async def test_eval_runtime_uses_native_transport_and_terminal_lifecycle(
         observed["runner_args"] = runner_args
         eval_params = params["eval"]()
         assert isinstance(eval_params, EvalTransportParams)
-        return object()
+        return FakeTransport()
 
     class FakeSession:
         def __init__(self, lifecycle: Any) -> None:
             self.lifecycle = lifecycle
+            self.observations = SimpleNamespace(interruptions=0)
+
+        def set_reason(self, reason: str) -> None:
+            observed["reason"] = reason
 
         async def start(self, _runner: object) -> None:
             observed["started"] = True
@@ -468,11 +526,19 @@ async def test_eval_runtime_uses_native_transport_and_terminal_lifecycle(
             return
 
     class FakeBuilder:
-        def __init__(self, _repository: object, *, transfer_handler: object) -> None:
+        def __init__(
+            self,
+            _repository: object,
+            *,
+            transfer_handler: object,
+            warm_transfer_handler: object,
+        ) -> None:
             observed["transfer_handler"] = transfer_handler
+            observed["warm_transfer_handler"] = warm_transfer_handler
 
         def build(self, **kwargs: Any) -> FakeSession:
             observed["sample_rate"] = kwargs["sample_rate"]
+            observed["transfer_number"] = kwargs["agent"].behavior.transfer_number
             return FakeSession(kwargs["lifecycle"])
 
     class FakeRunner:
@@ -482,31 +548,37 @@ async def test_eval_runtime_uses_native_transport_and_terminal_lifecycle(
         async def run(self) -> None:
             return
 
-    monkeypatch.setattr("voicekit.runtimes.pipecat.evals.create_transport", fake_create_transport)
-    monkeypatch.setattr("voicekit.runtimes.pipecat.evals.PipecatSessionBuilder", FakeBuilder)
-    monkeypatch.setattr("voicekit.runtimes.pipecat.evals.WorkerRunner", FakeRunner)
+    monkeypatch.setattr("voicey.runtimes.pipecat.evals.create_transport", fake_create_transport)
+    monkeypatch.setattr("voicey.runtimes.pipecat.evals.PipecatSessionBuilder", FakeBuilder)
+    monkeypatch.setattr("voicey.runtimes.pipecat.evals.WorkerRunner", FakeRunner)
 
     await run_eval_agent(
         _agent(),
         EvalRunnerArguments(
             session_id="unit",
-            body={"voicekit_call_id": "call_eval_manifest_body"},
+            body={"voicey_call_id": "call_eval_manifest_body"},
         ),
         repository=repository,
     )
+    await observed["handler:on_client_disconnected"](object(), object())
     record = await repository.get_call("call_eval_manifest_body")
     await repository.close()
 
     assert observed["started"] is True
     assert observed["sample_rate"] == 16000
+    assert observed["transfer_number"] == "+15555550199"
+    assert observed["transfer_handler"] is not None
+    assert observed["warm_transfer_handler"] is None
+    assert "handler:on_client_disconnected" in observed
+    assert observed["reason"] == "caller_hangup"
     assert record.status == "completed"
 
 
 @pytest.mark.asyncio
 async def test_eval_runtime_rejects_the_other_runtime() -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         await run_eval_agent(_agent(runtime="livekit"), EvalRunnerArguments())
-    assert caught.value.code == "VK-RUN-001"
+    assert caught.value.code == "VY-RUN-001"
 
 
 @pytest.mark.asyncio
@@ -522,7 +594,7 @@ async def test_eval_runtime_terminalizes_transport_setup_failure(
     ) -> object:
         raise RuntimeError("eval port unavailable")
 
-    monkeypatch.setattr("voicekit.runtimes.pipecat.evals.create_transport", fail_transport)
+    monkeypatch.setattr("voicey.runtimes.pipecat.evals.create_transport", fail_transport)
 
     with pytest.raises(RuntimeError, match="port unavailable"):
         await run_eval_agent(

@@ -8,13 +8,13 @@ from pathlib import Path
 import pytest
 from livekit import api
 
-from voicekit.runtimes.livekit.sip import LiveKitSipDialer
-from voicekit.runtimes.livekit.telnyx import (
+from voicey.runtimes.livekit.sip import LiveKitSipDialer
+from voicey.runtimes.livekit.telnyx import (
     TelnyxLiveKitSipConfig,
     TelnyxLiveKitSipProvisioner,
     TelnyxSipHTTPBackend,
 )
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.telephony.ledger import TelephonyLedger
 
 pytestmark = pytest.mark.live
 
@@ -36,19 +36,19 @@ def _livekit_api() -> api.LiveKitAPI:
 
 def _config() -> TelnyxLiveKitSipConfig:
     return TelnyxLiveKitSipConfig(
-        number=_required("VOICEKIT_TELNYX_LIVE_FROM"),
-        agent_name=_required("VOICEKIT_LIVEKIT_AGENT_NAME"),
-        livekit_sip_uri=_required("VOICEKIT_LIVEKIT_SIP_URI"),
-        auth_username=_required("VOICEKIT_TELNYX_SIP_USERNAME"),
-        auth_password=_required("VOICEKIT_TELNYX_SIP_PASSWORD"),
-        anchorsite=os.environ.get("VOICEKIT_TELNYX_ANCHORSITE", "Latency"),
+        number=_required("VOICEY_TELNYX_LIVE_FROM"),
+        agent_name=_required("VOICEY_LIVEKIT_AGENT_NAME"),
+        livekit_sip_uri=_required("VOICEY_LIVEKIT_SIP_URI"),
+        auth_username=_required("VOICEY_TELNYX_SIP_USERNAME"),
+        auth_password=_required("VOICEY_TELNYX_SIP_PASSWORD"),
+        anchorsite=os.environ.get("VOICEY_TELNYX_ANCHORSITE", "Latency"),
     )
 
 
 @pytest.mark.asyncio
 async def test_live_telnyx_livekit_provision_reuse_and_rollback(tmp_path: Path) -> None:
-    if os.environ.get("VOICEKIT_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
-        pytest.skip("VOICEKIT_LIVE_ROUTE_CONFIRM acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
+        pytest.skip("VOICEY_LIVE_ROUTE_CONFIRM acknowledgement is absent")
     ledger = TelephonyLedger(tmp_path / "telnyx-livekit-provision.sqlite3")
     livekit = _livekit_api()
     provisioner = TelnyxLiveKitSipProvisioner(
@@ -76,8 +76,8 @@ async def test_live_telnyx_livekit_provision_reuse_and_rollback(tmp_path: Path) 
 async def test_live_telnyx_livekit_paid_outbound_and_sip_status_mapping(
     tmp_path: Path,
 ) -> None:
-    if os.environ.get("VOICEKIT_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
-        pytest.skip("VOICEKIT_LIVE_CONFIRM charge acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
+        pytest.skip("VOICEY_LIVE_CONFIRM charge acknowledgement is absent")
     ledger = TelephonyLedger(tmp_path / "telnyx-livekit-outbound.sqlite3")
     livekit = _livekit_api()
     dialer = LiveKitSipDialer(
@@ -89,10 +89,10 @@ async def test_live_telnyx_livekit_paid_outbound_and_sip_status_mapping(
     )
     try:
         result = await dialer.dial(
-            from_number=_required("VOICEKIT_TELNYX_LIVE_FROM"),
-            to_number=_required("VOICEKIT_TELNYX_LIVE_TO"),
-            room_name=_required("VOICEKIT_LIVEKIT_CERT_ROOM"),
-            participant_identity="voicekit-telnyx-cert-callee",
+            from_number=_required("VOICEY_TELNYX_LIVE_FROM"),
+            to_number=_required("VOICEY_TELNYX_LIVE_TO"),
+            room_name=_required("VOICEY_LIVEKIT_CERT_ROOM"),
+            participant_identity="voicey-telnyx-cert-callee",
             intent_id="intent_telnyx_livekit_live_cert",
         )
         assert result.ended_reason is None

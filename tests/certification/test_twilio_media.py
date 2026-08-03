@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.telephony.twilio import (
+from voicey.errors import VoiceyError
+from voicey.telephony.twilio import (
     FramePacer,
     JitterBuffer,
     MediaEvent,
@@ -21,7 +21,7 @@ from voicekit.telephony.twilio import (
     rms_energy,
     tone_pcm16,
 )
-from voicekit.telephony.twilio.media import parse_stream_message
+from voicey.telephony.twilio.media import parse_stream_message
 
 STREAM_SID = "MZ" + "1" * 32
 CALL_SID = "CA" + "2" * 32
@@ -155,10 +155,10 @@ def test_stream_parser_validates_format_audio_mark_dtmf_and_stop() -> None:
     ],
 )
 def test_invalid_stream_messages_are_cataloged(message: str) -> None:
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         parse_stream_message(message)
 
-    assert caught.value.code == "VK-TEL-010"
+    assert caught.value.code == "VY-TEL-010"
 
 
 def test_jitter_buffer_reorders_within_tolerance_and_skips_late_gap() -> None:
@@ -182,12 +182,12 @@ def test_jitter_buffer_reorders_within_tolerance_and_skips_late_gap() -> None:
     buffered.push(MediaFrame(12, 40, payload))
     assert [frame.sequence for frame in buffered.flush()] == [12]
 
-    with pytest.raises(VoicekitError) as tolerance:
+    with pytest.raises(VoiceyError) as tolerance:
         JitterBuffer(max_late_frames=-1)
-    with pytest.raises(VoicekitError) as frame:
+    with pytest.raises(VoiceyError) as frame:
         buffer.push(MediaFrame(13, 0, b"short"))
-    assert tolerance.value.code == "VK-TEL-010"
-    assert frame.value.code == "VK-TEL-010"
+    assert tolerance.value.code == "VY-TEL-010"
+    assert frame.value.code == "VY-TEL-010"
 
 
 @pytest.mark.asyncio
@@ -228,34 +228,34 @@ def test_mark_clear_interruption_flush_is_immediate_and_observable() -> None:
     }
 
     tracker.sent("turn_3")
-    with pytest.raises(VoicekitError) as duplicate:
+    with pytest.raises(VoiceyError) as duplicate:
         tracker.sent("turn_3")
-    with pytest.raises(VoicekitError) as unknown:
+    with pytest.raises(VoiceyError) as unknown:
         tracker.acknowledged("missing")
-    assert duplicate.value.code == "VK-TEL-010"
-    assert unknown.value.code == "VK-TEL-010"
+    assert duplicate.value.code == "VY-TEL-010"
+    assert unknown.value.code == "VY-TEL-010"
 
 
 def test_media_helper_boundaries_fail_closed() -> None:
-    with pytest.raises(VoicekitError) as pacer:
+    with pytest.raises(VoiceyError) as pacer:
         FramePacer(frame_duration_s=0)
-    with pytest.raises(VoicekitError) as ulaw:
+    with pytest.raises(VoiceyError) as ulaw:
         mulaw_to_linear16(256)
-    with pytest.raises(VoicekitError) as pcm:
+    with pytest.raises(VoiceyError) as pcm:
         linear16_to_mulaw(40000)
-    with pytest.raises(VoicekitError) as rates:
+    with pytest.raises(VoiceyError) as rates:
         resample_linear([0], source_rate=0, target_rate=8000)
-    with pytest.raises(VoicekitError) as sample:
+    with pytest.raises(VoiceyError) as sample:
         resample_linear([40000], source_rate=8000, target_rate=16000)
-    with pytest.raises(VoicekitError) as tone:
+    with pytest.raises(VoiceyError) as tone:
         tone_pcm16(
             frequency_hz=9000,
             sample_rate=16000,
             duration_s=1,
         )
-    with pytest.raises(VoicekitError) as frequency:
+    with pytest.raises(VoiceyError) as frequency:
         dominant_frequency([0], sample_rate=8000)
-    with pytest.raises(VoicekitError) as mark:
+    with pytest.raises(VoiceyError) as mark:
         mark_message(STREAM_SID, "not valid")
     assert resample_linear([], source_rate=8000, target_rate=16000) == ()
     assert rms_energy([]) == 0
@@ -268,4 +268,4 @@ def test_media_helper_boundaries_fail_closed() -> None:
         tone.value.code,
         frequency.value.code,
         mark.value.code,
-    } == {"VK-TEL-010"}
+    } == {"VY-TEL-010"}

@@ -5,7 +5,7 @@ import warnings
 
 import pytest
 
-from voicekit.compatibility import (
+from voicey.compatibility import (
     RUNTIME_REQUIREMENTS,
     RuntimeCompatibilityWarning,
     RuntimeRequirement,

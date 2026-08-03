@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typer.main import get_command
 from typer.testing import CliRunner
 
-from voicekit.cli.app import app
+from voicey.cli.app import app
 
 ROOT = Path(__file__).parents[2]
 MATRIX = ROOT / "docs" / "verification" / "p1-cli-matrix.json"

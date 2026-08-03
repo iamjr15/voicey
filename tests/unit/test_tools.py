@@ -7,10 +7,10 @@ from typing import cast
 import httpx
 import pytest
 
-from voicekit import results, tool
-from voicekit.errors import VoicekitError
-from voicekit.obs.records import ToolCallObservation
-from voicekit.tools import (
+from voicey import results, tool
+from voicey.errors import VoiceyError
+from voicey.obs.records import ToolCallObservation
+from voicey.tools import (
     HttpTool,
     RepositoryToolObservationSink,
     ToolExecutor,
@@ -89,7 +89,7 @@ def test_tool_records_explicit_mutation_semantics() -> None:
 def test_tool_discovery_supports_modules_and_explicit_references(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = ModuleType("voicekit_test_discovery")
+    module = ModuleType("voicey_test_discovery")
 
     @tool
     def zebra() -> str:
@@ -120,7 +120,7 @@ def test_tool_discovery_supports_modules_and_explicit_references(
 def test_tool_discovery_catalogs_import_and_duplicate_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = ModuleType("voicekit_test_duplicate_tools")
+    module = ModuleType("voicey_test_duplicate_tools")
 
     def first() -> str:
         """Return the first value."""
@@ -135,17 +135,17 @@ def test_tool_discovery_catalogs_import_and_duplicate_failures(
     module.__dict__.update({"first": tool(first), "second": tool(second)})
     monkeypatch.setitem(sys.modules, module.__name__, module)
 
-    with pytest.raises(VoicekitError, match="VK-TOL-002"):
+    with pytest.raises(VoiceyError, match="VY-TOL-002"):
         load_tools(module.__name__)
-    with pytest.raises(VoicekitError, match="VK-TOL-001"):
-        load_tools("voicekit_module_that_does_not_exist")
+    with pytest.raises(VoiceyError, match="VY-TOL-001"):
+        load_tools("voicey_module_that_does_not_exist")
 
 
 def test_undecorated_callable_is_rejected() -> None:
     def plain() -> None:
         return None
 
-    with pytest.raises(VoicekitError, match="VK-TOL-001"):
+    with pytest.raises(VoiceyError, match="VY-TOL-001"):
         get_tool_metadata(plain)
 
 
@@ -176,19 +176,19 @@ def test_invalid_tool_declarations_raise_catalog_error() -> None:
     untyped.__annotations__.pop("value")
     missing_return.__annotations__.pop("return")
     for invalid in (untyped, missing_return):
-        with pytest.raises(VoicekitError) as caught:
+        with pytest.raises(VoiceyError) as caught:
             tool(invalid)
-        assert caught.value.code == "VK-TOL-002"
+        assert caught.value.code == "VY-TOL-002"
 
 
 def test_variadic_tool_declaration_is_rejected() -> None:
     def variadic(*values: str) -> list[str]:
         return list(values)
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         tool(variadic)
 
-    assert caught.value.code == "VK-TOL-002"
+    assert caught.value.code == "VY-TOL-002"
 
 
 def test_non_json_schema_tool_declaration_is_cataloged() -> None:
@@ -198,10 +198,10 @@ def test_non_json_schema_tool_declaration_is_cataloged() -> None:
     def opaque(value: Opaque) -> str:
         return str(value)
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         tool(opaque)
 
-    assert caught.value.code == "VK-TOL-002"
+    assert caught.value.code == "VY-TOL-002"
 
 
 @pytest.mark.asyncio
@@ -269,11 +269,11 @@ async def test_observation_persistence_failure_is_cataloged() -> None:
 
     with (
         tool_execution_context("call_broken", BrokenSink()),
-        pytest.raises(VoicekitError) as caught,
+        pytest.raises(VoiceyError) as caught,
     ):
         await ToolExecutor().execute(ping, {})
 
-    assert caught.value.code == "VK-TOL-005"
+    assert caught.value.code == "VY-TOL-005"
     assert "disk detail" not in str(caught.value)
 
 
@@ -463,33 +463,33 @@ async def test_http_missing_env_is_safe_failure(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_invalid_executor_and_http_configuration_are_cataloged() -> None:
-    with pytest.raises(VoicekitError) as timeout:
+    with pytest.raises(VoiceyError) as timeout:
         ToolExecutor(timeout_s=0)
-    with pytest.raises(VoicekitError) as method:
+    with pytest.raises(VoiceyError) as method:
         tool.http(
             name="invalid",
             url="https://api.example.test",
             method="TRACE",
         )
-    with pytest.raises(VoicekitError) as inline_secret:
+    with pytest.raises(VoiceyError) as inline_secret:
         tool.http(
             name="inline_secret",
             url="https://api.example.test",
             headers_env={"Authorization": "Bearer inline-value"},
         )
-    with pytest.raises(VoicekitError) as invalid_name:
+    with pytest.raises(VoiceyError) as invalid_name:
         tool.http(
             name="not-valid",
             url="https://api.example.test",
         )
-    with pytest.raises(VoicekitError) as unsafe_template:
+    with pytest.raises(VoiceyError) as unsafe_template:
         tool.http(
             name="unsafe_template",
             url="https://api.example.test/{customer.id}",
         )
 
-    assert timeout.value.code == "VK-TOL-003"
-    assert method.value.code == "VK-TOL-004"
-    assert inline_secret.value.code == "VK-TOL-004"
-    assert invalid_name.value.code == "VK-TOL-002"
-    assert unsafe_template.value.code == "VK-TOL-004"
+    assert timeout.value.code == "VY-TOL-003"
+    assert method.value.code == "VY-TOL-004"
+    assert inline_secret.value.code == "VY-TOL-004"
+    assert invalid_name.value.code == "VY-TOL-002"
+    assert unsafe_template.value.code == "VY-TOL-004"

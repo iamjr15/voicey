@@ -31,7 +31,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-gate-report.json"),
+        default=Path(".voicey/verification/p4-gate-report.json"),
     )
     parser.add_argument("--short-soak-s", type=float, default=5.0)
     parser.add_argument("--max-concurrent", type=int, default=8)
@@ -241,7 +241,7 @@ def _pending_external_results(max_concurrent: int) -> list[GateResult]:
             command=(
                 "uv run python tests/verification/p4_soak.py --duration-s 86400 "
                 f"--max-concurrent {max_concurrent} --runtime both "
-                "--report .voicekit/verification/p4-24h-soak-report.json"
+                "--report .voicey/verification/p4-24h-soak-report.json"
             ),
             detail="the aggregate uses a bounded soak and never represents 24 hours",
         ),

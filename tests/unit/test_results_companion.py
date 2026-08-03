@@ -7,30 +7,30 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from voicekit.deploy.results_service import ResultsServiceSettings
-from voicekit.errors import VoicekitError
-from voicekit.obs import NewCall, TimelineEvent
-from voicekit.relay import RelayClient, RelayCredential, RelayKeyring, SQLiteRelayJournal
-from voicekit.relay.companion import (
+from voicey.deploy.results_service import ResultsServiceSettings
+from voicey.errors import VoiceyError
+from voicey.obs import NewCall, TimelineEvent
+from voicey.relay import RelayClient, RelayCredential, RelayKeyring, SQLiteRelayJournal
+from voicey.relay.companion import (
     CompanionMaintenance,
     CompanionService,
     CompanionSettings,
 )
-from voicekit.relay.recording import (
+from voicey.relay.recording import (
     CallbackProvider,
     CarrierCallbackIngress,
     add_carrier_callback_routes,
     parse_callback_providers,
 )
-from voicekit.results import DeliveryWorker, encode_secret
-from voicekit.storage import (
+from voicey.results import DeliveryWorker, encode_secret
+from voicey.storage import (
     LocalArtifactStore,
     RecordingReady,
     ResultDeliveryConfig,
     SQLiteRepository,
     TerminalRequest,
 )
-from voicekit.telephony.models import CallEvent, TelephonyRequest
+from voicey.telephony.models import CallEvent, TelephonyRequest
 
 _CONFIG_HASH = f"sha256:{'4' * 64}"
 _RESULT_CURRENT = encode_secret(b"c" * 32)
@@ -63,16 +63,16 @@ def _delivery(*, recording: bool = False) -> ResultDeliveryConfig:
 
 
 def _settings_environment() -> dict[str, str]:
-    database_url = "postgresql://voicekit:password@db.test/voicekit"  # pragma: allowlist secret
+    database_url = "postgresql://voicey:password@db.test/voicey"  # pragma: allowlist secret
     return {
-        "VOICEKIT_PUBLIC_BASE": "https://results.example.test",
+        "VOICEY_PUBLIC_BASE": "https://results.example.test",
         "DATABASE_URL": database_url,
-        "VOICEKIT_OBJECT_BUCKET": "voicekit-artifacts",
-        "VOICEKIT_RELAY_CREDENTIAL": RelayCredential.issue("current-key").reveal(),
-        "VOICEKIT_RESULTS_SECRET": _RESULT_CURRENT,
-        "VOICEKIT_DEPLOY_TARGET": "fly",
-        "VOICEKIT_STORAGE_BACKEND": "postgres",
-        "VOICEKIT_ARTIFACT_BACKEND": "s3",
+        "VOICEY_OBJECT_BUCKET": "voicey-artifacts",
+        "VOICEY_RELAY_CREDENTIAL": RelayCredential.issue("current-key").reveal(),
+        "VOICEY_RESULTS_SECRET": _RESULT_CURRENT,
+        "VOICEY_DEPLOY_TARGET": "fly",
+        "VOICEY_STORAGE_BACKEND": "postgres",
+        "VOICEY_ARTIFACT_BACKEND": "s3",
     }
 
 
@@ -84,38 +84,38 @@ def test_results_service_settings_fail_closed_and_hide_secrets() -> None:
     assert settings.target == "fly"
     assert settings.pool_max == 5
     assert environment["DATABASE_URL"] not in rendered
-    assert environment["VOICEKIT_RELAY_CREDENTIAL"] not in rendered
+    assert environment["VOICEY_RELAY_CREDENTIAL"] not in rendered
     assert _RESULT_CURRENT not in rendered
 
-    environment["VOICEKIT_STORAGE_BACKEND"] = "sqlite"
-    with pytest.raises(VoicekitError) as topology:
+    environment["VOICEY_STORAGE_BACKEND"] = "sqlite"
+    with pytest.raises(VoiceyError) as topology:
         ResultsServiceSettings.from_environment(environment)
-    assert topology.value.code == "VK-DEP-002"
+    assert topology.value.code == "VY-DEP-002"
 
     invalid = _settings_environment()
-    invalid["VOICEKIT_DB_CONNECTION_BUDGET"] = "5"
-    with pytest.raises(VoicekitError) as budget:
+    invalid["VOICEY_DB_CONNECTION_BUDGET"] = "5"
+    with pytest.raises(VoiceyError) as budget:
         ResultsServiceSettings.from_environment(invalid)
-    assert budget.value.code == "VK-DEP-003"
+    assert budget.value.code == "VY-DEP-003"
 
-    with pytest.raises(VoicekitError) as public_base:
+    with pytest.raises(VoiceyError) as public_base:
         CompanionSettings(
             public_base="http://results.example.test/",
             recovery_owner="results-test",
         )
-    assert public_base.value.code == "VK-DEP-003"
-    with pytest.raises(VoicekitError) as owner:
+    assert public_base.value.code == "VY-DEP-003"
+    with pytest.raises(VoiceyError) as owner:
         CompanionSettings(
             public_base="https://results.example.test",
             recovery_owner="",
         )
-    assert owner.value.code == "VK-DEP-003"
+    assert owner.value.code == "VY-DEP-003"
 
     recording = _settings_environment()
-    recording["VOICEKIT_CALLBACK_PROVIDERS"] = "twilio"
-    with pytest.raises(VoicekitError) as credentials:
+    recording["VOICEY_CALLBACK_PROVIDERS"] = "twilio"
+    with pytest.raises(VoiceyError) as credentials:
         ResultsServiceSettings.from_environment(recording)
-    assert credentials.value.code == "VK-DEP-003"
+    assert credentials.value.code == "VY-DEP-003"
 
 
 class _RecordingAdapter:
@@ -197,16 +197,16 @@ async def test_recording_ingress_is_explicit_authenticated_and_uses_public_url()
     assert adapter.requests[0].path == "/relay/twilio/recordings"
     assert parse_callback_providers("telnyx, twilio") == ("telnyx", "twilio")
 
-    with pytest.raises(VoicekitError) as duplicate:
+    with pytest.raises(VoiceyError) as duplicate:
         parse_callback_providers("twilio,twilio")
-    assert duplicate.value.code == "VK-DEP-003"
+    assert duplicate.value.code == "VY-DEP-003"
     assert parse_callback_providers(" , ") == ()
 
-    with pytest.raises(VoicekitError) as unknown:
+    with pytest.raises(VoiceyError) as unknown:
         parse_callback_providers("unknown")
-    assert unknown.value.code == "VK-DEP-003"
+    assert unknown.value.code == "VY-DEP-003"
 
-    with pytest.raises(VoicekitError) as duplicate_routes:
+    with pytest.raises(VoiceyError) as duplicate_routes:
         add_carrier_callback_routes(
             FastAPI(),
             public_base="https://results.example.test",
@@ -215,7 +215,7 @@ async def test_recording_ingress_is_explicit_authenticated_and_uses_public_url()
                 CarrierCallbackIngress("twilio", adapter, handle),
             ),
         )
-    assert duplicate_routes.value.code == "VK-DEP-003"
+    assert duplicate_routes.value.code == "VY-DEP-003"
 
 
 @pytest.mark.asyncio
@@ -239,9 +239,9 @@ async def test_all_carrier_callback_routes_and_failure_modes(tmp_path: Path) -> 
 
     async def handle(event: CallEvent) -> None:
         if event.provider_call_id == "pending":
-            raise VoicekitError("VK-RES-010", detail="pending")
+            raise VoiceyError("VY-RES-010", detail="pending")
         if event.provider_call_id == "artifact-error":
-            raise VoicekitError("VK-ART-002", detail="object")
+            raise VoiceyError("VY-ART-002", detail="object")
         handled.append(event.provider_call_id)
 
     async def observe(event: CallEvent) -> None:
@@ -332,13 +332,13 @@ async def test_all_carrier_callback_routes_and_failure_modes(tmp_path: Path) -> 
         f"{provider}-completed" for provider in ("twilio", "telnyx", "vobiz")
     )
     assert wrong_kind.status_code == 503
-    assert wrong_kind.json()["error"]["code"] == "VK-TEL-009"
+    assert wrong_kind.json()["error"]["code"] == "VY-TEL-009"
     assert pending.status_code == 503
-    assert pending.json()["error"]["code"] == "VK-TEL-009"
+    assert pending.json()["error"]["code"] == "VY-TEL-009"
     assert artifact_error.status_code == 409
-    assert artifact_error.json()["error"]["code"] == "VK-ART-002"
+    assert artifact_error.json()["error"]["code"] == "VY-ART-002"
     assert invalid_utf8.status_code == 400
-    assert invalid_utf8.json()["error"]["code"] == "VK-TEL-008"
+    assert invalid_utf8.json()["error"]["code"] == "VY-TEL-008"
 
 
 @pytest.mark.asyncio
@@ -406,7 +406,7 @@ async def test_companion_signed_readiness_drain_and_existing_update(tmp_path: Pa
                 lease.call_id,
                 TimelineEvent(event_type="worker.finishing"),
             )
-            with pytest.raises(VoicekitError) as caught:
+            with pytest.raises(VoiceyError) as caught:
                 await client.begin_call(
                     _call("call_rejected"),
                     owner_id="worker-b",
@@ -420,9 +420,9 @@ async def test_companion_signed_readiness_drain_and_existing_update(tmp_path: Pa
     assert before.status_code == 200
     assert before.json()["signed_readiness_path"] == "/v1/ready"
     assert rejected_recording.status_code == 403
-    assert rejected_recording.json()["error"]["code"] == "VK-RUN-007"
+    assert rejected_recording.json()["error"]["code"] == "VY-RUN-007"
     assert after.status_code == 503
-    assert caught.value.code == "VK-REL-002"
+    assert caught.value.code == "VY-REL-002"
     assert [item.event_type for item in call.timeline] == ["worker.finishing"]
 
 
@@ -505,7 +505,7 @@ async def test_companion_admin_and_artifact_reads_accept_rotation_only(
             )
 
     assert unauthorized.status_code == 403
-    assert unauthorized.json()["error"]["code"] == "VK-WEB-004"
+    assert unauthorized.json()["error"]["code"] == "VY-WEB-004"
     assert previous.status_code == 200
     assert previous.content == b"audio-bytes"
     assert previous.headers["cache-control"] == "private, no-store"

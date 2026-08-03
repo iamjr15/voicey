@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from voicekit.obs import CallRecord
-from voicekit.results import ProviderReconciliation, RecoveryCoordinator
-from voicekit.storage import SQLiteRepository
+from voicey.obs import CallRecord
+from voicey.results import ProviderReconciliation, RecoveryCoordinator
+from voicey.storage import SQLiteRepository
 
 pytestmark = [pytest.mark.integration]
 
@@ -40,11 +40,11 @@ from typing import Any, cast
 from livekit.agents import ConversationItemAddedEvent
 from livekit.agents.llm import ChatMessage
 
-from voicekit import Agent, Models, Results, Web
-from voicekit.runtimes.livekit import LiveKitCall, LiveKitLifecycleManager
-from voicekit.runtimes.livekit.observability import LiveKitObservationBridge
-from voicekit.runtimes.pipecat.admission import AdmissionController
-from voicekit.storage import SQLiteRepository
+from voicey import Agent, Models, Results, Web
+from voicey.runtimes.livekit import LiveKitCall, LiveKitLifecycleManager
+from voicey.runtimes.livekit.observability import LiveKitObservationBridge
+from voicey.runtimes.pipecat.admission import AdmissionController
+from voicey.storage import SQLiteRepository
 
 async def noop():
     return None
@@ -65,7 +65,7 @@ async def main():
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
     admission = AdmissionController(1)

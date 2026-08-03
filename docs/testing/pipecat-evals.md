@@ -1,21 +1,23 @@
 # Pipecat Evals
 
 P1 uses Pipecat 1.6.0's native eval transport and CLI directly. The
-`voicekit[pipecat]` extra installs `pipecat-ai[evals]`; the copied recipe's
+`voicey[pipecat]` extra installs `pipecat-ai[evals]`; the copied recipe's
 `eval_bot.py` calls the same production session builder used by phone and web
 calls. Provider creation, native Flows initialization, typed tools,
 observations, admission, and fenced terminal persistence therefore stay in the
 test path.
 
 The only substituted side effect is carrier transfer: eval mode records a
-transfer request and ends the call without contacting Twilio.
+transfer request and ends the call without contacting Twilio. The eval client
+disconnect terminalizes the durable result before the native suite can stop
+the bot process.
 
 ## Text suite
 
 From an appointment recipe project:
 
 ```bash
-ollama pull gemma2:9b
+ollama pull qwen3:8b
 uv run pipecat eval suite evals/text-suite.yaml
 ```
 
@@ -23,6 +25,13 @@ Seven fresh-bot scenarios cover booking, change of mind, cancellation,
 barge-in, calendar failure, voicemail, and the production
 `transfer_to_human` function. Text mode bypasses STT/TTS for fast behavioral
 iteration but still uses the real agent LLM and native tools.
+
+For the unified cloud-model path, set the native Anthropic configuration in
+`tests/voicey-test.jsonc` as documented in `docs/testing.md`, then run
+`voicey test --report json`. Its compiler waits for both a native function-call
+event and the post-tool response on tool-only turns. The 2026-08-03 full
+seven-case Pipecat text run passed every case first attempt with the reference
+provider APIs and no Ollama request.
 
 ## Audio suite
 
@@ -47,25 +56,29 @@ reads `metric='e2e'` samples written by the production
 requires p50 ≤ 800 ms plus p95 ≤ 1500 ms:
 
 ```bash
-uv run python /path/to/voicekit/tests/verification/p1_latency_gate.py \
+uv run python /path/to/voicey/tests/verification/p1_latency_gate.py \
   --project "$PWD"
 ```
 
 The command requires 20 distinct measured turns and writes a secret-free JSON
-report under `.voicekit/verification/`. Missing provider credentials are
+report under `.voicey/verification/`. Missing provider credentials are
 reported as pending-live rather than success.
 
 ## Judge configuration
 
 `evals/judge-local.yaml` and `evals/judge-audio-local.yaml` select local Ollama
-with `gemma2:9b`; this is the default and requires no judge API key. A
+with `qwen3:8b`; this is the default and requires no judge API key. The model
+supports the tool schemas emitted by native LiveKit judging. A
 `judge-cloud.example.yaml` documents the Pipecat-supported cloud shape. Keep a
 private scenario overlay that includes the cloud file and collect its provider
 credential with:
 
 ```bash
-voicekit keys add openai
+voicey keys add openai
 ```
+
+The unified `voicey test` path also supports `service: "anthropic"` through
+Pipecat's installed `judge.eval.factory` and native `AnthropicLLMService`.
 
 Never put a credential in YAML or commit it.
 

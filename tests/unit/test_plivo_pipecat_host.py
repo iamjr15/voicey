@@ -11,18 +11,18 @@ from typing import Any, ClassVar, cast
 import httpx
 from starlette.datastructures import URL
 
-from voicekit import Agent, Behavior, Limits, Models, Phone, Results, Web, tool
-from voicekit.runtimes.pipecat.host import (
+from voicey import Agent, Behavior, Limits, Models, Phone, Results, Web, tool
+from voicey.runtimes.pipecat.host import (
     PipecatHost,
     PipecatHostSettings,
     PlivoRuntimeAdapter,
     _plivo_handshake,  # pyright: ignore[reportPrivateUsage]
     plivo_transport_params,
 )
-from voicekit.runtimes.pipecat.lifecycle import PipecatCallLifecycle
-from voicekit.runtimes.pipecat.session import PipecatSessionBuilder
-from voicekit.storage.sqlite import SQLiteRepository
-from voicekit.telephony import CallEvent, PipecatTarget, TelephonyRequest
+from voicey.runtimes.pipecat.lifecycle import PipecatCallLifecycle
+from voicey.runtimes.pipecat.session import PipecatSessionBuilder
+from voicey.storage.sqlite import SQLiteRepository
+from voicey.telephony import CallEvent, PipecatTarget, TelephonyRequest
 
 
 def entry() -> dict[str, object]:

@@ -5,8 +5,8 @@ from typing import Any, cast
 
 import pytest
 
-from voicekit.errors import VoicekitError
-from voicekit.runtimes.livekit.sip import (
+from voicey.errors import VoiceyError
+from voicey.runtimes.livekit.sip import (
     ManagedSipResource,
     TwilioElasticSipBackend,
     TwilioLiveKitSipConfig,
@@ -25,8 +25,15 @@ class FakeLeafCollection:
         return list(self.items.values())
 
     def create(self, **values: object) -> Any:
-        sid = f"{self.kind}-{len(self.items) + 1}"
-        item = SimpleNamespace(sid=sid, **values)
+        if self.kind == "binding":
+            # Twilio's trunk CredentialList mapping resource uses the bound
+            # CredentialList SID as its own `sid`; it does not expose a
+            # separate `credential_list_sid` attribute.
+            sid = str(values["credential_list_sid"])
+            item = SimpleNamespace(sid=sid, trunk_sid=self.parent_id)
+        else:
+            sid = f"{self.kind}-{len(self.items) + 1}"
+            item = SimpleNamespace(sid=sid, **values)
         self.items[sid] = item
         if self.kind == "phone":
             number = self.parent.numbers[str(values["phone_number_sid"])]
@@ -222,29 +229,29 @@ def test_twilio_elastic_backend_full_create_reuse_restore_and_delete() -> None:
     snapshot = backend.snapshot_number("+14155550100")
 
     trunk = backend.ensure_trunk(
-        name="voicekit-agent-14155550100",
-        domain_name="voicekit-test.pstn.twilio.com",
+        name="voicey-agent-14155550100",
+        domain_name="voicey-test.pstn.twilio.com",
     )
     assert trunk.created is True
     assert client.trunks.items[trunk.resource_id].secure is True
     assert (
         backend.ensure_trunk(
-            name="voicekit-agent-14155550100",
-            domain_name="voicekit-test.pstn.twilio.com",
+            name="voicey-agent-14155550100",
+            domain_name="voicey-test.pstn.twilio.com",
         ).created
         is False
     )
 
     origination = backend.ensure_origination(
         trunk_sid=trunk.resource_id,
-        name="voicekit-agent-14155550100",
+        name="voicey-agent-14155550100",
         sip_uri="sip:example.sip.livekit.cloud;transport=tls",
     )
     assert origination.created is True
     assert (
         backend.ensure_origination(
             trunk_sid=trunk.resource_id,
-            name="voicekit-agent-14155550100",
+            name="voicey-agent-14155550100",
             sip_uri="sip:example.sip.livekit.cloud;transport=tls",
         ).created
         is False
@@ -264,19 +271,19 @@ def test_twilio_elastic_backend_full_create_reuse_restore_and_delete() -> None:
         allow_update=False,
     )
 
-    credential_list = backend.ensure_credential_list(name="voicekit-agent-14155550100")
+    credential_list = backend.ensure_credential_list(name="voicey-agent-14155550100")
     assert credential_list.created is True
-    assert backend.ensure_credential_list(name="voicekit-agent-14155550100").created is False
+    assert backend.ensure_credential_list(name="voicey-agent-14155550100").created is False
     credential = backend.ensure_credential(
         credential_list_sid=credential_list.resource_id,
-        username="voicekit-user",
+        username="voicey-user",
         password="random-password",  # pragma: allowlist secret
     )
     assert credential.created is True
     assert (
         backend.ensure_credential(
             credential_list_sid=credential_list.resource_id,
-            username="voicekit-user",
+            username="voicey-user",
             password="ignored-existing",  # pragma: allowlist secret
         ).created
         is False
@@ -331,8 +338,8 @@ def test_twilio_elastic_backend_rejects_unconfirmed_mutations(
     client = FakeTwilioClient()
     backend = TwilioElasticSipBackend(client)
     trunk = backend.ensure_trunk(
-        name="voicekit-agent-14155550100",
-        domain_name="voicekit-test.pstn.twilio.com",
+        name="voicey-agent-14155550100",
+        domain_name="voicey-test.pstn.twilio.com",
     )
 
     def run() -> None:
@@ -368,10 +375,10 @@ def test_twilio_elastic_backend_rejects_unconfirmed_mutations(
             client.delete_confirmed = False
             backend.delete_resource(trunk)
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         run()
 
-    assert caught.value.code == "VK-TEL-006"
+    assert caught.value.code == "VY-TEL-006"
     assert detail in (caught.value.detail or "")
 
 
@@ -387,23 +394,23 @@ def test_twilio_elastic_backend_rejects_duplicates_and_drift() -> None:
         friendly_name="managed",
         domain_name="managed.pstn.twilio.com",
     )
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         backend.ensure_trunk(
             name="managed",
             domain_name="managed.pstn.twilio.com",
         )
     client.trunks.items.pop("TK2")
     client.trunks.items["TK1"].domain_name = "drift.pstn.twilio.com"
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         backend.ensure_trunk(
             name="managed",
             domain_name="managed.pstn.twilio.com",
         )
 
     client.numbers["PN2"] = SimpleNamespace(**{**vars(client.numbers["PN1"]), "sid": "PN2"})
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         backend.snapshot_number("+14155550100")
-    assert caught.value.code == "VK-TEL-003"
+    assert caught.value.code == "VY-TEL-003"
 
 
 def test_twilio_elastic_backend_correlates_only_one_completed_trunk_recording() -> None:
@@ -433,7 +440,7 @@ def test_twilio_elastic_backend_correlates_only_one_completed_trunk_recording() 
 
     client.recordings.items = []
     assert backend.completed_trunk_recording(call_sid) is None
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         backend.completed_trunk_recording("not-a-call-sid")
 
 
@@ -487,7 +494,7 @@ def test_twilio_elastic_backend_rejects_ambiguous_recording_results(
 ) -> None:
     client = FakeTwilioClient()
     client.recordings.items = items
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         TwilioElasticSipBackend(client).completed_trunk_recording(f"CA{'a' * 32}")
     assert detail in (caught.value.detail or "")
 
@@ -575,7 +582,7 @@ async def test_trunk_recording_reconciler_pending_ready_and_validation_edges() -
             access_base="https://records.example.test/",
         )
 
-    with pytest.raises(VoicekitError, match="VK-TEL-009"):
+    with pytest.raises(VoiceyError, match="VY-TEL-009"):
         TwilioTrunkRecordingReconciler(
             backend=TwilioElasticSipBackend(client),
             downloader=cast(Any, object()),
@@ -583,7 +590,7 @@ async def test_trunk_recording_reconciler_pending_ready_and_validation_edges() -
             artifact_store=cast(Any, object()),
             access_base="http://insecure.example.test",
         )
-    with pytest.raises(VoicekitError, match="VK-TEL-009"):
+    with pytest.raises(VoiceyError, match="VY-TEL-009"):
         await reconciler(None).reconcile(
             call_id="call-no-recording",
             twilio_call_sid=f"CA{'a' * 32}",
@@ -603,7 +610,7 @@ async def test_trunk_recording_reconciler_pending_ready_and_validation_edges() -
         )
         is False
     )
-    with pytest.raises(VoicekitError, match="VK-TEL-009"):
+    with pytest.raises(VoiceyError, match="VY-TEL-009"):
         await pending.wait_until_ready(
             call_id="call-pending",
             twilio_call_sid=f"CA{'a' * 32}",
@@ -619,6 +626,9 @@ async def test_trunk_recording_reconciler_pending_ready_and_validation_edges() -
         {"twilio_domain_name": "not-twilio.example.test"},
         {"agent_name": "UPPER"},
         {"auth_password": ""},
+        {"auth_password": "lowercasepassword1"},
+        {"auth_password": "UPPERCASEPASSWORD1"},
+        {"auth_password": "NoDigitsPassword"},
         {"room_prefix": ""},
     ],
 )
@@ -631,7 +641,7 @@ def test_twilio_livekit_sip_config_rejects_invalid_values(
         "livekit_sip_uri": "sip:example.sip.livekit.cloud",
         "twilio_domain_name": "managed.pstn.twilio.com",
         "auth_username": "user",
-        "auth_password": "password",  # pragma: allowlist secret
+        "auth_password": "VoiceyPassword1",  # pragma: allowlist secret
     }
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         TwilioLiveKitSipConfig(**{**defaults, **values})  # type: ignore[arg-type]

@@ -2,10 +2,10 @@
 
 Pipecat Cloud and LiveKit Cloud workers are ephemeral. They must not own the
 only copy of a call record, transcript, result buffer, terminal event, or
-recording state. The voicekit results relay is the authenticated protocol
+recording state. The voicey results relay is the authenticated protocol
 between those workers and the user-owned durable companion.
 
-This page describes protocol version `voicekit-results-relay/v1`. It is not a
+This page describes protocol version `voicey-results-relay/v1`. It is not a
 conversation abstraction: Pipecat Flows and LiveKit workflows remain native to
 their runtimes.
 
@@ -18,13 +18,13 @@ three explicit response fields:
 ```json
 {
   "ready": true,
-  "protocol": "voicekit-results-relay/v1",
+  "protocol": "voicey-results-relay/v1",
   "storage_ready": true
 }
 ```
 
 Missing, malformed, unauthenticated, or unavailable readiness fails with
-`VK-REL-002`. The worker then remains closed to calls.
+`VY-REL-002`. The worker then remains closed to calls.
 
 For each call, the relay must durably acknowledge `POST /v1/calls/begin`
 before the worker exposes media or accepts the runtime job. The response
@@ -45,10 +45,10 @@ The server accepts a current credential and, during bounded rotation, one
 previous credential. A request has these headers:
 
 ```text
-Authorization: VoicekitRelay <key-id>
-X-Voicekit-Relay-Timestamp: <unix-seconds>
-X-Voicekit-Relay-Nonce: <fresh-random-value>
-X-Voicekit-Relay-Signature: <base64url-hmac-sha256>
+Authorization: VoiceyRelay <key-id>
+X-Voicey-Relay-Timestamp: <unix-seconds>
+X-Voicey-Relay-Nonce: <fresh-random-value>
+X-Voicey-Relay-Signature: <base64url-hmac-sha256>
 ```
 
 The HMAC input is the UTF-8 encoding of these newline-separated values:
@@ -112,7 +112,7 @@ the stream cursor only after the durable acknowledgement is stored. If the
 process exits between those points, the same request can be applied again:
 observation inserts are at-most-once and lifecycle/event operations are
 idempotent. Reusing a sequence or idempotency key with different bytes, or
-sending a future sequence, fails with `VK-REL-005`.
+sending a future sequence, fails with `VY-REL-005`.
 
 ## Rotation
 

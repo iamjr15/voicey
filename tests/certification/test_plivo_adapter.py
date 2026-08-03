@@ -14,18 +14,18 @@ from typing import Any, cast
 import httpx
 import pytest
 
-import voicekit.telephony.plivo.adapter as plivo_module
-from voicekit.errors import VoicekitError
-from voicekit.storage.artifacts import LocalArtifactStore
-from voicekit.telephony import (
+import voicey.telephony.plivo.adapter as plivo_module
+from voicey.errors import VoiceyError
+from voicey.storage.artifacts import LocalArtifactStore
+from voicey.telephony import (
     LiveKitTarget,
     PipecatTarget,
     RollbackToken,
     TelephonyAdapter,
     TelephonyRequest,
 )
-from voicekit.telephony.ledger import TelephonyLedger
-from voicekit.telephony.plivo import PlivoAdapter
+from voicey.telephony.ledger import TelephonyLedger
+from voicey.telephony.plivo import PlivoAdapter
 
 AUTH_ID = "MA000000000000000000"
 AUTH_TOKEN = "not-a-real-plivo-token"  # pragma: allowlist secret
@@ -209,7 +209,7 @@ def test_route_ambiguity_and_conflict_are_fenced(
     adapter, fake, ledger = adapter_bundle
     route_path = f"/v1/Account/{AUTH_ID}/Number/{NUMBER[1:]}/"
     fake.failures[("POST", route_path)] = 503
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.point_inbound(NUMBER, TARGET)
     assert ledger.open_routes(provider="plivo")[0].state == "ambiguous"
 
@@ -217,7 +217,7 @@ def test_route_ambiguity_and_conflict_are_fenced(
     fake.apps.clear()
     token = adapter.point_inbound(NUMBER, TARGET)
     fake.number["app_id"] = "human-change"
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.restore(token)
     assert ledger.get_route(token.token).state == "conflict"
 
@@ -417,7 +417,7 @@ def test_adapter_config_and_target_validation_fail_closed(values: dict[str, obje
         "client": cast("httpx.Client", object()),
         "expected_public_base": "https://voice.example.test",
     }
-    with pytest.raises(VoicekitError, match="VK-TEL-002"):
+    with pytest.raises(VoiceyError, match="VY-TEL-002"):
         PlivoAdapter(**cast("Any", {**defaults, **values}))
 
 
@@ -425,17 +425,17 @@ def test_invalid_inputs_ambiguous_create_and_livekit_target_fail_closed(
     adapter_bundle: tuple[PlivoAdapter, FakePlivo, TelephonyLedger],
 ) -> None:
     adapter, fake, ledger = adapter_bundle
-    with pytest.raises(VoicekitError, match="country"):
+    with pytest.raises(VoiceyError, match="country"):
         adapter.buy_number("usa")
-    with pytest.raises(VoicekitError, match="prefix"):
+    with pytest.raises(VoiceyError, match="prefix"):
         adapter.buy_number("us", "bad")
-    with pytest.raises(VoicekitError, match="LiveKit targets"):
+    with pytest.raises(VoiceyError, match="LiveKit targets"):
         adapter.point_inbound(
             NUMBER,
             LiveKitTarget(project="project", sip_uri="sip:project.sip.livekit.cloud"),
         )
     fake.next_call_id = []
-    with pytest.raises(VoicekitError, match="VK-TEL-007"):
+    with pytest.raises(VoiceyError, match="VY-TEL-007"):
         adapter.start_call(NUMBER, "+14155550101", TARGET, intent_id="intent_ambiguous")
     assert ledger.get_intent("intent_ambiguous").state == "ambiguous"
 
@@ -445,13 +445,13 @@ def test_nonconfirmation_open_route_recovery_and_wrong_token_are_safe(
 ) -> None:
     adapter, fake, ledger = adapter_bundle
     fake.apply_route_mutations = False
-    with pytest.raises(VoicekitError, match="VK-TEL-006"):
+    with pytest.raises(VoiceyError, match="VY-TEL-006"):
         adapter.point_inbound(NUMBER, TARGET)
     assert ledger.open_routes(provider="plivo")[-1].state == "ambiguous"
     fake.apply_route_mutations = True
     adapter.restore_open_routes()
     assert adapter.restore_open_routes() == 0
-    with pytest.raises(VoicekitError, match="another carrier"):
+    with pytest.raises(VoiceyError, match="another carrier"):
         adapter.restore(RollbackToken(provider="twilio", token="route_missing"))
 
 
@@ -470,13 +470,13 @@ def test_recording_download_rejects_bad_url_type_and_size(tmp_path: Path) -> Non
                 recording_client=client,
             )
             store = LocalArtifactStore(tmp_path / "artifacts")
-            with pytest.raises(VoicekitError, match="safe HTTPS"):
+            with pytest.raises(VoiceyError, match="safe HTTPS"):
                 await adapter.download_recording(
                     "http://media.plivo.com/call.mp3",
                     artifact_store=store,
                     storage_key="bad",
                 )
-            with pytest.raises(VoicekitError, match="unexpected content"):
+            with pytest.raises(VoiceyError, match="unexpected content"):
                 await adapter.download_recording(
                     "https://media.plivo.com/call.mp3",
                     artifact_store=store,
@@ -572,7 +572,7 @@ def test_callback_variants_and_malformed_payloads_fail_closed(
         {"CallUUID": CALL_ID, "Digits": "A"},
     )
     for form in invalid_forms:
-        with pytest.raises(VoicekitError, match=r"VK-TEL-00[28]"):
+        with pytest.raises(VoiceyError, match=r"VY-TEL-00[28]"):
             adapter.parse_event(
                 TelephonyRequest(
                     scheme="https",
@@ -693,11 +693,11 @@ def test_managed_application_adoption_drift_duplicate_and_pagination(
     assert (adopted_id, adopted) == ("managed-app", False)
 
     fake.apps[0]["answer_method"] = "GET"
-    with pytest.raises(VoicekitError, match="differs"):
+    with pytest.raises(VoiceyError, match="differs"):
         adapter._ensure_application(TARGET)
     fake.apps[0]["answer_method"] = "POST"
     fake.apps.append(dict(fake.apps[0]))
-    with pytest.raises(VoicekitError, match="duplicate"):
+    with pytest.raises(VoiceyError, match="duplicate"):
         adapter._ensure_application(TARGET)
 
     pages: list[str] = []
@@ -748,9 +748,9 @@ def test_definitive_route_and_restore_nonconfirmation_are_fenced(
     adapter, fake, ledger = adapter_bundle
     route_path = f"/v1/Account/{AUTH_ID}/Number/{NUMBER[1:]}/"
     fake.failures[("POST", route_path)] = 400
-    with pytest.raises(VoicekitError) as definitive:
+    with pytest.raises(VoiceyError) as definitive:
         adapter.point_inbound(NUMBER, TARGET)
-    assert definitive.value.code == "VK-TEL-004"
+    assert definitive.value.code == "VY-TEL-004"
     assert ledger.open_routes(provider="plivo") == ()
     failed = ledger.prepare_route(
         provider="plivo",
@@ -760,14 +760,14 @@ def test_definitive_route_and_restore_nonconfirmation_are_fenced(
         applied={"app_id": "managed-app"},
     )
     ledger.transition_route(failed.token, expected=("prepared",), state="failed")
-    with pytest.raises(VoicekitError, match="cannot restore"):
+    with pytest.raises(VoiceyError, match="cannot restore"):
         adapter.restore(RollbackToken(provider="plivo", token=failed.token))
 
     fake.failures.clear()
     fake.apps.clear()
     token = adapter.point_inbound(NUMBER, TARGET)
     fake.apply_route_mutations = False
-    with pytest.raises(VoicekitError, match="restore conflicted"):
+    with pytest.raises(VoiceyError, match="restore conflicted"):
         adapter.restore(token)
     assert ledger.get_route(token.token).state == "conflict"
 
@@ -778,11 +778,11 @@ def test_outbound_rejection_uncertainty_reconciliation_and_input_guards(
     adapter, fake, ledger = adapter_bundle
     call_path = f"/v1/Account/{AUTH_ID}/Call/"
 
-    with pytest.raises(VoicekitError, match="timeout"):
+    with pytest.raises(VoiceyError, match="timeout"):
         adapter.start_call(NUMBER, "+14155550101", TARGET, timeout_s=4)
-    with pytest.raises(VoicekitError, match="DTMF"):
+    with pytest.raises(VoiceyError, match="DTMF"):
         adapter.start_call(NUMBER, "+14155550101", TARGET, send_digits="A")
-    with pytest.raises(VoicekitError, match="expected_public_base"):
+    with pytest.raises(VoiceyError, match="expected_public_base"):
         PlivoAdapter(
             auth_id=AUTH_ID,
             auth_token=AUTH_TOKEN,
@@ -791,27 +791,27 @@ def test_outbound_rejection_uncertainty_reconciliation_and_input_guards(
         ).cold_transfer(CALL_ID, "+14155550102")
 
     fake.failures[("POST", call_path)] = 400
-    with pytest.raises(VoicekitError) as rejected:
+    with pytest.raises(VoiceyError) as rejected:
         adapter.start_call(
             NUMBER,
             "+14155550101",
             TARGET,
             intent_id="intent_rejected",
         )
-    assert rejected.value.code == "VK-TEL-004"
+    assert rejected.value.code == "VY-TEL-004"
     assert ledger.get_intent("intent_rejected").state == "rejected"
 
     fake.failures[("POST", call_path)] = 503
-    with pytest.raises(VoicekitError) as ambiguous:
+    with pytest.raises(VoiceyError) as ambiguous:
         adapter.start_call(
             NUMBER,
             "+14155550101",
             TARGET,
             intent_id="intent_uncertain",
         )
-    assert ambiguous.value.code == "VK-TEL-007"
+    assert ambiguous.value.code == "VY-TEL-007"
     assert ledger.get_intent("intent_uncertain").state == "ambiguous"
-    with pytest.raises(VoicekitError, match="do not retry"):
+    with pytest.raises(VoiceyError, match="do not retry"):
         adapter.reconcile_outbound("intent_uncertain")
 
     fake.failures.clear()
@@ -856,7 +856,7 @@ def test_http_and_list_envelope_failures_are_classified(
     )
     try:
         action = adapter.list_numbers if "malformed" in operation else adapter.account_state
-        with pytest.raises(VoicekitError, match=operation):
+        with pytest.raises(VoiceyError, match=operation):
             action()
     finally:
         client.close()
@@ -879,7 +879,7 @@ def test_network_ownership_empty_search_and_scalar_failures_are_safe(tmp_path: P
         client=client,
     )
     try:
-        with pytest.raises(VoicekitError, match="definitive result"):
+        with pytest.raises(VoiceyError, match="definitive result"):
             adapter.account_state()
     finally:
         client.close()
@@ -888,12 +888,12 @@ def test_network_ownership_empty_search_and_scalar_failures_are_safe(tmp_path: P
     assert plivo_module._optional("") is None
     assert plivo_module._optional(3) == "3"
     assert plivo_module._form_dict(["not", "a", "mapping"]) == {}
-    with pytest.raises(VoicekitError, match="invalid scalar"):
+    with pytest.raises(VoiceyError, match="invalid scalar"):
         plivo_module._optional([])
     fake_adapter, fake, fake_ledger = _one_off_fake(tmp_path / "ownership")
     try:
         fake.number["number"] = "14155550101"
-        with pytest.raises(VoicekitError, match="ownership"):
+        with pytest.raises(VoiceyError, match="ownership"):
             fake_adapter.inbound_route(NUMBER)
     finally:
         fake_adapter._client.close()
@@ -912,7 +912,7 @@ def test_network_ownership_empty_search_and_scalar_failures_are_safe(tmp_path: P
             ),
         )
         original.close()
-        with pytest.raises(VoicekitError, match="no Plivo number"):
+        with pytest.raises(VoiceyError, match="no Plivo number"):
             empty_adapter.buy_number("US")
     finally:
         empty_adapter._client.close()
@@ -982,7 +982,7 @@ async def test_recording_download_declared_stream_and_transport_failures(
             recording_client=client,
         )
         store = LocalArtifactStore(tmp_path / "artifacts")
-        with pytest.raises(VoicekitError, match="positive"):
+        with pytest.raises(VoiceyError, match="positive"):
             await adapter.download_recording(
                 "https://media.plivo.com/call.mp3",
                 artifact_store=store,
@@ -990,7 +990,7 @@ async def test_recording_download_declared_stream_and_transport_failures(
                 max_bytes=0,
             )
         for storage_key in ("declared", "stream", "length", "status"):
-            with pytest.raises(VoicekitError, match="recording"):
+            with pytest.raises(VoiceyError, match="recording"):
                 await adapter.download_recording(
                     "https://media.plivo.com/call.mp3",
                     artifact_store=store,

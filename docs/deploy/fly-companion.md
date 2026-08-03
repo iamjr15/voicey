@@ -1,11 +1,11 @@
 # Fly results companion
 
 Pipecat Cloud and LiveKit Cloud workers are ephemeral. Their certified durable
-peer is a user-owned Fly application running voicekit in results-service mode,
+peer is a user-owned Fly application running voicey in results-service mode,
 with managed Postgres and a private S3-compatible object store. The companion
 does not run an agent or define conversation flow.
 
-`voicekit deploy fly` owns the companion's provisioning and release lifecycle.
+`voicey deploy fly` owns the companion's provisioning and release lifecycle.
 It uses current Fly CLI surfaces: `fly apps`, `fly mpg` for Managed Postgres,
 `fly storage` for private Tigris, staged stdin secret import, and a rolling
 `fly deploy`. It never uses the legacy unmanaged `fly postgres` surface.
@@ -19,7 +19,7 @@ resource and cost choice explicitly:
 
 ```bash
 fly auth whoami
-voicekit deploy fly \
+voicey deploy fly \
   --app my-agent-results \
   --org my-fly-org \
   --region iad \
@@ -27,7 +27,7 @@ voicekit deploy fly \
   --postgres-plan Basic \
   --postgres-volume-gb 10 \
   --bucket my-agent-results-objects \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
@@ -44,8 +44,8 @@ Published releases omit `--engine-wheel`. The command:
 5. deploys rolling, requires passing Fly service checks, probes unsigned
    liveness, then performs authenticated relay readiness.
 
-Generated artifacts live under `.voicekit/deploy/fly/`. The non-secret resource
-ledger is `.voicekit/deploy/fly-resources.json` with mode `0600`. It records
+Generated artifacts live under `.voicey/deploy/fly/`. The non-secret resource
+ledger is `.voicey/deploy/fly-resources.json` with mode `0600`. It records
 exact resource identifiers, ownership flags, artifact and secret fingerprints,
 and gate status, never secret values. Generated credential material is kept in
 the existing owner-only, ignored `.env`.
@@ -54,12 +54,12 @@ Rerunning the same command resumes from the ledger and revalidates every
 resource. An existing unledgered app, cluster, bucket, `DATABASE_URL`, or
 Tigris credential set stops the command. After verifying ownership and
 attachment in Fly, rerun with `--adopt`; adopted resources are never deleted by
-voicekit rollback.
+voicey rollback.
 
 Rotate the relay and protected-results pair with:
 
 ```bash
-voicekit deploy fly \
+voicey deploy fly \
   --app my-agent-results \
   --org my-fly-org \
   --region iad \
@@ -68,7 +68,7 @@ voicekit deploy fly \
   --postgres-volume-gb 10 \
   --bucket my-agent-results-objects \
   --rotate-credentials \
-  --engine-wheel /absolute/path/to/voicekit-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
   --yes
 ```
 
@@ -79,7 +79,7 @@ replacement cannot silently strand deployed workers.
 Rollback is explicit, destructive, and reverse ordered:
 
 ```bash
-voicekit deploy fly \
+voicey deploy fly \
   --app my-agent-results \
   --org my-fly-org \
   --region iad \
@@ -91,7 +91,7 @@ voicekit deploy fly \
   --yes
 ```
 
-Only bucket, MPG cluster, and app rows marked created by voicekit are destroyed.
+Only bucket, MPG cluster, and app rows marked created by voicey are destroyed.
 The command never auto-rolls back a failed deployment and never deletes adopted
 resources. This preserves evidence and avoids converting a recoverable partial
 provision into data loss.
@@ -102,52 +102,52 @@ The companion extra contains only the managed-storage and carrier-callback
 dependencies; it does not pull either voice runtime into the results process.
 
 ```bash
-pip install 'voicekit[companion]'
-python -m voicekit.deploy.results_service
+pip install 'voicey[companion]'
+python -m voicey.deploy.results_service
 ```
 
 Configure these values through Fly secrets, not a checked-in environment file:
 
 | Variable | Purpose |
 |---|---|
-| `VOICEKIT_PUBLIC_BASE` | Normalized public HTTPS base for artifact and callback URLs |
-| `DATABASE_URL` or `VOICEKIT_DATABASE_URL` | Managed Postgres DSN |
-| `VOICEKIT_OBJECT_BUCKET` | Private object bucket |
-| `VOICEKIT_OBJECT_PREFIX` | Object namespace; defaults to `voicekit` |
-| `VOICEKIT_OBJECT_ENDPOINT` | Optional HTTPS S3-compatible endpoint |
+| `VOICEY_PUBLIC_BASE` | Normalized public HTTPS base for artifact and callback URLs |
+| `DATABASE_URL` or `VOICEY_DATABASE_URL` | Managed Postgres DSN |
+| `VOICEY_OBJECT_BUCKET` | Private object bucket |
+| `VOICEY_OBJECT_PREFIX` | Object namespace; defaults to `voicey` |
+| `VOICEY_OBJECT_ENDPOINT` | Optional HTTPS S3-compatible endpoint |
 | `AWS_REGION` | Bucket region (`auto` for Tigris) |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Optional paired object credentials |
-| `VOICEKIT_RELAY_CREDENTIAL` | Current `vkr_` worker credential |
-| `VOICEKIT_RELAY_PREVIOUS_CREDENTIAL` | Optional previous credential during rotation |
-| `VOICEKIT_RESULTS_SECRET` | Current `whsec_` delivery and protected-read secret |
-| `VOICEKIT_RESULTS_PREVIOUS_SECRET` | Optional previous result secret during rotation |
-| `VOICEKIT_DEPLOY_TARGET` | Must be `fly` |
-| `VOICEKIT_STORAGE_BACKEND` | Must be `postgres` |
-| `VOICEKIT_ARTIFACT_BACKEND` | Must be `s3` |
-| `VOICEKIT_CALLBACK_PROVIDERS` | Explicit comma list of carrier callback routes to install |
-| `VOICEKIT_PROMETHEUS_ENABLED` | `1` in generated deployments |
-| `VOICEKIT_PROMETHEUS_BIND` | `0.0.0.0` for Fly's private scraper |
-| `VOICEKIT_PROMETHEUS_PORT` | Dedicated metrics port; generated value `9464` |
-| `VOICEKIT_PROMETHEUS_PATH` | Generated value `/metrics` |
-| `VOICEKIT_OTLP_ENDPOINT` | Optional HTTPS OTLP/HTTP traces endpoint |
-| `VOICEKIT_OTLP_HEADERS` | Optional secret `name=value` header list |
+| `VOICEY_RELAY_CREDENTIAL` | Current `vkr_` worker credential |
+| `VOICEY_RELAY_PREVIOUS_CREDENTIAL` | Optional previous credential during rotation |
+| `VOICEY_RESULTS_SECRET` | Current `whsec_` delivery and protected-read secret |
+| `VOICEY_RESULTS_PREVIOUS_SECRET` | Optional previous result secret during rotation |
+| `VOICEY_DEPLOY_TARGET` | Must be `fly` |
+| `VOICEY_STORAGE_BACKEND` | Must be `postgres` |
+| `VOICEY_ARTIFACT_BACKEND` | Must be `s3` |
+| `VOICEY_CALLBACK_PROVIDERS` | Explicit comma list of carrier callback routes to install |
+| `VOICEY_PROMETHEUS_ENABLED` | `1` in generated deployments |
+| `VOICEY_PROMETHEUS_BIND` | `0.0.0.0` for Fly's private scraper |
+| `VOICEY_PROMETHEUS_PORT` | Dedicated metrics port; generated value `9464` |
+| `VOICEY_PROMETHEUS_PATH` | Generated value `/metrics` |
+| `VOICEY_OTLP_ENDPOINT` | Optional HTTPS OTLP/HTTP traces endpoint |
+| `VOICEY_OTLP_HEADERS` | Optional secret `name=value` header list |
 | `PORT` | Public listener port; defaults to `8080` |
 
-`VOICEKIT_CALLBACK_PROVIDERS` has no default provider. Each selected carrier
+`VOICEY_CALLBACK_PROVIDERS` has no default provider. Each selected carrier
 requires its documented credentials: Twilio account SID/token; Telnyx API key,
 public key, and connection id; Vobiz auth id/token; or Plivo auth id/token.
 Install only the providers used by the deployed agents.
 
 The repository and relay journal use separate pools. The default maximum is
-five connections each. `VOICEKIT_DB_CONNECTION_BUDGET` defaults to 20 and
+five connections each. `VOICEY_DB_CONNECTION_BUDGET` defaults to 20 and
 startup rejects a pair of pools that exceeds it.
 
 Generated `fly.toml` contains Fly's native `[metrics]` stanza for port 9464 and
 path `/metrics`; that port is not part of the public HTTP service. The
 companion reports relay-owned active calls, stable error-code counts, durable
-DLQ depth, and latency histograms. Set `VOICEKIT_OTLP_ENDPOINT` through target
+DLQ depth, and latency histograms. Set `VOICEY_OTLP_ENDPOINT` through target
 configuration to add PII-safe call/turn/tool spans; keep any collector auth in
-the Fly secret `VOICEKIT_OTLP_HEADERS`.
+the Fly secret `VOICEY_OTLP_HEADERS`.
 
 ## Startup preflight
 
@@ -198,7 +198,7 @@ Retention deletes an object before acknowledging its durable purge row.
 
 On `SIGTERM` or `SIGINT`, the replica first makes `/healthz` and signed
 readiness fail and rejects new `begin`/`claim` operations. Already-fenced
-updates remain valid during `VOICEKIT_DRAIN_GRACE_S` (10 seconds by default),
+updates remain valid during `VOICEY_DRAIN_GRACE_S` (10 seconds by default),
 so Fly can shift traffic to the replacement replica. The process then runs one
 final maintenance pass and closes both Postgres pools.
 
@@ -214,8 +214,8 @@ uv run pytest -q --no-cov tests/unit/test_results_companion.py
 The managed probe and complete backend matrix require disposable Postgres 17:
 
 ```bash
-TEST_DB_AUTH='voicekit:voicekit-test'
-VOICEKIT_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicekit" \
+TEST_DB_AUTH='voicey:voicey-test'
+VOICEY_TEST_POSTGRES_DSN="postgresql://${TEST_DB_AUTH}@127.0.0.1:55432/voicey" \
   uv run pytest -q --no-cov \
   tests/integration/test_managed_results_service.py \
   tests/integration/test_postgres_repository.py \

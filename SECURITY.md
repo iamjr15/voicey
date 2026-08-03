@@ -23,4 +23,4 @@ Before 1.0, only the current `main` branch receives security fixes. Published su
 - Local protected data uses a `0700` directory and `0600` files.
 - `.env*` is ignored except the documentation-only `.env.example`.
 
-Please include `VK-SEC` in private report subjects so reports can be routed consistently.
+Please include `VY-SEC` in private report subjects so reports can be routed consistently.

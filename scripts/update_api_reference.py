@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from voicekit.release.docs import changed_api_reference, write_api_reference
+from voicey.release.docs import changed_api_reference, write_api_reference
 
 
 def main() -> int:

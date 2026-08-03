@@ -1,4 +1,4 @@
-from voicekit import __version__
+from voicey import __version__
 
 
 def test_version_is_pre_release_during_build() -> None:

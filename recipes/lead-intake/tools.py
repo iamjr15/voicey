@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from voicekit import results, tool
+from voicey import results, tool
 
 Fit = Literal["priority", "standard", "nurture"]
 

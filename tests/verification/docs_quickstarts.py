@@ -21,14 +21,14 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-docs-quickstarts.json"),
+        default=Path(".voicey/verification/p4-docs-quickstarts.json"),
     )
     args = parser.parse_args()
     wheel = args.wheel.expanduser().resolve()
     if not wheel.is_file():
         parser.error("--wheel must point to a built wheel")
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="voicekit-docs-quickstart-") as directory:
+    with tempfile.TemporaryDirectory(prefix="voicey-docs-quickstart-") as directory:
         root = Path(directory)
         environment = dict(os.environ)
         environment.pop("PYTHONPATH", None)

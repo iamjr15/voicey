@@ -25,7 +25,12 @@ class ReservationIntakeAgent(Agent):
 
     def __init__(self, *, tools: list[NativeTool], chat_ctx: llm.ChatContext | None = None) -> None:
         self._shared_tools = list(tools)
-        super().__init__(instructions=_ROLE, tools=self._shared_tools, chat_ctx=chat_ctx)
+        intake_tools = [
+            tool
+            for tool in self._shared_tools
+            if getattr(getattr(tool, "info", None), "name", None) != "join_waitlist"
+        ]
+        super().__init__(instructions=_ROLE, tools=intake_tools, chat_ctx=chat_ctx)
 
     async def on_enter(self) -> None:
         self.session.generate_reply(instructions=_GREETING)

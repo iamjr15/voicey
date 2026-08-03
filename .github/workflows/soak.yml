@@ -15,7 +15,7 @@ concurrency:
 jobs:
   soak:
     name: Dual-runtime max-concurrency soak
-    runs-on: [self-hosted, linux, voicekit-soak]
+    runs-on: [self-hosted, linux, voicey-soak]
     timeout-minutes: 1560
     steps:
       - uses: actions/checkout@v4

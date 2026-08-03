@@ -43,5 +43,5 @@ Community recipes use the `community/` namespace and the same CI. They are not
 described as certified until a maintainer completes this checklist and the live
 provider suite.
 
-Next: run `voicekit test`, `voicekit test --audio`, and then the recipe's
+Next: run `voicey test`, `voicey test --audio`, and then the recipe's
 credentialed commands from `docs/GAPS.md`.

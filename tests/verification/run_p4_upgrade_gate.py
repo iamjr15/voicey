@@ -17,9 +17,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import cast
 
-from voicekit.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.recipes.source import RECIPE_LOCK_NAME, install_recipe, recipe_files
+from voicey.config.manifest import ManifestStore, ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.recipes.source import RECIPE_LOCK_NAME, install_recipe, recipe_files
 
 ROOT = Path(__file__).parents[2]
 _VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
@@ -41,7 +41,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path(".voicekit/verification/p4-upgrade-report.json"),
+        default=Path(".voicey/verification/p4-upgrade-report.json"),
     )
     args = parser.parse_args()
     report_path = args.report.expanduser().resolve()
@@ -57,8 +57,8 @@ def main() -> int:
                 "tests/unit/test_recipe_appointment.py",
                 "tests/unit/test_recipes_p3.py",
                 "tests/verification/test_p1_cli_matrix.py",
-                "--cov=voicekit.upgrade",
-                "--cov=voicekit.recipes.drift",
+                "--cov=voicey.upgrade",
+                "--cov=voicey.recipes.drift",
                 "--cov-branch",
                 "--cov-fail-under=90",
             ],
@@ -122,15 +122,15 @@ def _uv_cli_contract() -> GateResult:
 
 def _real_local_upgrade() -> GateResult:
     started = time.monotonic()
-    command = ".venv/bin/voicekit upgrade --pre --yes --json"
+    command = ".venv/bin/voicey upgrade --pre --yes --json"
     try:
-        with tempfile.TemporaryDirectory(prefix="voicekit-p4-upgrade-") as directory:
+        with tempfile.TemporaryDirectory(prefix="voicey-p4-upgrade-") as directory:
             root = Path(directory)
             environment = dict(os.environ)
             environment.pop("VIRTUAL_ENV", None)
             environment["UV_NO_CACHE"] = "1"
             manifest = _manifest()
-            ManifestStore(root / "voicekit.jsonc").save(manifest)
+            ManifestStore(root / "voicey.jsonc").save(manifest)
             install_recipe(
                 root,
                 name=manifest.recipe.name,
@@ -140,9 +140,9 @@ def _real_local_upgrade() -> GateResult:
             pyproject = root / "pyproject.toml"
             pyproject.write_text(
                 (
-                    '[project]\nname = "voicekit-upgrade-gate"\nversion = "0.0.0"\n'
+                    '[project]\nname = "voicey-upgrade-gate"\nversion = "0.0.0"\n'
                     'requires-python = ">=3.11,<3.15"\n'
-                    f'dependencies = ["voicekit[pipecat] @ {ROOT.as_uri()}"]\n'
+                    f'dependencies = ["voicey[pipecat] @ {ROOT.as_uri()}"]\n'
                 ),
                 encoding="utf-8",
             )
@@ -185,12 +185,12 @@ def _real_local_upgrade() -> GateResult:
                 relative: (root / relative).read_bytes()
                 for relative in (*owned, RECIPE_LOCK_NAME, "pyproject.toml")
             }
-            voicekit_executable = (
-                root / ".venv" / ("Scripts/voicekit.exe" if os.name == "nt" else "bin/voicekit")
+            voicey_executable = (
+                root / ".venv" / ("Scripts/voicey.exe" if os.name == "nt" else "bin/voicey")
             )
             completed = subprocess.run(
                 [
-                    str(voicekit_executable),
+                    str(voicey_executable),
                     "upgrade",
                     "--pre",
                     "--yes",

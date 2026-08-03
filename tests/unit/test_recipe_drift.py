@@ -6,12 +6,12 @@ from typing import Any, cast
 
 import pytest
 
-from voicekit.config.manifest import ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis
-from voicekit.errors import VoicekitError
-from voicekit.recipes.drift import RecipeDriftAnalyzer
-from voicekit.recipes.registry import RecipeDefinition, RecipeRegistry
-from voicekit.recipes.source import (
+from voicey.config.manifest import ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis
+from voicey.errors import VoiceyError
+from voicey.recipes.drift import RecipeDriftAnalyzer
+from voicey.recipes.registry import RecipeDefinition, RecipeRegistry
+from voicey.recipes.source import (
     RECIPE_LOCK_NAME,
     RecipeBaseline,
     RecipeBaselineStore,
@@ -87,7 +87,7 @@ def test_current_recipe_report_is_read_only_and_uses_tracked_baseline(
     assert report.upstream_changes == 0
     assert report.conflicts == 0
     assert report.ai_merge_prompt is None
-    assert report.next_step == "voicekit doctor"
+    assert report.next_step == "voicey doctor"
     assert _tree_digest(tmp_path) == before
 
 
@@ -131,7 +131,7 @@ def test_three_way_report_classifies_every_drift_state(
         return upstream
 
     monkeypatch.setattr(
-        "voicekit.recipes.drift.recipe_files",
+        "voicey.recipes.drift.recipe_files",
         updated_sources,
     )
 
@@ -156,7 +156,7 @@ def test_three_way_report_classifies_every_drift_state(
     assert "Never copy secrets" in report.ai_merge_prompt
     assert "no MCP" in report.ai_merge_prompt
     assert "overwrite a file wholesale" in report.ai_merge_prompt
-    assert report.next_step.endswith("voicekit test")
+    assert report.next_step.endswith("voicey test")
     row = next(item for item in report.files if item.path == "conflict.py")
     assert row.base_sha256 == hashlib.sha256(base["conflict.py"].encode()).hexdigest()
     assert row.local_sha256 == hashlib.sha256(local["conflict.py"].encode()).hexdigest()
@@ -197,7 +197,7 @@ def test_scratch_and_ahead_recipe_have_explicit_statuses(tmp_path: Path) -> None
     assert scratch.status == "scratch"
     assert scratch.baseline_source == "not-applicable"
     assert scratch.files == ()
-    assert scratch.next_step == "voicekit doctor"
+    assert scratch.next_step == "voicey doctor"
     assert ahead.status == "ahead"
     assert ahead.baseline_source == "tracked"
 
@@ -231,10 +231,10 @@ def test_scratch_and_ahead_recipe_have_explicit_statuses(tmp_path: Path) -> None
     ],
 )
 def test_recipe_baseline_rejects_invalid_shapes(payload: object) -> None:
-    with pytest.raises(VoicekitError) as captured:
+    with pytest.raises(VoiceyError) as captured:
         RecipeBaseline.from_payload(payload)
 
-    assert captured.value.code == "VK-UPG-003"
+    assert captured.value.code == "VY-UPG-003"
 
 
 def test_recipe_baseline_and_local_source_safety_errors(
@@ -242,15 +242,15 @@ def test_recipe_baseline_and_local_source_safety_errors(
 ) -> None:
     lock = tmp_path / RECIPE_LOCK_NAME
     lock.symlink_to(tmp_path / "outside.json")
-    with pytest.raises(VoicekitError) as symlink:
+    with pytest.raises(VoiceyError) as symlink:
         RecipeBaselineStore(lock).load()
-    assert symlink.value.code == "VK-SEC-002"
+    assert symlink.value.code == "VY-SEC-002"
 
     lock.unlink()
     lock.write_text("{", encoding="utf-8")
-    with pytest.raises(VoicekitError) as corrupt:
+    with pytest.raises(VoiceyError) as corrupt:
         RecipeBaselineStore(lock).load()
-    assert corrupt.value.code == "VK-UPG-003"
+    assert corrupt.value.code == "VY-UPG-003"
 
     baseline = RecipeBaseline(
         schema_version=1,
@@ -261,9 +261,9 @@ def test_recipe_baseline_and_local_source_safety_errors(
     )
     RecipeBaselineStore(lock).save(baseline)
     (tmp_path / "flow.py").mkdir()
-    with pytest.raises(VoicekitError) as directory:
+    with pytest.raises(VoiceyError) as directory:
         RecipeDriftAnalyzer(tmp_path).analyze(_manifest())
-    assert directory.value.code == "VK-UPG-003"
+    assert directory.value.code == "VY-UPG-003"
 
 
 def test_recipe_drift_rejects_broken_symlink_and_non_utf8_source(
@@ -279,15 +279,15 @@ def test_recipe_drift_rejects_broken_symlink_and_non_utf8_source(
     RecipeBaselineStore(tmp_path / RECIPE_LOCK_NAME).save(baseline)
     path = tmp_path / "flow.py"
     path.symlink_to(tmp_path / "missing-source")
-    with pytest.raises(VoicekitError) as symlink:
+    with pytest.raises(VoiceyError) as symlink:
         RecipeDriftAnalyzer(tmp_path).analyze(_manifest())
-    assert symlink.value.code == "VK-SEC-002"
+    assert symlink.value.code == "VY-SEC-002"
 
     path.unlink()
     path.write_bytes(b"\xff")
-    with pytest.raises(VoicekitError) as encoding:
+    with pytest.raises(VoiceyError) as encoding:
         RecipeDriftAnalyzer(tmp_path).analyze(_manifest())
-    assert encoding.value.code == "VK-UPG-003"
+    assert encoding.value.code == "VY-UPG-003"
 
 
 def test_recipe_drift_rejects_mismatched_baseline_and_invalid_semver(
@@ -302,9 +302,9 @@ def test_recipe_drift_rejects_mismatched_baseline_and_invalid_semver(
             files={"flow.py": "base"},
         )
     )
-    with pytest.raises(VoicekitError) as mismatch:
+    with pytest.raises(VoiceyError) as mismatch:
         RecipeDriftAnalyzer(tmp_path).analyze(_manifest())
-    assert mismatch.value.code == "VK-UPG-003"
+    assert mismatch.value.code == "VY-UPG-003"
 
     RecipeBaselineStore(tmp_path / RECIPE_LOCK_NAME).save(
         RecipeBaseline(
@@ -315,11 +315,11 @@ def test_recipe_drift_rejects_mismatched_baseline_and_invalid_semver(
             files={"flow.py": "base"},
         )
     )
-    with pytest.raises(VoicekitError) as invalid:
+    with pytest.raises(VoiceyError) as invalid:
         RecipeDriftAnalyzer(tmp_path, registry=_registry("1.0.0")).analyze(
             _manifest(version="not-semver")
         )
-    assert invalid.value.code == "VK-UPG-003"
+    assert invalid.value.code == "VY-UPG-003"
 
 
 def test_recipe_baseline_runtime_validation_is_strict() -> None:
@@ -330,5 +330,5 @@ def test_recipe_baseline_runtime_validation_is_strict() -> None:
         "runtime": "unknown",
         "files": {"flow.py": "source"},
     }
-    with pytest.raises(VoicekitError):
+    with pytest.raises(VoiceyError):
         RecipeBaseline.from_payload(cast(object, payload))

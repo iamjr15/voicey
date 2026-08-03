@@ -9,14 +9,14 @@ from typing import cast
 import pytest
 from livekit import api
 
-from voicekit.runtimes.livekit.generic_sip import (
+from voicey.runtimes.livekit.generic_sip import (
     GenericSipConfig,
     GenericSipProvisioner,
     SipMediaEncryption,
     SipTransport,
 )
-from voicekit.runtimes.livekit.sip import LiveKitSipDialer
-from voicekit.telephony.ledger import TelephonyLedger
+from voicey.runtimes.livekit.sip import LiveKitSipDialer
+from voicey.telephony.ledger import TelephonyLedger
 
 pytestmark = pytest.mark.live
 
@@ -39,27 +39,27 @@ def _livekit_api() -> api.LiveKitAPI:
 def _config() -> GenericSipConfig:
     allowed = tuple(
         value.strip()
-        for value in os.environ.get("VOICEKIT_SIP_ALLOWED_ADDRESSES", "").split(",")
+        for value in os.environ.get("VOICEY_SIP_ALLOWED_ADDRESSES", "").split(",")
         if value.strip()
     )
     return GenericSipConfig(
-        number=_required("VOICEKIT_SIP_LIVE_FROM"),
-        agent_name=_required("VOICEKIT_LIVEKIT_AGENT_NAME"),
-        outbound_address=_required("VOICEKIT_SIP_ADDRESS"),
-        auth_username=_required("VOICEKIT_SIP_USERNAME"),
-        auth_password=_required("VOICEKIT_SIP_PASSWORD"),
+        number=_required("VOICEY_SIP_LIVE_FROM"),
+        agent_name=_required("VOICEY_LIVEKIT_AGENT_NAME"),
+        outbound_address=_required("VOICEY_SIP_ADDRESS"),
+        auth_username=_required("VOICEY_SIP_USERNAME"),
+        auth_password=_required("VOICEY_SIP_PASSWORD"),
         allowed_addresses=allowed,
-        transport=cast("SipTransport", _required("VOICEKIT_SIP_TRANSPORT").casefold()),
+        transport=cast("SipTransport", _required("VOICEY_SIP_TRANSPORT").casefold()),
         media_encryption=cast(
             "SipMediaEncryption",
-            _required("VOICEKIT_SIP_MEDIA_ENCRYPTION").casefold(),
+            _required("VOICEY_SIP_MEDIA_ENCRYPTION").casefold(),
         ),
     )
 
 
 async def test_live_generic_sip_provision_reuse_and_rollback(tmp_path: Path) -> None:
-    if os.environ.get("VOICEKIT_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
-        pytest.skip("VOICEKIT_LIVE_ROUTE_CONFIRM acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_ROUTE_CONFIRM") != "I_ACKNOWLEDGE_ROUTE_MUTATION":
+        pytest.skip("VOICEY_LIVE_ROUTE_CONFIRM acknowledgement is absent")
     ledger = TelephonyLedger(tmp_path / "generic-sip-provision.sqlite3")
     livekit = _livekit_api()
     provisioner = GenericSipProvisioner(livekit=livekit.sip, ledger=ledger)
@@ -78,8 +78,8 @@ async def test_live_generic_sip_provision_reuse_and_rollback(tmp_path: Path) -> 
 
 
 async def test_live_generic_sip_paid_loopback_and_status_mapping(tmp_path: Path) -> None:
-    if os.environ.get("VOICEKIT_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
-        pytest.skip("VOICEKIT_LIVE_CONFIRM charge acknowledgement is absent")
+    if os.environ.get("VOICEY_LIVE_CONFIRM") != "I_ACKNOWLEDGE_PSTN_CHARGES":
+        pytest.skip("VOICEY_LIVE_CONFIRM charge acknowledgement is absent")
     ledger = TelephonyLedger(tmp_path / "generic-sip-outbound.sqlite3")
     livekit = _livekit_api()
     dialer = LiveKitSipDialer(
@@ -91,10 +91,10 @@ async def test_live_generic_sip_paid_loopback_and_status_mapping(tmp_path: Path)
     )
     try:
         result = await dialer.dial(
-            from_number=_required("VOICEKIT_SIP_LIVE_FROM"),
-            to_number=_required("VOICEKIT_SIP_LIVE_TO"),
-            room_name=_required("VOICEKIT_LIVEKIT_CERT_ROOM"),
-            participant_identity="voicekit-generic-sip-cert-callee",
+            from_number=_required("VOICEY_SIP_LIVE_FROM"),
+            to_number=_required("VOICEY_SIP_LIVE_TO"),
+            room_name=_required("VOICEY_LIVEKIT_CERT_ROOM"),
+            participant_identity="voicey-generic-sip-cert-callee",
             intent_id="intent_generic_sip_live_cert",
         )
         assert result.ended_reason is None

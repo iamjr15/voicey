@@ -16,9 +16,9 @@ from pipecat.evals.scenario import EvalScenario
 from pipecat.evals.suite import EvalManifest
 from typer.testing import CliRunner
 
-from voicekit.cli.app import app
-from voicekit.errors import VoicekitError
-from voicekit.testing import (
+from voicey.cli.app import app
+from voicey.errors import VoiceyError
+from voicey.testing import (
     JudgeConfig,
     Persona,
     ResultExpectation,
@@ -30,32 +30,34 @@ from voicekit.testing import (
     discover_scenarios,
     scenario,
 )
-from voicekit.testing import TestProfile as ScenarioProfile
-from voicekit.testing import livekit_audio as audio_testing
-from voicekit.testing import runner as testing_runner
-from voicekit.testing.discovery import ScenarioFunction
-from voicekit.testing.livekit import assert_native_turn, compile_livekit
-from voicekit.testing.livekit_audio import CapturingAudioOutput, QueueAudioInput
-from voicekit.testing.models import matches_expected_data
-from voicekit.testing.pipecat import compile_pipecat
-from voicekit.testing.reporting import (
+from voicey.testing import TestProfile as ScenarioProfile
+from voicey.testing import livekit_audio as audio_testing
+from voicey.testing import runner as testing_runner
+from voicey.testing.discovery import ScenarioFunction
+from voicey.testing.livekit import assert_native_turn, compile_livekit
+from voicey.testing.livekit_audio import CapturingAudioOutput, QueueAudioInput
+from voicey.testing.models import matches_expected_data
+from voicey.testing.pipecat import compile_pipecat
+from voicey.testing.reporting import (
     AttemptResult,
     CaseResult,
     SuiteResult,
     result_json,
     write_junit,
 )
-from voicekit.testing.runner import (
+from voicey.testing.runner import (
     CaseExecutor,
     LiveKitExecutor,
     PipecatExecutor,
     run_project_tests,
 )
-from voicekit.testing.sim_caller import (
+from voicey.testing.sim_caller import (
+    AnthropicMessagesClient,
     JudgeDecision,
     OpenAICompatibleClient,
     SimCaller,
     TranscriptJudge,
+    build_model_client,
     load_testing_config,
 )
 
@@ -98,7 +100,7 @@ def test_scenario_rejects_parameters_and_predicate_failures_are_safe() -> None:
     def invalid(value: str) -> Mapping[str, Any]:
         return {"caller": value, "goals": ["x"]}
 
-    with pytest.raises(VoicekitError, match="VK-TST-001"):
+    with pytest.raises(VoiceyError, match="VY-TST-001"):
         scenario(cast(ScenarioFunction, invalid))
 
     def false_predicate(_value: Any) -> bool:
@@ -126,6 +128,7 @@ def test_scenario_models_reject_every_ambiguous_empty_contract() -> None:
         lambda: Persona(description=""),
         lambda: ScenarioProfile(name=""),
         lambda: JudgeConfig(service="openai"),
+        lambda: JudgeConfig(service="anthropic"),
         lambda: JudgeConfig(api_key_env="UNEXPECTED"),
         lambda: ToolExpectation(name=""),
         lambda: TurnExpectation(),
@@ -134,6 +137,7 @@ def test_scenario_models_reject_every_ambiguous_empty_contract() -> None:
             expect=TurnExpectation(judge=("waits",)),
             send_after=SendAfter(delay_ms=1),
         ),
+        lambda: ScenarioTurn(user="hello", runtimes=frozenset()),
         lambda: ResultExpectation(),
         lambda: ScenarioDefinition(name="", caller="caller", goals=("help",)),
         lambda: ScenarioDefinition(name="x", caller="caller", goals=("",)),
@@ -174,7 +178,7 @@ def test_discovery_loads_documented_locations_and_rejects_duplicates(
     (tests / "scenarios.py").write_text(
         "\n".join(
             (
-                "from voicekit.testing import scenario",
+                "from voicey.testing import scenario",
                 "@scenario",
                 "def alpha():",
                 "    return {'caller': 'A', 'goals': ['help']}",
@@ -187,7 +191,7 @@ def test_discovery_loads_documented_locations_and_rejects_duplicates(
     (nested / "more.py").write_text(
         "\n".join(
             (
-                "from voicekit.testing import scenario",
+                "from voicey.testing import scenario",
                 "@scenario",
                 "def beta():",
                 "    return {'caller': 'B', 'goals': ['help']}",
@@ -200,7 +204,7 @@ def test_discovery_loads_documented_locations_and_rejects_duplicates(
     (nested / "more.py").write_text(
         "\n".join(
             (
-                "from voicekit.testing import scenario, ScenarioDefinition",
+                "from voicey.testing import scenario, ScenarioDefinition",
                 "@scenario",
                 "def duplicate():",
                 "    return ScenarioDefinition(name='alpha', caller='B', goals=('help',))",
@@ -208,31 +212,31 @@ def test_discovery_loads_documented_locations_and_rejects_duplicates(
         ),
         encoding="utf-8",
     )
-    with pytest.raises(VoicekitError, match="duplicate scenario names"):
+    with pytest.raises(VoiceyError, match="duplicate scenario names"):
         discover_scenarios(tmp_path)
 
 
 def test_discovery_reports_missing_empty_import_and_invalid_return(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(VoicekitError, match="no tests/scenarios"):
+    with pytest.raises(VoiceyError, match="no tests/scenarios"):
         discover_scenarios(tmp_path)
 
     tests = tmp_path / "tests"
     tests.mkdir()
     source = tests / "scenarios.py"
     source.write_text("VALUE = 1\n", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="contain no @scenario"):
+    with pytest.raises(VoiceyError, match="contain no @scenario"):
         discover_scenarios(tmp_path)
 
     source.write_text("raise RuntimeError('boom')\n", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="raised RuntimeError"):
+    with pytest.raises(VoiceyError, match="raised RuntimeError"):
         discover_scenarios(tmp_path)
 
     source.write_text(
         "\n".join(
             (
-                "from voicekit.testing import scenario",
+                "from voicey.testing import scenario",
                 "@scenario",
                 "def invalid():",
                 "    return {'caller': 'caller'}",
@@ -240,7 +244,7 @@ def test_discovery_reports_missing_empty_import_and_invalid_return(
         ),
         encoding="utf-8",
     )
-    with pytest.raises(VoicekitError, match="returned an invalid scenario"):
+    with pytest.raises(VoiceyError, match="returned an invalid scenario"):
         discover_scenarios(tmp_path)
 
 
@@ -306,13 +310,70 @@ def test_pipecat_compiler_emits_installed_native_text_and_audio(
     assert native_audio.transcriber is not None
 
 
+def test_pipecat_tool_only_turn_waits_for_post_tool_response(tmp_path: Path) -> None:
+    definition = _definition().model_copy(
+        update={
+            "judge": (),
+            "turns": (
+                ScenarioTurn(
+                    user="Search for {email}.",
+                    expect=TurnExpectation(
+                        tools=(ToolExpectation(name="search_available_slots"),),
+                        within_ms=1500,
+                    ),
+                ),
+                ScenarioTurn(
+                    user="Choose the first slot.",
+                    expect=TurnExpectation(judge=("asks for confirmation",)),
+                ),
+            ),
+        }
+    )
+    compiled = compile_pipecat(
+        (definition,),
+        output_dir=tmp_path / "tool-only",
+        bot=Path("recipes/appointment-booking/pipecat/eval_bot.py"),
+        audio=False,
+        judge=JudgeConfig(),
+    )
+
+    native = EvalScenario.load(compiled.scenarios[0])
+    events = native.turns[0].expect
+    assert [event.event for event in events] == ["function_call", "llm_response"]
+    assert events[1].eval is None
+    assert events[1].within_ms == 1500
+
+
+def test_pipecat_compiler_selects_warm_transfer_eval_handler(tmp_path: Path) -> None:
+    definition = _definition().model_copy(
+        update={
+            "turns": (
+                ScenarioTurn(
+                    user="I consent to the handoff.",
+                    expect=TurnExpectation(tools=(ToolExpectation(name="warm_transfer_to_human"),)),
+                ),
+            )
+        }
+    )
+    compiled = compile_pipecat(
+        (definition,),
+        output_dir=tmp_path / "warm-transfer",
+        bot=Path("recipes/appointment-booking/pipecat/eval_bot.py"),
+        audio=False,
+        judge=JudgeConfig(),
+    )
+
+    body = json.loads(compiled.runner_bodies[0].read_text(encoding="utf-8"))
+    assert body["voicey_transfer_mode"] == "warm"
+
+
 def test_pipecat_compiler_generates_bot_and_requires_resolved_turns(
     tmp_path: Path,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
     definition = _definition().model_copy(update={"turns": ()})
-    with pytest.raises(VoicekitError, match="no scripted or sim-caller-planned turns"):
+    with pytest.raises(VoiceyError, match="no scripted or sim-caller-planned turns"):
         compile_pipecat(
             (definition,),
             output_dir=tmp_path / "missing",
@@ -338,14 +399,14 @@ def test_pipecat_compiler_generates_bot_and_requires_resolved_turns(
             )
         },
     )
-    generated_bot = compiled.manifest.parent / "voicekit_eval_bot.py"
+    generated_bot = compiled.manifest.parent / "voicey_eval_bot.py"
     assert "run_eval_agent(agent, runner_args)" in generated_bot.read_text(encoding="utf-8")
 
 
 def test_pipecat_compiler_covers_timing_handoff_cloud_and_template_errors(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(VoicekitError, match="requires project_root"):
+    with pytest.raises(VoiceyError, match="requires project_root"):
         compile_pipecat(
             (_definition(),),
             output_dir=tmp_path / "no-project",
@@ -390,6 +451,22 @@ def test_pipecat_compiler_covers_timing_handoff_cloud_and_template_errors(
     assert criterion is not None
     assert "moves the conversation to SpecialistAgent" in criterion
 
+    anthropic_compilation = compile_pipecat(
+        (definition,),
+        output_dir=tmp_path / "anthropic",
+        bot=Path("recipes/appointment-booking/pipecat/eval_bot.py"),
+        audio=False,
+        judge=JudgeConfig(
+            service="anthropic",
+            model="claude-sonnet-5",
+            base_url="https://api.anthropic.com",
+            api_key_env="ANTHROPIC_API_KEY",  # pragma: allowlist secret
+        ),
+    )
+    anthropic_native = EvalScenario.load(anthropic_compilation.scenarios[0])
+    assert anthropic_native.judge["service"] == "anthropic"
+    assert anthropic_native.judge["factory"] == "voicey.testing.pipecat_judge.anthropic_service"
+
     missing_value = definition.model_copy(
         update={
             "turns": (
@@ -398,7 +475,7 @@ def test_pipecat_compiler_covers_timing_handoff_cloud_and_template_errors(
             )
         }
     )
-    with pytest.raises(VoicekitError, match="missing template value 'missing'"):
+    with pytest.raises(VoiceyError, match="missing template value 'missing'"):
         compile_pipecat(
             (missing_value,),
             output_dir=tmp_path / "missing-value",
@@ -428,6 +505,7 @@ async def test_openai_compatible_planner_and_cited_judge() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         assert payload["seed"] == 7
+        assert payload["think"] is False
         return httpx.Response(
             200,
             json={"choices": [{"message": {"content": next(replies)}}]},
@@ -465,8 +543,9 @@ class _SequenceCompletionClient:
         _messages: list[dict[str, str]],
         *,
         seed: int,
+        response_schema: dict[str, Any] | None = None,
     ) -> str:
-        del seed
+        del seed, response_schema
         return next(self._replies)
 
 
@@ -479,7 +558,7 @@ async def test_sim_caller_and_judge_reject_malformed_model_outputs() -> None:
             OpenAICompatibleClient,
             _SequenceCompletionClient(reply),
         )
-        with pytest.raises(VoicekitError, match="VK-TST-003"):
+        with pytest.raises(VoiceyError, match="VY-TST-003"):
             await SimCaller(client).plan(definition, definition.profiles[0])
 
     no_criteria = await TranscriptJudge(
@@ -489,7 +568,7 @@ async def test_sim_caller_and_judge_reject_malformed_model_outputs() -> None:
 
     for reply in ('["not an object"]', '{"passed":"yes"}'):
         judge = TranscriptJudge(cast(OpenAICompatibleClient, _SequenceCompletionClient(reply)))
-        with pytest.raises(VoicekitError, match="VK-TST-003"):
+        with pytest.raises(VoiceyError, match="VY-TST-003"):
             await judge.evaluate(("criterion",), ("agent: answer",), seed=7)
 
 
@@ -501,25 +580,69 @@ async def test_model_client_requires_cloud_key_and_maps_bad_response() -> None:
         base_url="https://example.test/v1",
         api_key_env="CLOUD_KEY",  # pragma: allowlist secret
     )
-    with pytest.raises(VoicekitError, match="CLOUD_KEY is required"):
+    with pytest.raises(VoiceyError, match="CLOUD_KEY is required"):
         await OpenAICompatibleClient(cloud, environment={}).complete([], seed=7)
 
     async def invalid_handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"choices": []})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(invalid_handler)) as http_client:
-        with pytest.raises(VoicekitError, match="returned invalid output"):
+        with pytest.raises(VoiceyError, match="returned invalid output"):
             await OpenAICompatibleClient(
                 JudgeConfig(),
                 client=http_client,
             ).complete([], seed=7)
 
 
+@pytest.mark.asyncio
+async def test_native_anthropic_model_client_separates_system_and_omits_temperature() -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs: Any) -> Any:
+            captured.update(kwargs)
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text='{"passed":true}')])
+
+    client = SimpleNamespace(messages=FakeMessages())
+    config = JudgeConfig(
+        service="anthropic",
+        model="claude-sonnet-5",
+        base_url="https://api.anthropic.com",
+        api_key_env="ANTHROPIC_API_KEY",  # pragma: allowlist secret
+    )
+    adapter = AnthropicMessagesClient(
+        config,
+        environment={"ANTHROPIC_API_KEY": "test"},  # pragma: allowlist secret
+        client=client,
+    )
+
+    response = await adapter.complete(
+        [
+            {"role": "system", "content": "Return JSON."},
+            {"role": "user", "content": "Evaluate."},
+        ],
+        seed=7,
+        response_schema={"type": "object"},
+    )
+
+    assert response == '{"passed":true}'
+    assert captured["system"] == "Return JSON."
+    assert captured["messages"] == [{"role": "user", "content": "Evaluate."}]
+    assert "temperature" not in captured
+    assert captured["output_config"] == {
+        "format": {"type": "json_schema", "schema": {"type": "object"}}
+    }
+    assert isinstance(build_model_client(config, environment={}), AnthropicMessagesClient)
+
+
 def test_testing_config_defaults_local_and_validates_cloud(tmp_path: Path) -> None:
-    assert load_testing_config(tmp_path).judge.service == "ollama"
+    default_config = load_testing_config(tmp_path)
+    assert default_config.judge.service == "ollama"
+    assert default_config.judge.model == "qwen3:8b"
+    assert default_config.sim_caller.model == "qwen3:8b"
     tests = tmp_path / "tests"
     tests.mkdir()
-    (tests / "voicekit-test.jsonc").write_text(
+    (tests / "voicey-test.jsonc").write_text(
         """
         {
           judge: {
@@ -537,8 +660,8 @@ def test_testing_config_defaults_local_and_validates_cloud(tmp_path: Path) -> No
         == "OPENAI_API_KEY"  # pragma: allowlist secret
     )
 
-    (tests / "voicekit-test.jsonc").write_text("{ judge: false }", encoding="utf-8")
-    with pytest.raises(VoicekitError, match="VK-TST-001"):
+    (tests / "voicey-test.jsonc").write_text("{ judge: false }", encoding="utf-8")
+    with pytest.raises(VoiceyError, match="VY-TST-001"):
         load_testing_config(tmp_path)
 
 
@@ -553,10 +676,10 @@ def test_reporting_preserves_stability_and_junit_failures(tmp_path: Path) -> Non
     )
     case = CaseResult("booking[alex]", "livekit", "text", (failed, passed, passed, passed))
     result = SuiteResult("livekit", "text", (case,))
-    payload = json.loads(result_json(result, next_step="voicekit dev"))
+    payload = json.loads(result_json(result, next_step="voicey dev"))
     assert payload["passed"] is False
     assert payload["cases"][0]["stability"] == 75
-    assert payload["next_step"] == "voicekit dev"
+    assert payload["next_step"] == "voicey dev"
     junit = write_junit(result, tmp_path / "results.xml")
     tree = ElementTree.parse(junit)
     assert tree.getroot().attrib["failures"] == "1"
@@ -604,16 +727,17 @@ def _write_project(root: Path) -> None:
     (root / "tests" / "scenarios.py").write_text(
         "\n".join(
             (
-                "from voicekit.testing import scenario, ScenarioTurn",
+                "from voicey.testing import scenario, ScenarioTurn",
                 "@scenario",
                 "def hello():",
                 "    return dict(caller='Caller', goals=['be helped'],",
-                "      turns=(ScenarioTurn(user='Hello'),))",
+                "      turns=(ScenarioTurn(user='Hello'),",
+                "        ScenarioTurn(user='Pipecat only', runtimes=frozenset({'pipecat'}))))",
             )
         ),
         encoding="utf-8",
     )
-    (root / "voicekit.jsonc").write_text(
+    (root / "voicey.jsonc").write_text(
         """
         {
           schema_version: 1,
@@ -649,12 +773,13 @@ async def test_runner_passes_once_filters_and_keeps_live_distinct(
     executor = _FakeExecutor([True])
     result = await run_project_tests(tmp_path, filter_text="hell", executor=executor)
     assert result.passed is True
+    assert result.cases[0].attempts[0].turn_count == 1
     assert executor.attempts == [1]
     live_executor = _FakeExecutor([True])
     live_result = await run_project_tests(tmp_path, live=True, executor=live_executor)
     assert live_result.tier == "live"
     assert live_result.cases[0].tier == "live"
-    with pytest.raises(VoicekitError, match="distinct paid and local tiers"):
+    with pytest.raises(VoiceyError, match="distinct paid and local tiers"):
         await run_project_tests(tmp_path, live=True, audio=True, executor=live_executor)
 
 
@@ -685,17 +810,17 @@ async def test_runner_builds_and_closes_default_paid_live_executor(
         )
         return executor
 
-    monkeypatch.setattr("voicekit.testing.live.build_live_executor", fake_builder)
+    monkeypatch.setattr("voicey.testing.live.build_live_executor", fake_builder)
     result = await run_project_tests(
         tmp_path,
         live=True,
-        environment={"VOICEKIT_TEST_SENTINEL": "present"},
+        environment={"VOICEY_TEST_SENTINEL": "present"},
     )
     assert result.tier == "live"
     assert captured == {
         "root": tmp_path,
         "runtime": "livekit",
-        "environment": {"VOICEKIT_TEST_SENTINEL": "present"},
+        "environment": {"VOICEY_TEST_SENTINEL": "present"},
         "case_count": 1,
     }
     assert executor.closed
@@ -712,7 +837,7 @@ async def test_runner_validates_paid_acknowledgement_before_planning(
         raise AssertionError("the planner must not run before paid-call preflight")
 
     monkeypatch.setattr(SimCaller, "plan", unexpected_plan)
-    with pytest.raises(VoicekitError, match="no paid PSTN call was placed"):
+    with pytest.raises(VoiceyError, match="no paid PSTN call was placed"):
         await run_project_tests(tmp_path, live=True, environment={})
 
 
@@ -759,6 +884,8 @@ async def test_livekit_pcm_bridge_preserves_input_and_output_frames() -> None:
 
 
 class _FakeMessageAssert:
+    delay_s = 0.0
+
     def __init__(self, text: str) -> None:
         self._text = text
         self.criteria: list[str] = []
@@ -767,6 +894,7 @@ class _FakeMessageAssert:
         return SimpleNamespace(item=SimpleNamespace(text_content=self._text))
 
     async def judge(self, _judge: object, *, intent: str) -> _FakeMessageAssert:
+        await asyncio.sleep(self.delay_s)
         self.criteria.append(intent)
         return self
 
@@ -776,6 +904,12 @@ class _FakeNativeExpect:
         self.tools: list[tuple[str, dict[str, Any]]] = []
         self.handoffs = 0
         self.message = _FakeMessageAssert(text)
+        self.reverse_requested = False
+
+    def __getitem__(self, key: slice) -> _FakeNativeExpect:
+        assert key == slice(None, None, -1)
+        self.reverse_requested = True
+        return self
 
     def contains_function_call(self, *, name: str, **kwargs: Any) -> object:
         self.tools.append((name, cast(dict[str, Any], kwargs.get("arguments", {}))))
@@ -818,7 +952,18 @@ async def test_livekit_native_assertions_cover_tools_handoff_text_and_judge() ->
 
     assert native_expect.tools == [("shared", {"value": 1})]
     assert native_expect.handoffs == 1
+    assert native_expect.reverse_requested is True
     assert native_expect.message.criteria == ["is concise"]
+
+    _FakeMessageAssert.delay_s = 0.01
+    with pytest.raises(AssertionError, match=r"native judge exceeded 0\.001s timeout"):
+        await assert_native_turn(
+            result,
+            turn,
+            judge_llm=object(),
+            judge_timeout_s=0.001,
+        )
+    _FakeMessageAssert.delay_s = 0
 
     failing = _FakeNativeExpect("No matching phrase.")
     with pytest.raises(AssertionError, match="does not contain"):
@@ -831,6 +976,7 @@ async def test_livekit_native_assertions_cover_tools_handoff_text_and_judge() ->
 
 class _FakeTranscriptJudge:
     next_decision = JudgeDecision(True, "supported by line 1", (1,))
+    fail = False
 
     def __init__(self, _client: object) -> None:
         return
@@ -843,6 +989,8 @@ class _FakeTranscriptJudge:
         seed: int,
     ) -> JudgeDecision:
         del criteria, transcript, seed
+        if self.fail:
+            raise VoiceyError("VY-TST-003", detail="judge unavailable")
         return self.next_decision
 
 
@@ -862,6 +1010,7 @@ async def test_pipecat_executor_combines_native_durable_latency_and_cited_result
             {"type": "user_transcription", "transcript": "book Tuesday"},
             {"type": "llm_response", "text": "confirmed Tuesday"},
         ],
+        debug_log=[],
         duration_ms=20,
     )
 
@@ -885,7 +1034,11 @@ async def test_pipecat_executor_combines_native_durable_latency_and_cited_result
         manifest.write_text("suite: []\n", encoding="utf-8")
         return SimpleNamespace(manifest=manifest)
 
-    async def fake_snapshot(_path: Path, _call_id: str) -> dict[str, Any]:
+    async def fake_snapshot(
+        _path: Path,
+        _call_id: str,
+        **_kwargs: object,
+    ) -> dict[str, Any]:
         return {
             "outcome": "appointment_booked",
             "data": {"appointment": {"status": "booked"}},
@@ -937,14 +1090,20 @@ async def test_pipecat_executor_combines_native_durable_latency_and_cited_result
 
 class _FakeLiveKitLLM:
     constructors: ClassVar[list[str]] = []
+    options: ClassVar[list[dict[str, object]]] = []
+    closed = 0
 
-    def __init__(self, **_kwargs: object) -> None:
-        self.constructors.append("cloud")
+    def __init__(self, **kwargs: object) -> None:
+        self.constructors.append("ollama" if kwargs.get("api_key") == "ollama" else "cloud")
+        self.options.append(kwargs)
 
     @classmethod
     def with_ollama(cls, **_kwargs: object) -> _FakeLiveKitLLM:
         cls.constructors.append("ollama")
         return cls.__new__(cls)
+
+    async def aclose(self) -> None:
+        type(self).closed += 1
 
 
 class _FakeRunResult:
@@ -956,21 +1115,37 @@ class _FakeRunResult:
 
 class _FakeAgentSession:
     delay_s = 0.0
+    instances: ClassVar[list[_FakeAgentSession]] = []
 
     def __init__(self, **_kwargs: object) -> None:
         self.closed = False
+        self.interrupts = 0
+        self.callbacks: dict[str, list[Any]] = {}
+        self.instances.append(self)
+
+    def on(self, event: str, callback: Any) -> None:
+        self.callbacks.setdefault(event, []).append(callback)
+
+    def off(self, event: str, callback: Any) -> None:
+        self.callbacks[event].remove(callback)
 
     async def start(self, _native: object, **_kwargs: object) -> _FakeRunResult:
         return _FakeRunResult("opening")
 
     def run(self, *, user_input: str) -> Any:
         del user_input
+        for callback in self.callbacks.get("agent_state_changed", []):
+            callback(SimpleNamespace(new_state="thinking"))
 
         async def complete() -> _FakeRunResult:
             await asyncio.sleep(self.delay_s)
             return _FakeRunResult()
 
         return complete()
+
+    async def interrupt(self, *, force: bool = False) -> None:
+        assert force is True
+        self.interrupts += 1
 
     async def aclose(self) -> None:
         self.closed = True
@@ -985,7 +1160,7 @@ def _empty_native_tools(*_args: object, **_kwargs: object) -> list[Any]:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("service", ["ollama", "openai"])
+@pytest.mark.parametrize("service", ["ollama", "openai", "anthropic"])
 async def test_livekit_executor_uses_native_runs_and_enforces_latency(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -994,15 +1169,20 @@ async def test_livekit_executor_uses_native_runs_and_enforces_latency(
     import livekit.agents
     import livekit.plugins.openai
 
-    import voicekit.runtimes.livekit.flow
-    import voicekit.runtimes.livekit.providers
-    import voicekit.runtimes.livekit.tools
+    import voicey.runtimes.livekit.flow
+    import voicey.runtimes.livekit.providers
+    import voicey.runtimes.livekit.tools
 
     agent = SimpleNamespace(tools="tools", flow="flow:entrypoint")
     monkeypatch.setattr(testing_runner, "project_modules", _null_project_modules)
     monkeypatch.setattr(testing_runner, "load_project_agent", lambda: agent)
     monkeypatch.setattr(livekit.agents, "AgentSession", _FakeAgentSession)
     monkeypatch.setattr(livekit.plugins.openai, "LLM", _FakeLiveKitLLM)
+    monkeypatch.setattr(
+        voicey.runtimes.livekit.providers,
+        "Sonnet5AnthropicLLM",
+        _FakeLiveKitLLM,
+    )
 
     def fake_factory(_environment: object) -> object:
         return object()
@@ -1011,44 +1191,52 @@ async def test_livekit_executor_uses_native_runs_and_enforces_latency(
         return SimpleNamespace(llm=object())
 
     monkeypatch.setattr(
-        voicekit.runtimes.livekit.providers,
+        voicey.runtimes.livekit.providers,
         "DefaultLiveKitProviderFactory",
         fake_factory,
     )
     monkeypatch.setattr(
-        voicekit.runtimes.livekit.providers,
+        voicey.runtimes.livekit.providers,
         "build_livekit_services",
         fake_services,
     )
     monkeypatch.setattr(
-        voicekit.runtimes.livekit.tools,
+        voicey.runtimes.livekit.tools,
         "shared_livekit_tools",
         _empty_native_tools,
     )
 
-    async def native_agent(*_args: object, **_kwargs: object) -> object:
+    native_tools: list[Any] = []
+
+    async def native_agent(*_args: object, **kwargs: object) -> object:
+        native_tools.extend(cast(list[Any], kwargs["shared_tools"]))
         return object()
 
-    async def native_assert(*_args: object, **_kwargs: object) -> None:
+    def native_events(*_args: object, **_kwargs: object) -> None:
+        return
+
+    async def native_judge(*_args: object, **_kwargs: object) -> None:
+        assert _FakeAgentSession.instances[-1].closed is True
         return
 
     monkeypatch.setattr(
-        voicekit.runtimes.livekit.flow,
+        voicey.runtimes.livekit.flow,
         "load_native_agent",
         native_agent,
     )
-    monkeypatch.setattr(testing_runner, "assert_native_turn", native_assert)
+    monkeypatch.setattr(testing_runner, "assert_native_turn_events", native_events)
+    monkeypatch.setattr(testing_runner, "judge_native_turn", native_judge)
     monkeypatch.setattr(testing_runner, "TranscriptJudge", _FakeTranscriptJudge)
-    config = (
-        JudgeConfig()
-        if service == "ollama"
-        else JudgeConfig(
-            service="openai",
-            model="cloud",
-            base_url="https://example.test/v1",
+    config = JudgeConfig()
+    if service != "ollama":
+        config = JudgeConfig(
+            service=cast(Any, service),
+            model="claude-sonnet-5" if service == "anthropic" else "cloud",
+            base_url=(
+                "https://api.anthropic.com" if service == "anthropic" else "https://example.test/v1"
+            ),
             api_key_env="TEST_KEY",  # pragma: allowlist secret
         )
-    )
     definition = ScenarioDefinition(
         name="native",
         caller="caller",
@@ -1059,10 +1247,17 @@ async def test_livekit_executor_uses_native_runs_and_enforces_latency(
                 user="hello",
                 expect=TurnExpectation(judge=("responds",), within_ms=1),
             ),
+            ScenarioTurn(
+                user="stop",
+                send_after=SendAfter(event="llm_started", delay_ms=0),
+            ),
         ),
     )
     _FakeAgentSession.delay_s = 0.003
+    _FakeAgentSession.instances.clear()
     _FakeLiveKitLLM.constructors.clear()
+    _FakeLiveKitLLM.options.clear()
+    _FakeLiveKitLLM.closed = 0
     executor = LiveKitExecutor(
         tmp_path,
         audio=False,
@@ -1079,7 +1274,58 @@ async def test_livekit_executor_uses_native_runs_and_enforces_latency(
 
     assert result.passed is False
     assert any("turn duration" in failure for failure in result.failures)
+    assert _FakeAgentSession.instances[-1].interrupts == 1
     assert ("ollama" if service == "ollama" else "cloud") in _FakeLiveKitLLM.constructors
+    assert any(tool.info.name == "transfer_to_human" for tool in native_tools)
+    assert _FakeLiveKitLLM.closed == 1
+    if service == "ollama":
+        assert _FakeLiveKitLLM.options[0]["extra_body"] == {"think": False}
+
+    native_tools.clear()
+    warm_definition = definition.model_copy(
+        update={
+            "turns": (
+                ScenarioTurn(
+                    user="I consent to a warm transfer.",
+                    expect=TurnExpectation(tools=(ToolExpectation(name="warm_transfer_to_human"),)),
+                ),
+            )
+        }
+    )
+    await executor.execute(
+        "native-warm-transfer[default]",
+        warm_definition,
+        warm_definition.turns,
+        attempt=1,
+    )
+    warm_transfer = next(
+        tool for tool in native_tools if tool.info.name == "warm_transfer_to_human"
+    )
+    assert await warm_transfer() == {"ok": True, "status": "transferred"}
+    assert all(tool.info.name != "transfer_to_human" for tool in native_tools)
+
+    _FakeAgentSession.delay_s = 0.01
+    timed = definition.model_copy(update={"max_duration_ms": 1})
+    timed_out = await executor.execute(
+        "native-timeout[default]",
+        timed,
+        timed.turns,
+        attempt=1,
+    )
+    assert timed_out.passed is False
+    assert "scenario exceeded 1ms hard timeout" in timed_out.failures
+
+    _FakeAgentSession.delay_s = 0
+    _FakeTranscriptJudge.fail = True
+    judge_failed = await executor.execute(
+        "native-judge-failure[default]",
+        definition,
+        definition.turns,
+        attempt=1,
+    )
+    assert judge_failed.passed is False
+    assert "judge failed with VY-TST-003" in judge_failed.failures
+    _FakeTranscriptJudge.fail = False
     _FakeAgentSession.delay_s = 0
 
 
@@ -1268,6 +1514,23 @@ async def test_runner_helpers_cover_snapshot_result_and_project_boundaries(
             {"type": "tts_response", "text": "hello"},
         ]
     ) == ["agent: hello"]
+    assert testing_runner.pipecat_transcript(
+        [
+            {"type": "llm_response", "text": "opening"},
+            {"type": "llm_response", "text": "switched"},
+        ],
+        debug_log=[
+            " 0.1 [ --] event: llm_response 'opening'",
+            " 0.2 [ t0] send: 'Book' (text)",
+            " 0.3 [ t0] event: llm_response 'switched'",
+        ],
+        turns=(ScenarioTurn(user="Book for {email}."),),
+        profile=ScenarioProfile(name="alex", identity={"email": "alex@example.com"}),
+    ) == [
+        "agent: opening",
+        "caller: Book for alex@example.com.",
+        "agent: switched",
+    ]
     assert (
         testing_runner.livekit_transcript(
             [
@@ -1284,13 +1547,13 @@ async def test_runner_helpers_cover_snapshot_result_and_project_boundaries(
     monkeypatch.syspath_prepend(str(tmp_path))
     (tmp_path / "agent.py").write_text("agent = object()\n", encoding="utf-8")
     with (
-        testing_runner.project_modules(tmp_path, {"VOICEKIT_TEST_TEMP": "yes"}),
-        pytest.raises(VoicekitError, match="must export"),
+        testing_runner.project_modules(tmp_path, {"VOICEY_TEST_TEMP": "yes"}),
+        pytest.raises(VoiceyError, match="must export"),
     ):
         testing_runner.load_project_agent()
 
 
-def test_voicekit_test_cli_terminal_and_junit(
+def test_voicey_test_cli_terminal_and_junit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1316,15 +1579,15 @@ def test_voicekit_test_cli_terminal_and_junit(
         )
         return SuiteResult("livekit", case.tier, (case,))
 
-    monkeypatch.setattr("voicekit.cli.app.run_project_tests", fake_run)
+    monkeypatch.setattr("voicey.cli.app.run_project_tests", fake_run)
     result = cli_runner.invoke(app, ["test", "--audio", "--report", "junit"])
     assert result.exit_code == 0
     assert "PASS" in result.stdout
-    assert "Next: voicekit dev" in result.stdout
-    assert (tmp_path / ".voicekit" / "test-results.xml").is_file()
+    assert "Next: voicey dev" in result.stdout
+    assert (tmp_path / ".voicey" / "test-results.xml").is_file()
 
 
-def test_voicekit_test_cli_json_failure_has_retry_next_step(
+def test_voicey_test_cli_json_failure_has_retry_next_step(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1351,7 +1614,7 @@ def test_voicekit_test_cli_json_failure_has_retry_next_step(
         )
         return SuiteResult("livekit", "live", (case,))
 
-    monkeypatch.setattr("voicekit.cli.app.run_project_tests", fake_run)
+    monkeypatch.setattr("voicey.cli.app.run_project_tests", fake_run)
     result = cli_runner.invoke(
         app,
         ["test", "--filter", "hello", "--live", "--report", "json"],
@@ -1359,4 +1622,4 @@ def test_voicekit_test_cli_json_failure_has_retry_next_step(
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
     assert payload["passed"] is False
-    assert payload["next_step"] == "voicekit test --filter hello --live"
+    assert payload["next_step"] == "voicey test --filter hello --live"

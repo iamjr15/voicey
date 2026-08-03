@@ -36,7 +36,7 @@ jobs:
       - name: Run signature, leak, dependency, and canonical-image security gate
         run: |
           uv run python tests/verification/run_p4_security_gate.py \
-            --wheel dist/voicekit-0.0.0.dev0-py3-none-any.whl \
+            --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
             --report p4-security-report.json
       - name: Upload truthful security report
         if: always()

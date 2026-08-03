@@ -1,7 +1,7 @@
 # Stored-data map and retention
 
-Voicekit stores call data only on infrastructure selected and owned by the
-operator. It does not send telemetry or call content to a voicekit-operated
+Voicey stores call data only on infrastructure selected and owned by the
+operator. It does not send telemetry or call content to a voicey-operated
 service. Model, speech, carrier, and deployment providers still process data
 under their own contracts.
 
@@ -22,7 +22,7 @@ under their own contracts.
 
 Provider audio, transcripts, prompts, and tool traffic may also pass through the
 configured Deepgram, Anthropic, Cartesia, Pipecat transport, LiveKit, carrier,
-or SIP systems. Voicekit cannot apply its repository purge transaction to
+or SIP systems. Voicey cannot apply its repository purge transaction to
 provider-owned copies. Configure those providers' retention and training
 settings separately.
 

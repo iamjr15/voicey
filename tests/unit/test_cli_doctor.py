@@ -15,8 +15,8 @@ from typing import ClassVar, cast
 import httpx
 import pytest
 
-from voicekit.cli.context import ProjectContext
-from voicekit.cli.doctor import (
+from voicey.cli.context import ProjectContext
+from voicey.cli.doctor import (
     Doctor,
     DoctorCheck,
     LiveKitSipInspector,
@@ -33,13 +33,13 @@ from voicekit.cli.doctor import (
     _twilio_check,
     _vobiz_check,
 )
-from voicekit.cli.keys import KeyCheck
-from voicekit.compatibility import RuntimeCompatibilityReport
-from voicekit.config.catalog import ProviderKind
-from voicekit.config.manifest import ProjectManifest, RecipeSelection
-from voicekit.config.models import ModelAxis, RuntimeName
-from voicekit.results.signing import WebhookSigner
-from voicekit.telephony.models import CarrierAccountState, NumberInfo
+from voicey.cli.keys import KeyCheck
+from voicey.compatibility import RuntimeCompatibilityReport
+from voicey.config.catalog import ProviderKind
+from voicey.config.manifest import ProjectManifest, RecipeSelection
+from voicey.config.models import ModelAxis, RuntimeName
+from voicey.results.signing import WebhookSigner
+from voicey.telephony.models import CarrierAccountState, NumberInfo
 
 
 class ValidKeys:
@@ -135,11 +135,11 @@ def test_safe_fixes_are_idempotent_private_and_never_print_secret(tmp_path: Path
     first = doctor.apply_safe_fixes()
     second = doctor.apply_safe_fixes()
 
-    assert "generated VOICEKIT_WEBHOOK_SECRET" in first
-    assert "generated VOICEKIT_WEBHOOK_SECRET" not in second
+    assert "generated VOICEY_WEBHOOK_SECRET" in first
+    assert "generated VOICEY_WEBHOOK_SECRET" not in second
     assert stat.S_IMODE((tmp_path / ".env").stat().st_mode) == 0o600
-    assert stat.S_IMODE((tmp_path / ".voicekit").stat().st_mode) == 0o700
-    assert WebhookSigner(context.environment["VOICEKIT_WEBHOOK_SECRET"])
+    assert stat.S_IMODE((tmp_path / ".voicey").stat().st_mode) == 0o700
+    assert WebhookSigner(context.environment["VOICEY_WEBHOOK_SECRET"])
     assert "whsec_" not in " ".join(first + second)
 
 
@@ -158,7 +158,7 @@ def test_doctor_warns_but_does_not_fail_for_uncertified_runtime(
             status="out-of-range",
         )
 
-    monkeypatch.setattr("voicekit.cli.doctor.inspect_runtime_compatibility", out_of_range)
+    monkeypatch.setattr("voicey.cli.doctor.inspect_runtime_compatibility", out_of_range)
     check = _runtime_check(cast("ProjectManifest", context.manifest))
 
     assert check.ok
@@ -238,10 +238,10 @@ def test_results_endpoint_parser_never_imports_project_code(tmp_path: Path) -> N
     (tmp_path / "agent.py").write_text(
         """
 raise RuntimeError("must not execute")
-from voicekit import Results
+from voicey import Results
 results = Results(
     webhook="https://receiver.example.test/results",
-    secret_env="VOICEKIT_WEBHOOK_SECRET",
+    secret_env="VOICEY_WEBHOOK_SECRET",
 )
 """,
         encoding="utf-8",
@@ -300,21 +300,21 @@ async def test_complete_web_doctor_runs_green_with_signed_receiver_test(
     doctor = Doctor(context, key_validator=ValidKeys(), send_test=True, port=_free_port())
     doctor.apply_safe_fixes()
     (tmp_path / ".env.example").write_text(
-        "DEEPGRAM_API_KEY=\nANTHROPIC_API_KEY=\nCARTESIA_API_KEY=\nVOICEKIT_WEBHOOK_SECRET=\n",
+        "DEEPGRAM_API_KEY=\nANTHROPIC_API_KEY=\nCARTESIA_API_KEY=\nVOICEY_WEBHOOK_SECRET=\n",
         encoding="utf-8",
     )
     (tmp_path / "agent.py").write_text(
         """
-from voicekit import Results
+from voicey import Results
 results = Results(
     webhook="https://receiver.example.test/results",
-    secret_env="VOICEKIT_WEBHOOK_SECRET",
+    secret_env="VOICEY_WEBHOOK_SECRET",
 )
 """,
         encoding="utf-8",
     )
-    monkeypatch.setattr("voicekit.cli.doctor.httpx.AsyncClient", FakeDoctorHttp)
-    monkeypatch.setattr("voicekit.cli.doctor.shutil.which", _fake_which)
+    monkeypatch.setattr("voicey.cli.doctor.httpx.AsyncClient", FakeDoctorHttp)
+    monkeypatch.setattr("voicey.cli.doctor.shutil.which", _fake_which)
 
     report = await doctor.run()
 
@@ -381,10 +381,10 @@ def test_twilio_doctor_surfaces_trial_funding_kyc_and_route_diff(
         environment={
             "TWILIO_ACCOUNT_SID": "AC" + "1" * 32,
             "TWILIO_AUTH_TOKEN": "token",  # pragma: allowlist secret
-            "VOICEKIT_PUBLIC_URL": "https://public.example.test",
+            "VOICEY_PUBLIC_URL": "https://public.example.test",
         },
     )
-    monkeypatch.setattr("voicekit.telephony.twilio.TwilioAdapter", FakeCarrier)
+    monkeypatch.setattr("voicey.telephony.twilio.TwilioAdapter", FakeCarrier)
 
     check = _twilio_check(context, manifest)
 
@@ -432,7 +432,7 @@ def test_telnyx_doctor_checks_funding_ownership_and_connection_route(
         "TELNYX_CONNECTION_ID": "expected-connection",
     }
     context = ProjectContext(tmp_path, manifest, False, environment)
-    monkeypatch.setattr("voicekit.telephony.telnyx.TelnyxAdapter", FakeTelnyxCarrier)
+    monkeypatch.setattr("voicey.telephony.telnyx.TelnyxAdapter", FakeTelnyxCarrier)
 
     check = _telnyx_check(context, manifest)
 
@@ -489,7 +489,7 @@ def test_vobiz_doctor_checks_funding_ownership_and_inbound_route(
             "VOBIZ_AUTH_TOKEN": "token",  # pragma: allowlist secret
         },
     )
-    monkeypatch.setattr("voicekit.telephony.vobiz.VobizAdapter", FakeVobizCarrier)
+    monkeypatch.setattr("voicey.telephony.vobiz.VobizAdapter", FakeVobizCarrier)
 
     check = _vobiz_check(context, manifest)
 
@@ -539,7 +539,7 @@ def test_plivo_doctor_checks_funding_ownership_and_inbound_route(
             "PLIVO_AUTH_TOKEN": "token",  # pragma: allowlist secret
         },
     )
-    monkeypatch.setattr("voicekit.telephony.plivo.PlivoAdapter", FakePlivoCarrier)
+    monkeypatch.setattr("voicey.telephony.plivo.PlivoAdapter", FakePlivoCarrier)
 
     check = _carrier_check(context, manifest)
 
@@ -569,11 +569,11 @@ def test_generic_sip_doctor_enforces_livekit_and_operator_boundary(tmp_path: Pat
         phone_number="+14155550123",
     )
     environment = {
-        "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
-        "VOICEKIT_SIP_USERNAME": "voicekit",
-        "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
-        "VOICEKIT_SIP_TRANSPORT": "tls",
-        "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+        "VOICEY_SIP_ADDRESS": "trunk.example.test:5061",
+        "VOICEY_SIP_USERNAME": "voicey",
+        "VOICEY_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+        "VOICEY_SIP_TRANSPORT": "tls",
+        "VOICEY_SIP_MEDIA_ENCRYPTION": "require",
     }
     pipecat = _generic_sip_check(
         ProjectContext(tmp_path, pipecat_manifest, False, environment),
@@ -619,7 +619,7 @@ def _phone_context(tmp_path: Path, *, public_url: bool = True) -> ProjectContext
         "TWILIO_AUTH_TOKEN": "token",  # pragma: allowlist secret
     }
     if public_url:
-        environment["VOICEKIT_PUBLIC_URL"] = "https://public.example.test"
+        environment["VOICEY_PUBLIC_URL"] = "https://public.example.test"
     return ProjectContext(
         root=tmp_path,
         manifest=manifest,
@@ -670,7 +670,7 @@ async def test_doctor_failure_checks_are_explicit(
     tmp_path: Path,
 ) -> None:
     web = _context(tmp_path)
-    web.environment["VOICEKIT_WEBHOOK_SECRET"] = "invalid"
+    web.environment["VOICEY_WEBHOOK_SECRET"] = "invalid"
     invalid_keys = Doctor(web, key_validator=InvalidKeys())
     key_check = await invalid_keys._keys()
     assert not key_check.ok
@@ -692,7 +692,7 @@ async def test_doctor_failure_checks_are_explicit(
 
     ErrorScenarioHttp.get_status = 503
     ErrorScenarioHttp.raise_http = False
-    monkeypatch.setattr("voicekit.cli.doctor.httpx.AsyncClient", ErrorScenarioHttp)
+    monkeypatch.setattr("voicey.cli.doctor.httpx.AsyncClient", ErrorScenarioHttp)
     phone = Doctor(_phone_context(tmp_path), key_validator=ValidKeys())
     status_failure = await phone._tunnel()
     assert not status_failure.ok
@@ -715,10 +715,10 @@ async def test_receiver_clock_livekit_and_dlq_failure_paths(
 
     (tmp_path / "agent.py").write_text(
         """
-from voicekit import Results
+from voicey import Results
 results = Results(
     webhook="https://receiver.example.test/results",
-    secret_env="VOICEKIT_WEBHOOK_SECRET",
+    secret_env="VOICEY_WEBHOOK_SECRET",
 )
 """,
         encoding="utf-8",
@@ -726,7 +726,7 @@ results = Results(
     ErrorScenarioHttp.head_status = 503
     ErrorScenarioHttp.raise_http = False
     ErrorScenarioHttp.include_date = False
-    monkeypatch.setattr("voicekit.cli.doctor.httpx.AsyncClient", ErrorScenarioHttp)
+    monkeypatch.setattr("voicey.cli.doctor.httpx.AsyncClient", ErrorScenarioHttp)
     receiver = await doctor._receiver()
     assert not receiver.ok
     assert "503" in receiver.issues[0]
@@ -786,14 +786,14 @@ results = Results(
     )
     phone_check = await phone_livekit._livekit()
     assert not phone_check.ok
-    assert "VOICEKIT_LIVEKIT_SIP_URI" in phone_check.issues[0]
+    assert "VOICEY_LIVEKIT_SIP_URI" in phone_check.issues[0]
 
     complete_phone_environment = {
         **web_livekit_context.environment,
-        "VOICEKIT_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
-        "VOICEKIT_TWILIO_SIP_DOMAIN": "voicekit.pstn.twilio.com",
-        "VOICEKIT_TWILIO_SIP_USERNAME": "voicekit-user",
-        "VOICEKIT_TWILIO_SIP_PASSWORD": "voicekit-password",  # pragma: allowlist secret
+        "VOICEY_LIVEKIT_SIP_URI": "sip:project.sip.livekit.cloud",
+        "VOICEY_TWILIO_SIP_DOMAIN": "voicey.pstn.twilio.com",
+        "VOICEY_TWILIO_SIP_USERNAME": "voicey-user",
+        "VOICEY_TWILIO_SIP_PASSWORD": "VoiceyPassword1",  # pragma: allowlist secret
     }
     sip_inspector = ValidSipInspector()
     complete_phone = Doctor(
@@ -808,7 +808,7 @@ results = Results(
         livekit_sip_inspector=cast("LiveKitSipInspector", sip_inspector),
     )
     assert (await complete_phone._livekit()).ok
-    assert sip_inspector.names == ["voicekit-livekit-agent-14155550123"]
+    assert sip_inspector.names == ["voicey-livekit-agent-14155550123"]
 
     class FakeRepository:
         def __init__(self, _path: Path) -> None:
@@ -823,10 +823,10 @@ results = Results(
         async def dlq_depth(self) -> int:
             return 2
 
-    database = tmp_path / ".voicekit" / "calls.sqlite3"
+    database = tmp_path / ".voicey" / "calls.sqlite3"
     database.parent.mkdir()
     database.touch()
-    monkeypatch.setattr("voicekit.cli.doctor.SQLiteRepository", FakeRepository)
+    monkeypatch.setattr("voicey.cli.doctor.SQLiteRepository", FakeRepository)
     dlq = await doctor._dlq()
     assert not dlq.ok
     assert "2 delivery" in dlq.issues[0]
@@ -861,7 +861,7 @@ def test_doctor_local_negative_branches(
             installed_version=None,
         )
 
-    monkeypatch.setattr("voicekit.cli.doctor.inspect_runtime_compatibility", missing_runtime)
+    monkeypatch.setattr("voicey.cli.doctor.inspect_runtime_compatibility", missing_runtime)
     assert not _runtime_check(cast("ProjectManifest", context.manifest)).ok
 
     invalid_manifest = cast(
@@ -885,7 +885,7 @@ def test_doctor_local_negative_branches(
 async def test_livekit_sip_inspector_reads_exact_managed_resources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    expected = "voicekit-livekit-agent-14155550123"
+    expected = "voicey-livekit-agent-14155550123"
     names = {
         "inbound": expected,
         "outbound": expected,
@@ -924,7 +924,7 @@ async def test_livekit_sip_inspector_reads_exact_managed_resources(
     names["outbound"] = "other"
     issues, advice = await inspector.inspect(values, expected_name=expected)
     assert "outbound trunk" in issues[0]
-    assert "voicekit dev --phone" in advice[0]
+    assert "voicey dev --phone" in advice[0]
     assert closed == [True, True]
 
     async def rejected(_self: object, _request: object) -> object:

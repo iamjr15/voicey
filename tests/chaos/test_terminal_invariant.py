@@ -8,19 +8,19 @@ from typing import Literal
 import httpx
 import pytest
 
-from voicekit import Agent, Models, Results, Web, results, tool
-from voicekit.obs import TranscriptTurn
-from voicekit.results import DeliveryWorker
-from voicekit.results.signing import encode_secret
-from voicekit.runtimes.pipecat.admission import AdmissionController
-from voicekit.runtimes.pipecat.lifecycle import (
+from voicey import Agent, Models, Results, Web, results, tool
+from voicey.obs import TranscriptTurn
+from voicey.results import DeliveryWorker
+from voicey.results.signing import encode_secret
+from voicey.runtimes.pipecat.admission import AdmissionController
+from voicey.runtimes.pipecat.lifecycle import (
     PipecatCall,
     PipecatLifecycleManager,
 )
-from voicekit.storage import SQLiteRepository
-from voicekit.storage.models import EndedReason
-from voicekit.tools import RepositoryToolObservationSink, ToolExecutor
-from voicekit.tools.execution import tool_execution_context
+from voicey.storage import SQLiteRepository
+from voicey.storage.models import EndedReason
+from voicey.tools import RepositoryToolObservationSink, ToolExecutor
+from voicey.tools.execution import tool_execution_context
 
 Fault = Literal[
     "provider_connection_killed",
@@ -44,7 +44,7 @@ def _agent(runtime: Literal["pipecat", "livekit"]) -> Agent:
         web=Web(enabled=True, allowed_origins=["http://localhost:5173"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 

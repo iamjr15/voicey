@@ -4,10 +4,10 @@ import asyncio
 
 import pytest
 
-from voicekit.versioning import (
+from voicey.versioning import (
     Deprecation,
     SemVer,
-    VoicekitDeprecationWarning,
+    VoiceyDeprecationWarning,
     deprecated,
     validate_deprecations,
     warn_deprecated,
@@ -38,11 +38,11 @@ def test_semver_rejects_invalid_versions(raw: str) -> None:
 
 def _deprecation(*, remove_in: str = "1.4.0") -> Deprecation:
     return Deprecation(
-        name="voicekit.old",
+        name="voicey.old",
         since="1.2.0",
         remove_in=remove_in,
-        replacement="voicekit.new",
-        migration_url="https://voicekit.dev/docs/migrate-old",
+        replacement="voicey.new",
+        migration_url="https://voicey.dev/docs/migrate-old",
     )
 
 
@@ -52,18 +52,18 @@ def test_deprecation_requires_two_minor_releases() -> None:
         _deprecation(remove_in="1.3.9")
     with pytest.raises(ValueError, match="stable"):
         Deprecation(
-            name="voicekit.old",
+            name="voicey.old",
             since="1.2.0-rc.1",
             remove_in="1.4.0",
-            replacement="voicekit.new",
-            migration_url="https://voicekit.dev/docs/migrate-old",
+            replacement="voicey.new",
+            migration_url="https://voicey.dev/docs/migrate-old",
         )
 
 
 def test_warn_deprecated_has_actionable_message() -> None:
     with pytest.warns(
-        VoicekitDeprecationWarning,
-        match=r"deprecated since Voicekit 1\.2\.0.*voicekit\.new",
+        VoiceyDeprecationWarning,
+        match=r"deprecated since Voicey 1\.2\.0.*voicey\.new",
     ):
         warn_deprecated(_deprecation())
 
@@ -78,9 +78,9 @@ def test_deprecated_wraps_sync_and_async_callables() -> None:
     async def old_async(value: int) -> int:
         return value + 2
 
-    with pytest.warns(VoicekitDeprecationWarning):
+    with pytest.warns(VoiceyDeprecationWarning):
         assert old_sync(1) == 2
-    with pytest.warns(VoicekitDeprecationWarning):
+    with pytest.warns(VoiceyDeprecationWarning):
         assert asyncio.run(old_async(1)) == 3
     assert old_sync.__name__ == "old_sync"
     assert old_sync.__doc__ == "Preserved metadata."

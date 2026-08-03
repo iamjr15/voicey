@@ -7,7 +7,7 @@ Agent-returning handoffs and prebuilt contact-capture tasks.
 Create a project:
 
 ```bash
-voicekit init ./appointments \
+voicey init ./appointments \
   --name appointments \
   --recipe appointment-booking \
   --channels web \
@@ -50,6 +50,11 @@ is reintroduced as untrusted caller data, never prompt instructions. Calendar
 mutation rules remain in the shared prompt and tools, so both runtimes preserve
 the same confirmation and success contract.
 
+The shared test scenarios therefore provide LiveKit-targeted caller turns for
+the name and email confirmations. Test orchestration does not silently accept
+contact data on the caller's behalf or skip that native task boundary. Pipecat
+keeps its native final-details confirmation before the mutating booking tool.
+
 ## Production customization map
 
 | File / setting | Owner action |
@@ -58,13 +63,13 @@ the same confirmation and success contract.
 | `prompts/system.md` | Add business hours, timezone, appointment types, and confirmation policy. |
 | `prompts/failure.md` | Align retry, callback, and escalation language with support operations. |
 | `prompts/voicemail.md` | Add the approved callback number while preserving the no-PII rule. |
-| `VOICEKIT_TRANSFER_NUMBER` | Inject an E.164 human destination at runtime; absence removes the native transfer function. |
+| `VOICEY_TRANSFER_NUMBER` | Inject an E.164 human destination at runtime; absence removes the native transfer function. |
 | `agent.py:Results` | Configure the verified results receiver for the deployment. |
 
 For a local transfer test, inject the non-secret destination for that process:
 
 ```bash
-VOICEKIT_TRANSFER_NUMBER=+14155550199 voicekit dev --phone
+VOICEY_TRANSFER_NUMBER=+14155550199 voicey dev --phone
 ```
 
 Next: make a test call, request a human, and verify the Twilio cold-transfer
@@ -94,6 +99,12 @@ exit contract, and exact commands.
 The native LiveKit factory, three handoffs, tool preservation, pinned contact
 tasks, and copied-project import path run in normal CI. The unified cross-runtime
 scenario command lands in P2.4.
+
+The 2026-08-03 P2.4 text certification regenerated this recipe on Pipecat and
+LiveKit and selected the native Anthropic test-model override. All seven cases
+passed first attempt on both runtimes with the reference Deepgram/Anthropic/
+Cartesia stack, production typed tools, and durable result assertions. No
+Ollama request was used. Audio and physical-input gates remain separate.
 
 Next: run the Pipecat text suite after every prompt or tool change and the audio
 suite before deployment.

@@ -1,6 +1,6 @@
 """Provider-lazy deployment fixture; health startup makes no model calls."""
 
-from voicekit import Agent, Limits, Models, Results, Web
+from voicey import Agent, Limits, Models, Results, Web
 
 agent = Agent(
     name="docker-fixture",
@@ -16,7 +16,7 @@ agent = Agent(
     web=Web(enabled=True, allowed_origins=["https://app.example"]),
     results=Results(
         webhook="https://receiver.example/results",
-        secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+        secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
     ),
     limits=Limits(max_duration_s=10, silence_hangup_s=5),
 )

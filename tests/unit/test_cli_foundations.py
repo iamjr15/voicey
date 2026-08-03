@@ -10,38 +10,38 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-import voicekit.cli.context as cli_context
-from voicekit.capabilities import (
+import voicey.cli.context as cli_context
+from voicey.capabilities import (
     DEFAULT_CAPABILITIES,
     Capability,
     CapabilityRegistry,
 )
-from voicekit.cli.checkpoint import InitCheckpoint, InitCheckpointStore
-from voicekit.cli.context import (
+from voicey.cli.checkpoint import InitCheckpoint, InitCheckpointStore
+from voicey.cli.context import (
     ProjectContext,
     discover_project,
     load_project_agent,
     next_step,
     require_manifest,
 )
-from voicekit.cli.environment import EnvFileStore, ensure_env_ignored, merged_environment
-from voicekit.cli.keys import (
+from voicey.cli.environment import EnvFileStore, ensure_env_ignored, merged_environment
+from voicey.cli.keys import (
     LiveKitKeyValidator,
     ProviderKeyValidator,
     mask_value,
     required_entries,
 )
-from voicekit.cli.scaffold import ScaffoldWriter, ScratchScaffold
-from voicekit.config.catalog import ProviderCatalog, ProviderCatalogEntry
-from voicekit.config.manifest import (
+from voicey.cli.scaffold import ScaffoldWriter, ScratchScaffold
+from voicey.config.catalog import ProviderCatalog, ProviderCatalogEntry
+from voicey.config.manifest import (
     ManifestState,
     ManifestStore,
     ProjectManifest,
     RecipeSelection,
 )
-from voicekit.config.models import Agent, ModelAxis, Models, Results, Web
-from voicekit.errors import VoicekitError
-from voicekit.recipes.registry import (
+from voicey.config.models import Agent, ModelAxis, Models, Results, Web
+from voicey.errors import VoiceyError
+from voicey.recipes.registry import (
     DEFAULT_RECIPE_REGISTRY,
     RecipeDefinition,
     RecipeRegistry,
@@ -106,21 +106,21 @@ def test_project_agent_loader_catalogs_import_shape_and_runtime_failures(
         raise ImportError("missing")
 
     monkeypatch.setattr(cli_context.importlib, "import_module", missing)
-    with pytest.raises(VoicekitError, match="must export an Agent"):
+    with pytest.raises(VoiceyError, match="must export an Agent"):
         load_project_agent(context)
 
     def broken(_name: str) -> object:
         raise RuntimeError("private detail")
 
     monkeypatch.setattr(cli_context.importlib, "import_module", broken)
-    with pytest.raises(VoicekitError, match="failed to load \\(RuntimeError\\)"):
+    with pytest.raises(VoiceyError, match="failed to load \\(RuntimeError\\)"):
         load_project_agent(context)
 
     def wrong_type(_name: str) -> object:
         return SimpleNamespace(agent=object())
 
     monkeypatch.setattr(cli_context.importlib, "import_module", wrong_type)
-    with pytest.raises(VoicekitError, match="is not a voicekit Agent"):
+    with pytest.raises(VoiceyError, match="is not a voicey Agent"):
         load_project_agent(context)
 
     livekit_agent = Agent(
@@ -137,7 +137,7 @@ def test_project_agent_loader_catalogs_import_shape_and_runtime_failures(
         web=Web(enabled=True, allowed_origins=["https://app.example.test"]),
         results=Results(
             webhook="https://receiver.example.test/results",
-            secret_env="VOICEKIT_WEBHOOK_SECRET",  # pragma: allowlist secret
+            secret_env="VOICEY_WEBHOOK_SECRET",  # pragma: allowlist secret
         ),
     )
 
@@ -145,7 +145,7 @@ def test_project_agent_loader_catalogs_import_shape_and_runtime_failures(
         return SimpleNamespace(agent=livekit_agent)
 
     monkeypatch.setattr(cli_context.importlib, "import_module", wrong_runtime)
-    with pytest.raises(VoicekitError, match="different runtimes"):
+    with pytest.raises(VoiceyError, match="different runtimes"):
         load_project_agent(context)
 
 
@@ -276,9 +276,9 @@ def test_capability_registry_indexes_filters_and_catalogs_bad_entries() -> None:
         "zeta",
     ]
     assert registry.get("runtime", "missing") is None
-    with pytest.raises(VoicekitError, match="voicekit\\[future\\]"):
+    with pytest.raises(VoiceyError, match="voicey\\[future\\]"):
         registry.require("runtime", "alpha")
-    with pytest.raises(VoicekitError, match="unknown"):
+    with pytest.raises(VoiceyError, match="unknown"):
         registry.require("runtime", "missing")
     with pytest.raises(AssertionError, match="duplicate"):
         CapabilityRegistry(
@@ -304,9 +304,9 @@ def test_recipe_registry_handles_unknown_runtime_source_and_duplicates() -> None
     assert registry.get("scratch") == available
     assert registry.list(include_unavailable=False) == (available,)
     assert registry.require("scratch", "pipecat") == available
-    with pytest.raises(VoicekitError, match="unknown"):
+    with pytest.raises(VoiceyError, match="unknown"):
         registry.require("missing", "pipecat")
-    with pytest.raises(VoicekitError, match="does not contain"):
+    with pytest.raises(VoiceyError, match="does not contain"):
         registry.require("scratch", "livekit")
 
     unavailable_source = RecipeRegistry(
@@ -322,7 +322,7 @@ def test_recipe_registry_handles_unknown_runtime_source_and_duplicates() -> None
         ),
         capabilities=capabilities,
     )
-    with pytest.raises(VoicekitError, match="source is not packaged"):
+    with pytest.raises(VoiceyError, match="source is not packaged"):
         unavailable_source.require("scratch", "pipecat")
     with pytest.raises(AssertionError, match="duplicate"):
         RecipeRegistry((available, available), capabilities=capabilities)
@@ -366,25 +366,25 @@ def test_env_store_rejects_links_invalid_names_nul_and_malformed_values(
     link = tmp_path / ".env"
     link.symlink_to(target)
 
-    with pytest.raises(VoicekitError) as read_link:
+    with pytest.raises(VoiceyError) as read_link:
         EnvFileStore(link).read()
-    with pytest.raises(VoicekitError) as update_link:
+    with pytest.raises(VoiceyError) as update_link:
         EnvFileStore(link).update({"KEY": "value"})
-    assert read_link.value.code == "VK-SEC-002"
-    assert update_link.value.code == "VK-SEC-002"
+    assert read_link.value.code == "VY-SEC-002"
+    assert update_link.value.code == "VY-SEC-002"
 
     store = EnvFileStore(tmp_path / "safe.env")
-    with pytest.raises(VoicekitError) as invalid:
+    with pytest.raises(VoiceyError) as invalid:
         store.update({"lowercase": "value"})
-    with pytest.raises(VoicekitError) as nul:
+    with pytest.raises(VoiceyError) as nul:
         store.update({"VALID": "bad\x00value"})
-    assert invalid.value.code == "VK-CLI-003"
-    assert nul.value.code == "VK-CLI-003"
+    assert invalid.value.code == "VY-CLI-003"
+    assert nul.value.code == "VY-CLI-003"
 
     store.path.write_text('VALID="unterminated\n', encoding="utf-8")
-    with pytest.raises(VoicekitError) as malformed:
+    with pytest.raises(VoiceyError) as malformed:
         store.read()
-    assert malformed.value.code == "VK-CLI-003"
+    assert malformed.value.code == "VY-CLI-003"
 
 
 def test_env_decode_supports_export_empty_single_quote_and_inline_comment(
@@ -411,17 +411,17 @@ def test_env_write_and_ignore_os_errors_are_cataloged(
         raise OSError("disk full")
 
     store = EnvFileStore(tmp_path / ".env")
-    monkeypatch.setattr("voicekit.cli.environment.EnvFileStore._replace", fail_replace)
-    with pytest.raises(VoicekitError) as write:
+    monkeypatch.setattr("voicey.cli.environment.EnvFileStore._replace", fail_replace)
+    with pytest.raises(VoiceyError) as write:
         store.update({"KEY": "value"})
-    assert write.value.code == "VK-CLI-003"
+    assert write.value.code == "VY-CLI-003"
 
     project = tmp_path / "project"
     project.mkdir()
     (project / ".gitignore").mkdir()
-    with pytest.raises(VoicekitError) as ignored:
+    with pytest.raises(VoiceyError) as ignored:
         ensure_env_ignored(project)
-    assert ignored.value.code == "VK-CLI-003"
+    assert ignored.value.code == "VY-CLI-003"
 
 
 def test_env_ignore_rejects_symlink(tmp_path: Path) -> None:
@@ -431,10 +431,10 @@ def test_env_ignore_rejects_symlink(tmp_path: Path) -> None:
     target.write_text("", encoding="utf-8")
     (project / ".gitignore").symlink_to(target)
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         ensure_env_ignored(project)
 
-    assert caught.value.code == "VK-SEC-002"
+    assert caught.value.code == "VY-SEC-002"
 
 
 @pytest.mark.asyncio
@@ -491,18 +491,18 @@ async def test_generic_sip_key_validation_is_local_and_fail_closed() -> None:
     client = FakeHttpClient()
     validator = ProviderKeyValidator(client=client)
     valid = {
-        "VOICEKIT_SIP_ADDRESS": "trunk.example.test:5061",
-        "VOICEKIT_SIP_USERNAME": "voicekit",
-        "VOICEKIT_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
-        "VOICEKIT_SIP_TRANSPORT": "tls",
-        "VOICEKIT_SIP_MEDIA_ENCRYPTION": "require",
+        "VOICEY_SIP_ADDRESS": "trunk.example.test:5061",
+        "VOICEY_SIP_USERNAME": "voicey",
+        "VOICEY_SIP_PASSWORD": "credential-value",  # pragma: allowlist secret
+        "VOICEY_SIP_TRANSPORT": "tls",
+        "VOICEY_SIP_MEDIA_ENCRYPTION": "require",
     }
 
     accepted = await validator.validate("carrier", "sip", valid)
     rejected = await validator.validate(
         "carrier",
         "sip",
-        valid | {"VOICEKIT_SIP_MEDIA_ENCRYPTION": "disable"},
+        valid | {"VOICEY_SIP_MEDIA_ENCRYPTION": "disable"},
     )
     missing = await validator.validate("carrier", "sip", {})
 
@@ -514,14 +514,14 @@ async def test_generic_sip_key_validation_is_local_and_fail_closed() -> None:
 
 @pytest.mark.asyncio
 async def test_key_validation_catalogs_timeout_unknown_network_and_template_errors() -> None:
-    with pytest.raises(VoicekitError) as timeout:
+    with pytest.raises(VoiceyError) as timeout:
         ProviderKeyValidator(timeout_s=0)
-    assert timeout.value.code == "VK-CLI-004"
+    assert timeout.value.code == "VY-CLI-004"
 
     validator = ProviderKeyValidator(client=FakeHttpClient())
-    with pytest.raises(VoicekitError) as unknown:
+    with pytest.raises(VoiceyError) as unknown:
         await validator.validate("llm", "missing/model", {})
-    assert unknown.value.code == "VK-CLI-005"
+    assert unknown.value.code == "VY-CLI-005"
 
     network = await ProviderKeyValidator(client=RaisingHttpClient()).validate(
         "stt",
@@ -548,9 +548,9 @@ async def test_key_validation_catalogs_timeout_unknown_network_and_template_erro
         client=FakeHttpClient(),
         catalog=ProviderCatalog((entry,)),
     )
-    with pytest.raises(VoicekitError) as template:
+    with pytest.raises(VoiceyError) as template:
         await custom.validate("llm", "custom/model", {"CUSTOM_KEY": "value"})
-    assert template.value.code == "VK-CLI-004"
+    assert template.value.code == "VY-CLI-004"
 
 
 def test_required_entries_deduplicates_one_provider_key() -> None:
@@ -565,12 +565,12 @@ def test_required_entries_deduplicates_one_provider_key() -> None:
     assert len(entries) == 1
     assert entries[0].key_env_vars == ("OPENAI_API_KEY",)
 
-    with pytest.raises(VoicekitError) as model:
+    with pytest.raises(VoiceyError) as model:
         required_entries(
             {"stt": "missing/model", "llm": "openai/gpt-5", "tts": "openai/gpt-4o-mini-tts"},
             carrier=None,
         )
-    with pytest.raises(VoicekitError) as carrier:
+    with pytest.raises(VoiceyError) as carrier:
         required_entries(
             {
                 "stt": "openai/gpt-4o-transcribe",
@@ -579,12 +579,12 @@ def test_required_entries_deduplicates_one_provider_key() -> None:
             },
             carrier="missing",
         )
-    assert model.value.code == "VK-CLI-005"
-    assert carrier.value.code == "VK-CLI-005"
+    assert model.value.code == "VY-CLI-005"
+    assert carrier.value.code == "VY-CLI-005"
 
 
 def test_checkpoint_is_secret_free_and_resumable(tmp_path: Path) -> None:
-    store = InitCheckpointStore(tmp_path / "voicekit.jsonc")
+    store = InitCheckpointStore(tmp_path / "voicey.jsonc")
     checkpoint = InitCheckpoint(
         project_name="agent",
         answers={"runtime": "pipecat"},
@@ -602,19 +602,19 @@ def test_checkpoint_catalogs_invalid_input_and_atomic_write_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    path = tmp_path / "voicekit.jsonc"
+    path = tmp_path / "voicey.jsonc"
     path.write_text("{broken", encoding="utf-8")
-    with pytest.raises(VoicekitError) as invalid:
+    with pytest.raises(VoiceyError) as invalid:
         InitCheckpointStore(path).load()
-    assert invalid.value.code == "VK-CLI-002"
+    assert invalid.value.code == "VY-CLI-002"
 
     def fail_replace(_source: Path, _destination: Path) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr("voicekit.cli.checkpoint.os.replace", fail_replace)
-    with pytest.raises(VoicekitError) as failed:
+    monkeypatch.setattr("voicey.cli.checkpoint.os.replace", fail_replace)
+    with pytest.raises(VoiceyError) as failed:
         InitCheckpointStore(path).save(InitCheckpoint(project_name="agent"))
-    assert failed.value.code == "VK-CLI-003"
+    assert failed.value.code == "VY-CLI-003"
     assert not list(tmp_path.glob("*.tmp"))
 
 
@@ -623,21 +623,21 @@ def test_project_discovery_and_next_steps_cover_resume_keys_secret_and_dev(
 ) -> None:
     nested = tmp_path / "src" / "nested"
     nested.mkdir(parents=True)
-    checkpoint_path = tmp_path / "voicekit.jsonc"
+    checkpoint_path = tmp_path / "voicey.jsonc"
     InitCheckpointStore(checkpoint_path).save(InitCheckpoint(project_name="agent"))
 
     checkpoint = discover_project(nested, {})
     assert checkpoint.root == tmp_path
     assert checkpoint.checkpoint
-    assert next_step(checkpoint) == "voicekit init --resume"
-    with pytest.raises(VoicekitError, match="--resume"):
+    assert next_step(checkpoint) == "voicey init --resume"
+    with pytest.raises(VoiceyError, match="--resume"):
         require_manifest(checkpoint)
 
     checkpoint_path.unlink()
     empty = discover_project(nested / "missing.py", {})
     assert empty.root == nested
-    assert next_step(empty) == "voicekit init"
-    with pytest.raises(VoicekitError, match="voicekit init"):
+    assert next_step(empty) == "voicey init"
+    with pytest.raises(VoiceyError, match="voicey init"):
         require_manifest(empty)
 
     models: dict[ModelAxis, str] = {
@@ -655,7 +655,7 @@ def test_project_discovery_and_next_steps_cover_resume_keys_secret_and_dev(
     ManifestStore(checkpoint_path).save(manifest)
     missing_keys = discover_project(nested, {})
     assert require_manifest(missing_keys) == manifest
-    assert next_step(missing_keys) == "voicekit keys add deepgram"
+    assert next_step(missing_keys) == "voicey keys add deepgram"
 
     all_keys = {
         "DEEPGRAM_API_KEY": "dg",
@@ -663,12 +663,12 @@ def test_project_discovery_and_next_steps_cover_resume_keys_secret_and_dev(
         "CARTESIA_API_KEY": "car",
     }
     missing_secret = discover_project(nested, all_keys)
-    assert next_step(missing_secret) == "voicekit doctor --fix"
+    assert next_step(missing_secret) == "voicey doctor --fix"
     ready = discover_project(
         nested,
-        {**all_keys, "VOICEKIT_WEBHOOK_SECRET": "whsec_test"},
+        {**all_keys, "VOICEY_WEBHOOK_SECRET": "whsec_test"},
     )
-    assert next_step(ready) == "voicekit dev"
+    assert next_step(ready) == "voicey dev"
 
     explicit = ProjectContext(tmp_path, manifest, False, ready.environment)
     assert require_manifest(explicit) is manifest
@@ -714,9 +714,9 @@ def test_scratch_scaffold_is_native_compilable_and_manifested(tmp_path: Path) ->
     )
     assert "flow DSL" not in all_source
     assert "MCP" not in all_source
-    assert ManifestStore(tmp_path / "voicekit.jsonc").load() == manifest
+    assert ManifestStore(tmp_path / "voicey.jsonc").load() == manifest
     project_data = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
-    assert "voicekit[pipecat,twilio]" in project_data
+    assert "voicey[pipecat,twilio]" in project_data
 
 
 def test_livekit_vobiz_scaffold_declares_every_control_plane_value(tmp_path: Path) -> None:
@@ -750,12 +750,12 @@ def test_livekit_vobiz_scaffold_declares_every_control_plane_value(tmp_path: Pat
 
     project = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
     env = (tmp_path / ".env.example").read_text(encoding="utf-8")
-    assert "voicekit[livekit,vobiz]" in project
+    assert "voicey[livekit,vobiz]" in project
     assert "VOBIZ_AUTH_ID=" in env
     assert "VOBIZ_AUTH_TOKEN=" in env
-    assert "VOICEKIT_VOBIZ_SIP_CREDENTIAL_ID=" in env
-    assert "VOICEKIT_VOBIZ_SIP_USERNAME=" in env
-    assert "VOICEKIT_VOBIZ_SIP_PASSWORD=" in env
+    assert "VOICEY_VOBIZ_SIP_CREDENTIAL_ID=" in env
+    assert "VOICEY_VOBIZ_SIP_USERNAME=" in env
+    assert "VOICEY_VOBIZ_SIP_PASSWORD=" in env
 
 
 @pytest.mark.parametrize(
@@ -763,25 +763,25 @@ def test_livekit_vobiz_scaffold_declares_every_control_plane_value(tmp_path: Pat
     [
         (
             "plivo",
-            "voicekit[livekit,plivo]",
+            "voicey[livekit,plivo]",
             {
                 "PLIVO_AUTH_ID=",
                 "PLIVO_AUTH_TOKEN=",
-                "VOICEKIT_LIVEKIT_SIP_URI=",
-                "VOICEKIT_PLIVO_SIP_USERNAME=",
-                "VOICEKIT_PLIVO_SIP_PASSWORD=",
+                "VOICEY_LIVEKIT_SIP_URI=",
+                "VOICEY_PLIVO_SIP_USERNAME=",
+                "VOICEY_PLIVO_SIP_PASSWORD=",
             },
         ),
         (
             "sip",
-            "voicekit[livekit]",
+            "voicey[livekit]",
             {
-                "VOICEKIT_SIP_ADDRESS=",
-                "VOICEKIT_SIP_ALLOWED_ADDRESSES=",
-                "VOICEKIT_SIP_USERNAME=",
-                "VOICEKIT_SIP_PASSWORD=",
-                "VOICEKIT_SIP_TRANSPORT=",
-                "VOICEKIT_SIP_MEDIA_ENCRYPTION=",
+                "VOICEY_SIP_ADDRESS=",
+                "VOICEY_SIP_ALLOWED_ADDRESSES=",
+                "VOICEY_SIP_USERNAME=",
+                "VOICEY_SIP_PASSWORD=",
+                "VOICEY_SIP_TRANSPORT=",
+                "VOICEY_SIP_MEDIA_ENCRYPTION=",
             },
         ),
     ],
@@ -851,9 +851,9 @@ def test_scaffold_refuses_to_overwrite_user_content(tmp_path: Path) -> None:
         models=models,
     )
 
-    with pytest.raises(VoicekitError) as caught:
+    with pytest.raises(VoiceyError) as caught:
         ScaffoldWriter().write(tmp_path, scaffold, manifest)
-    assert caught.value.code == "VK-CLI-003"
+    assert caught.value.code == "VY-CLI-003"
     assert json.loads(
         json.dumps({"user_file": (tmp_path / "agent.py").read_text(encoding="utf-8")})
     ) == {"user_file": "# mine\n"}
@@ -883,7 +883,7 @@ def test_scaffold_rejects_manifest_runtime_mismatch(tmp_path: Path) -> None:
         web_enabled=True,
     )
 
-    with pytest.raises(VoicekitError, match="does not match"):
+    with pytest.raises(VoiceyError, match="does not match"):
         ScaffoldWriter().write(tmp_path, scaffold, manifest)
 
 
@@ -954,15 +954,15 @@ def test_scaffold_rejects_gitignore_link_and_rolls_back_manifest_failure(
         web_enabled=True,
     )
 
-    with pytest.raises(VoicekitError) as linked:
+    with pytest.raises(VoiceyError) as linked:
         ScaffoldWriter().write(tmp_path, scaffold, manifest)
-    assert linked.value.code == "VK-SEC-002"
+    assert linked.value.code == "VY-SEC-002"
     (tmp_path / ".gitignore").unlink()
 
     def fail_save(_store: ManifestStore, _manifest: ProjectManifest) -> None:
         raise RuntimeError("manifest write failed")
 
-    monkeypatch.setattr("voicekit.cli.scaffold.ManifestStore.save", fail_save)
+    monkeypatch.setattr("voicey.cli.scaffold.ManifestStore.save", fail_save)
     with pytest.raises(RuntimeError, match="manifest write failed"):
         ScaffoldWriter().write(tmp_path, scaffold, manifest)
     assert not (tmp_path / "agent.py").exists()
@@ -999,7 +999,7 @@ def test_scaffold_catalogs_atomic_create_failure(
     def fail_mkstemp(**_kwargs: object) -> tuple[int, str]:
         raise OSError("disk full")
 
-    monkeypatch.setattr("voicekit.cli.scaffold.tempfile.mkstemp", fail_mkstemp)
-    with pytest.raises(VoicekitError) as failed:
+    monkeypatch.setattr("voicey.cli.scaffold.tempfile.mkstemp", fail_mkstemp)
+    with pytest.raises(VoiceyError) as failed:
         ScaffoldWriter().write(tmp_path, scaffold, manifest)
-    assert failed.value.code == "VK-CLI-003"
+    assert failed.value.code == "VY-CLI-003"
