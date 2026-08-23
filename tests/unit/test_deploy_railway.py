@@ -72,6 +72,7 @@ class FakeRailwayRunner:
             else []
         )
         self.deployment_status = deployment_status
+        self.regions: dict[str, dict[str, int]] = {"ams": {"numReplicas": 2}}
         self.commands: list[tuple[str, ...]] = []
         self.secret_payloads: list[tuple[str, str]] = []
 
@@ -123,6 +124,8 @@ class FakeRailwayRunner:
             )
         if command[:2] == ("service", "list"):
             return _result(stdout=json.dumps(self.services))
+        if command[:2] == ("service", "link"):
+            return _result(stdout='{"linked":true}')
         if command[:2] == ("add", "--service"):
             self.services.append({"id": self.service_id, "name": command[2]})
             return _result(stdout=json.dumps({"serviceId": self.service_id}))
@@ -177,9 +180,55 @@ class FakeRailwayRunner:
                 )
             )
         if command[0] == "scale":
-            return _result(stdout='{"scaled":true}')
+            aliases = {"us-east": "us-east4-eqdc4a"}
+            for assignment in command[1:]:
+                if "=" not in assignment:
+                    continue
+                region, raw_replicas = assignment.split("=", maxsplit=1)
+                resolved = aliases.get(region, region)
+                replicas = int(raw_replicas)
+                if replicas:
+                    self.regions[resolved] = {"numReplicas": replicas}
+                else:
+                    self.regions.pop(resolved, None)
+            return _result(stdout=json.dumps({"regions": self.regions}))
         if command[:2] == ("service", "status"):
             return _result(stdout='{"status":"SUCCESS"}')
+        if command[:2] == ("status", "--json"):
+            return _result(
+                stdout=json.dumps(
+                    {
+                        "environments": {
+                            "edges": [
+                                {
+                                    "node": {
+                                        "serviceInstances": {
+                                            "edges": [
+                                                {
+                                                    "node": {
+                                                        "serviceId": self.service_id,
+                                                        "latestDeployment": {
+                                                            "meta": {
+                                                                "serviceManifest": {
+                                                                    "deploy": {
+                                                                        "multiRegionConfig": (
+                                                                            self.regions
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                )
+            )
         if command[:2] == ("domain", "delete"):
             self.domains.clear()
             return _result(stdout='{"deleted":true}')
@@ -318,6 +367,15 @@ def test_railway_output_normalization_and_state_validation(tmp_path: Path) -> No
     }
     with pytest.raises(VoiceyError, match="version or identity"):
         RailwayResourceState.from_payload(invalid)
+
+
+def test_railway_scale_maps_missing_ledgered_service_to_catalog_error(tmp_path: Path) -> None:
+    runner = FakeRailwayRunner()
+    manager = RailwayDeploymentManager(tmp_path, runner=runner)
+    state = replace(RailwayResourceState.initial(_plan()), service_id="missing-service")
+
+    with pytest.raises(VoiceyError, match="VY-DEP-007"):
+        manager._scale_service(_plan(), state)
 
     state = RailwayResourceState.initial(_plan())
     with pytest.raises(VoiceyError, match="does not match"):
@@ -593,12 +651,13 @@ async def test_railway_deploy_resumes_and_keeps_secrets_out_of_arguments(
     assert "VOICEY_PROMETHEUS_ENABLED=1" in flattened
     assert "VOICEY_PROMETHEUS_BIND=0.0.0.0" in flattened
     assert "VOICEY_PROMETHEUS_PORT=9464" in flattened
-    scale = next(command for command in runner.commands if command[0] == "scale")
-    assert scale[-1] == "us-east=2"
-    assert scale.index("--project") < scale.index("us-east=2")
-    assert scale.index("--environment") < scale.index("us-east=2")
-    assert scale.index("--service") < scale.index("us-east=2")
-    assert scale.index("--json") < scale.index("us-east=2")
+    scales = [command for command in runner.commands if command[0] == "scale"]
+    assert scales == [
+        ("scale", "--json", "us-east=2"),
+        ("scale", "--json", "ams=0", "us-east4-eqdc4a=2"),
+    ]
+    assert runner.regions == {"us-east4-eqdc4a": {"numReplicas": 2}}
+    assert ("service", "link", runner.service_id) in runner.commands
     assert {name for name, _value in runner.secret_payloads} >= {
         "TWILIO_ACCOUNT_SID",
         "TWILIO_AUTH_TOKEN",

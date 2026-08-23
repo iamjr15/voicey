@@ -1086,15 +1086,7 @@ class RailwayDeploymentManager:
                 "VY-DEP-004",
                 detail="Railway deployment did not reach a healthy terminal status.",
             )
-        self.runner.run(
-            [
-                "scale",
-                *self._context_args(state),
-                "--json",
-                f"{plan.service_region}=2",
-            ],
-            timeout_s=120,
-        )
+        self._scale_service(plan, state)
         service_status = self.runner.run(
             ["service", "status", *self._context_args(state), "--json"],
             timeout_s=60,
@@ -1107,6 +1099,56 @@ class RailwayDeploymentManager:
         )
         self.store.save(checkpoint)
         return checkpoint
+
+    def _scale_service(self, plan: RailwayPlan, state: RailwayResourceState) -> None:
+        if state.service_id is None:
+            raise VoiceyError("VY-DEP-007", detail="Railway service id is missing.")
+        self.runner.run(["service", "link", state.service_id], timeout_s=60)
+        status = self.runner.run(["status", "--json"], timeout_s=60)
+        try:
+            before = _service_region_counts(
+                _parse_json(status.stdout, label="Railway project status"),
+                state.service_id,
+            )
+        except LookupError as exc:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail="Railway project status omitted the ledgered service.",
+            ) from exc
+        scaled = self.runner.run(
+            ["scale", "--json", f"{plan.service_region}=2"],
+            timeout_s=120,
+        )
+        after = _scale_region_counts(_parse_json(scaled.stdout, label="Railway scale result"))
+        introduced = set(after) - set(before)
+        if plan.service_region in after:
+            resolved = plan.service_region
+        elif len(introduced) == 1:
+            resolved = introduced.pop()
+        elif len(after) == 1:
+            resolved = next(iter(after))
+        else:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail="Railway could not resolve the selected service region uniquely.",
+            )
+        desired = {resolved: 2}
+        if after == desired:
+            return
+        assignments = [f"{region}=0" for region in sorted(after) if region != resolved]
+        assignments.append(f"{resolved}=2")
+        reconciled = self.runner.run(
+            ["scale", "--json", *assignments],
+            timeout_s=120,
+        )
+        final = _scale_region_counts(
+            _parse_json(reconciled.stdout, label="Railway scale reconciliation")
+        )
+        if final != desired:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail="Railway replica placement did not converge to one selected region.",
+            )
 
     def _wait_for_deployment(
         self,
@@ -1421,6 +1463,68 @@ def _find_text(value: object, *keys: str) -> str:
         if found:
             return found
     return ""
+
+
+def _scale_region_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        raise VoiceyError("VY-DEP-007", detail="Railway scale result is not an object.")
+    regions = cast("dict[str, object]", value).get("regions")
+    if not isinstance(regions, dict):
+        raise VoiceyError("VY-DEP-007", detail="Railway scale result omitted regions.")
+    counts: dict[str, int] = {}
+    for region, config in cast("dict[str, object]", regions).items():
+        if config is None:
+            continue
+        if not isinstance(config, dict):
+            raise VoiceyError("VY-DEP-007", detail="Railway scale region is malformed.")
+        replicas = cast("dict[str, object]", config).get("numReplicas")
+        if not isinstance(replicas, int) or isinstance(replicas, bool) or replicas < 0:
+            raise VoiceyError("VY-DEP-007", detail="Railway replica count is malformed.")
+        if replicas:
+            counts[region] = replicas
+    return counts
+
+
+def _service_region_counts(value: object, service_id: str) -> dict[str, int]:
+    if isinstance(value, dict):
+        mapping = cast("dict[str, object]", value)
+        if mapping.get("serviceId") == service_id:
+            latest = mapping.get("latestDeployment")
+            if not isinstance(latest, dict):
+                raise VoiceyError(
+                    "VY-DEP-007", detail="Railway service omitted its latest deployment."
+                )
+            meta = cast("dict[str, object]", latest).get("meta")
+            manifest = (
+                cast("dict[str, object]", meta).get("serviceManifest")
+                if isinstance(meta, dict)
+                else None
+            )
+            deploy = (
+                cast("dict[str, object]", manifest).get("deploy")
+                if isinstance(manifest, dict)
+                else None
+            )
+            regions = (
+                cast("dict[str, object]", deploy).get("multiRegionConfig")
+                if isinstance(deploy, dict)
+                else None
+            )
+            if not isinstance(regions, dict):
+                raise VoiceyError("VY-DEP-007", detail="Railway service omitted replica placement.")
+            return _scale_region_counts({"regions": cast("dict[str, object]", regions)})
+        for nested in mapping.values():
+            try:
+                return _service_region_counts(nested, service_id)
+            except LookupError:
+                continue
+    elif isinstance(value, list):
+        for nested in cast("list[object]", value):
+            try:
+                return _service_region_counts(nested, service_id)
+            except LookupError:
+                continue
+    raise LookupError(service_id)
 
 
 def _item_text(item: Mapping[str, object], key: str) -> str:

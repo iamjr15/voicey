@@ -47,10 +47,12 @@ default. The command:
    two replicas; and
 6. probes unsigned `/healthz`, then authenticated relay `/v1/ready`.
 
-Railway CLI 5.30.x defines replica assignments as a variadic positional tail.
-Voicey therefore emits project, environment, service, and JSON flags before
-the final `REGION=2` assignment; placing a flag after that assignment makes the
-CLI parse its value as another replica count.
+Railway CLI 5.30.x defines replica assignments as a variadic positional tail
+and misparses valued context flags on that command. Voicey first links the
+exact ledgered service, snapshots its current placement, then runs a
+context-free `REGION=2` scale. It resolves Railway's canonical region id from
+the response and explicitly scales every prior region to zero, leaving exactly
+two replicas in the operator-selected region.
 
 Generated artifacts live in `.voicey/deploy/railway/`. The owner-only,
 non-secret checkpoint is `.voicey/deploy/railway-resources.json`. It stores
