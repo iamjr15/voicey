@@ -55,6 +55,7 @@ def _agent() -> Agent:
 class FakeAgentServer:
     def __init__(self) -> None:
         self.registration: dict[str, object] = {}
+        self.active_jobs: list[object] = []
         self.runs: list[bool] = []
         self.drains: list[float] = []
         self.closed = False
@@ -179,6 +180,7 @@ def test_registered_job_entrypoint_is_forkserver_serializable() -> None:
     payload = bytes(ForkingPickler.dumps(server.registration["entrypoint"]))
     restored = pickle.loads(payload)
     assert isinstance(restored, LiveKitJobEntrypoint)
+    assert server.registration["on_session_end"] is None
 
 
 @pytest.mark.asyncio
@@ -504,6 +506,15 @@ async def test_livekit_reservation_expires() -> None:
     gate = LiveKitAdmissionGate(1, reservation_ttl_s=0.01)
     await gate.reserve("expires")
     await asyncio.sleep(0.03)
+    assert gate.occupied == 0
+
+
+@pytest.mark.asyncio
+async def test_livekit_gate_reconciles_parent_active_jobs() -> None:
+    gate = LiveKitAdmissionGate(1)
+    assert await gate.admit("job-ended", "call-ended")
+    assert gate.occupied == 1
+    await gate.reconcile(set(), grace_s=0)
     assert gate.occupied == 0
 
 

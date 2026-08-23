@@ -52,7 +52,9 @@ agent language and requires an explicit LiveKit dependency before it invokes
 the supplied Dockerfile.
 The registered RTC job entrypoint is a forkserver-serializable process object;
 parent-only admission locks, metrics registries, environment mappings, and the
-`AgentServer` itself never cross into the Python 3.14 job process.
+`AgentServer` itself never cross into the Python 3.14 job process. Parent
+admission state is reconciled from `AgentServer.active_jobs`; no bound
+session-end callback is serialized into a child.
 It sends worker-only secrets through a temporary `0600` file that is removed
 as soon as the CLI returns.
 LiveKit project credentials injected into the local command remain available

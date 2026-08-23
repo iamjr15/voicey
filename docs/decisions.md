@@ -856,6 +856,11 @@ These choices apply the documented proposals authorized in the build mandate and
   serialized its metrics environment, locks, server, and admission state and
   failed before any warmed job process could start. Only agent configuration,
   nonsecret settings, and the repository factory cross the process boundary.
+- Do not register the parent host's `on_session_end` as a job callback: the
+  installed SDK serializes that callback into the job process as well. The
+  parent instead reconciles admission bookkeeping against the authoritative
+  `AgentServer.active_jobs` table, retaining a short grace window across the
+  accept-to-process-start transition.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

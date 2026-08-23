@@ -124,7 +124,7 @@ class LiveKitAdmissionGate:
         self.capacity = capacity
         self.reservation_ttl_s = reservation_ttl_s
         self._pending: dict[str, asyncio.TimerHandle] = {}
-        self._active: set[str] = set()
+        self._active: dict[str, float] = {}
         self._lock = asyncio.Lock()
         self._accepting = True
 
@@ -163,8 +163,20 @@ class LiveKitAdmissionGate:
                 pending.cancel()
             elif not self._accepting or self.occupied >= self.capacity:
                 return False
-            self._active.add(job_id)
+            self._active[job_id] = asyncio.get_running_loop().time()
             return True
+
+    async def reconcile(self, active_job_ids: set[str], *, grace_s: float = 5.0) -> None:
+        """Reconcile accepted jobs against the parent AgentServer process table."""
+        async with self._lock:
+            now = asyncio.get_running_loop().time()
+            for job_id in active_job_ids:
+                self._active.setdefault(job_id, now)
+            self._active = {
+                job_id: admitted_at
+                for job_id, admitted_at in self._active.items()
+                if job_id in active_job_ids or now - admitted_at < grace_s
+            }
 
     async def begin_drain(self) -> None:
         """Close new admission while preserving already-issued reservations."""
@@ -176,7 +188,7 @@ class LiveKitAdmissionGate:
             pending = self._pending.pop(identifier, None)
             if pending is not None:
                 pending.cancel()
-            self._active.discard(identifier)
+            self._active.pop(identifier, None)
 
 
 class JobCallControl(LiveKitCallControl):
@@ -267,7 +279,7 @@ class LiveKitHost:
             self._job_entrypoint,
             agent_name=agent.name,
             on_request=self.on_request,
-            on_session_end=self.on_session_end,
+            on_session_end=None,
         )
 
     async def on_request(self, request: JobRequest) -> None:
@@ -310,10 +322,27 @@ class LiveKitHost:
     async def run(self, *, devmode: bool = False) -> None:
         """Run the installed AgentServer; ``start`` mode owns SIGTERM drain."""
         await self.telemetry_server.start()
+        sync_task = asyncio.create_task(
+            self._sync_active_jobs(),
+            name=f"voicey-livekit-active-jobs-{self.agent.name}",
+        )
         try:
             await self.server.run(devmode=devmode)
         finally:
+            sync_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await sync_task
             await self.telemetry_server.stop()
+
+    async def _sync_active_jobs(self) -> None:
+        while True:
+            active = {
+                job_id
+                for item in self.server.active_jobs
+                if (job_id := getattr(getattr(item, "job", None), "id", None)) is not None
+            }
+            await self.gate.reconcile(active)
+            await asyncio.sleep(0.25)
 
     async def reload_agent(self, agent: Agent, *, restart_runner: bool) -> bool:
         """Apply the next-call revision once process-per-call work is idle."""
