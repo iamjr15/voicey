@@ -1089,9 +1089,9 @@ class RailwayDeploymentManager:
         self.runner.run(
             [
                 "scale",
-                f"{plan.service_region}=2",
                 *self._context_args(state),
                 "--json",
+                f"{plan.service_region}=2",
             ],
             timeout_s=120,
         )

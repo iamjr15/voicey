@@ -593,7 +593,12 @@ async def test_railway_deploy_resumes_and_keeps_secrets_out_of_arguments(
     assert "VOICEY_PROMETHEUS_ENABLED=1" in flattened
     assert "VOICEY_PROMETHEUS_BIND=0.0.0.0" in flattened
     assert "VOICEY_PROMETHEUS_PORT=9464" in flattened
-    assert any(command[0] == "scale" and "us-east=2" in command for command in runner.commands)
+    scale = next(command for command in runner.commands if command[0] == "scale")
+    assert scale[-1] == "us-east=2"
+    assert scale.index("--project") < scale.index("us-east=2")
+    assert scale.index("--environment") < scale.index("us-east=2")
+    assert scale.index("--service") < scale.index("us-east=2")
+    assert scale.index("--json") < scale.index("us-east=2")
     assert {name for name, _value in runner.secret_payloads} >= {
         "TWILIO_ACCOUNT_SID",
         "TWILIO_AUTH_TOKEN",

@@ -47,6 +47,11 @@ default. The command:
    two replicas; and
 6. probes unsigned `/healthz`, then authenticated relay `/v1/ready`.
 
+Railway CLI 5.30.x defines replica assignments as a variadic positional tail.
+Voicey therefore emits project, environment, service, and JSON flags before
+the final `REGION=2` assignment; placing a flag after that assignment makes the
+CLI parse its value as another replica count.
+
 Generated artifacts live in `.voicey/deploy/railway/`. The owner-only,
 non-secret checkpoint is `.voicey/deploy/railway-resources.json`. It stores
 exact platform ids, created/adopted flags, artifact and credential
