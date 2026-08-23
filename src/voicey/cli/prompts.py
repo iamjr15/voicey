@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Protocol, TypeVar, cast
 
@@ -67,7 +68,7 @@ class QuestionaryPromptIO:
 
     def select(self, message: str, choices: tuple[PromptChoice, ...]) -> str:
         self._require_interactive(message)
-        answer = questionary.select(
+        question = questionary.select(
             message,
             choices=[
                 questionary.Choice(
@@ -82,8 +83,9 @@ class QuestionaryPromptIO:
             default=None,
             style=self._style,
             show_description=True,
-        ).ask()
-        return _answer(answer, message)
+        )
+        answer = _ask(question)
+        return str(_answer(answer, message))
 
     def multiselect(
         self,
@@ -97,7 +99,7 @@ class QuestionaryPromptIO:
         def validate(values: list[str]) -> bool | str:
             return True if len(values) >= minimum else f"Select at least {minimum}."
 
-        answer = questionary.checkbox(
+        question = questionary.checkbox(
             message,
             choices=[
                 questionary.Choice(
@@ -112,17 +114,18 @@ class QuestionaryPromptIO:
             validate=validate,
             style=self._style,
             show_description=True,
-        ).ask()
+        )
+        answer = _ask(question)
         return tuple(cast("list[str]", _answer(answer, message)))
 
     def text(self, message: str) -> str:
         self._require_interactive(message)
-        answer = questionary.text(message, default="", style=self._style).ask()
+        answer = _ask(questionary.text(message, default="", style=self._style))
         return str(_answer(answer, message)).strip()
 
     def secret(self, message: str) -> str:
         self._require_interactive(message)
-        answer = questionary.password(message, style=self._style).ask()
+        answer = _ask(questionary.password(message, style=self._style))
         return str(_answer(answer, message)).strip()
 
     def notice(self, message: str) -> None:
@@ -134,6 +137,18 @@ class QuestionaryPromptIO:
                 "VY-CLI-001",
                 detail=f"explicit flag required for: {question}",
             )
+
+
+def _ask(question: questionary.Question) -> object | None:
+    """Keep synchronous Questionary prompts out of an already-running loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return question.ask()
+    try:
+        return question.application.run(in_thread=True)
+    except KeyboardInterrupt:
+        return None
 
 
 def _answer(value: ValueT | None, question: str) -> ValueT:

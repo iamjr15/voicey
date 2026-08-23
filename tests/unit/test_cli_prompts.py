@@ -10,8 +10,17 @@ from voicey.errors import VoiceyError
 
 class StubQuestion:
     value: ClassVar[object]
+    threaded_runs: ClassVar[list[bool]] = []
+
+    @property
+    def application(self) -> StubQuestion:
+        return self
 
     def ask(self) -> object:
+        return self.value
+
+    def run(self, *, in_thread: bool = False) -> object:
+        self.threaded_runs.append(in_thread)
         return self.value
 
 
@@ -42,6 +51,7 @@ class QuestionaryStub:
 @pytest.fixture(autouse=True)
 def stub_questionary(monkeypatch: pytest.MonkeyPatch) -> None:
     QuestionaryStub.calls.clear()
+    StubQuestion.threaded_runs.clear()
     monkeypatch.setattr("voicey.cli.prompts.questionary.select", QuestionaryStub.select)
     monkeypatch.setattr("voicey.cli.prompts.questionary.checkbox", QuestionaryStub.checkbox)
     monkeypatch.setattr("voicey.cli.prompts.questionary.text", QuestionaryStub.text)
@@ -90,6 +100,15 @@ def test_questionary_text_secret_notice_and_cancellation(
     with pytest.raises(VoiceyError) as cancelled:
         prompt.select("Cancelled", ())
     assert cancelled.value.code == "VY-CLI-002"
+
+
+@pytest.mark.asyncio
+async def test_questionary_prompt_uses_a_thread_inside_the_async_wizard() -> None:
+    prompt = QuestionaryPromptIO()
+    StubQuestion.value = "  secret  "
+
+    assert prompt.secret("Secret") == "secret"
+    assert StubQuestion.threaded_runs == [True]
 
 
 def test_noninteractive_prompt_fails_before_questionary_call() -> None:

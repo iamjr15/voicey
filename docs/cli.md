@@ -48,6 +48,10 @@ at paste time. Valid keys are written atomically to owner-only `.env`, and
 process take precedence and are not copied into `.env`. The generated
 `.env.example` documents variable names only.
 
+Questionary runs its blocking terminal application in a dedicated thread while
+the asynchronous setup workflow validates provider credentials. This avoids a
+nested event loop without weakening input masking or interruption handling.
+
 An interruption leaves a secret-free `init-checkpoint` in `voicey.jsonc`.
 Resume it with:
 
