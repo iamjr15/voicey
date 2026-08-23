@@ -55,7 +55,7 @@ def test_stt_catalog_builds_current_settings(
     [
         ("anthropic/claude-sonnet-5", AnthropicLLMService, "claude-sonnet-5"),
         ("openai/gpt-5", OpenAILLMService, "gpt-5"),
-        ("google/gemini-3.6-flash", GoogleLLMService, "gemini-3.6-flash"),
+        ("google/gemini-3.5-flash", GoogleLLMService, "gemini-3.5-flash"),
     ],
 )
 def test_llm_catalog_builds_current_settings(

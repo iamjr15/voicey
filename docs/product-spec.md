@@ -26,7 +26,7 @@ One line: **choose your engine per project, keep your workflow forever.**
 |---|---|
 | Runtime | Pipecat, LiveKit — chosen per project at `init`, full parity in toolchain |
 | STT | Anything the chosen runtime supports, by id (`deepgram/nova-3`, …) |
-| LLM | Same (`anthropic/claude-sonnet-5`, `openai/…`, `google/gemini-3.6-flash`) |
+| LLM | Same (`anthropic/claude-sonnet-5`, `openai/…`, `google/gemini-3.5-flash`) |
 | TTS | Same (`cartesia/sonic-3.5`, `elevenlabs/…`, …) |
 | Telephony | Twilio, Telnyx, Vobiz (Certified); Plivo, generic SIP (Beta at launch) |
 

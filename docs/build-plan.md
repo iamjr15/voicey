@@ -110,7 +110,7 @@ remote.
 |---|---|
 | Python | 3.11–3.14 (intersection: pipecat ≥3.11, livekit <3.15). PR CI: lint/type/unit on all four + integration on 3.11/3.14 edges; nightly: full matrix. Spec §17's older 3.11–3.13 list is corrected in the P0 spec-sync commit (Codex R1) |
 | Runtimes | `pipecat-ai==1.6.0` with core `from pipecat.flows import …` (standalone `pipecat-ai-flows` must not be installed) · `livekit-agents==1.6.7` (new `AgentServer` API) with `anthropic==0.120.0` |
-| Google LLM | `google/gemini-3.6-flash`; live correction 2026-08-23 after 2.5 Flash returned new-user 404, with a direct free-tier 3.6 `generateContent` call green |
+| Google LLM | `google/gemini-3.5-flash`; live correction 2026-08-23 after 2.5 Flash returned new-user 404 and 3.6 repeatedly timed out with the full tool schema; direct free-tier 3.5 tool-calling and cloud-runtime probes are the acceptance evidence |
 | CLI | typer 0.27 + rich >=13.9.4,<16 (13.9.4 selected with Pipecat Evals) + questionary 2.1.1 |
 | Server | FastAPI ≥0.138 (`app.frontend()`) + uvicorn `--proxy-headers` |
 | Config | pydantic v2 + pydantic-settings + json5 manifest |

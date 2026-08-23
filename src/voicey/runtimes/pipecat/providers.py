@@ -33,7 +33,7 @@ _PROVIDER_MODEL_NAMES: dict[str, str] = {
     "openai/gpt-4o-transcribe": "gpt-4o-transcribe",
     "anthropic/claude-sonnet-5": "claude-sonnet-5",
     "openai/gpt-5": "gpt-5",
-    "google/gemini-3.6-flash": "gemini-3.6-flash",
+    "google/gemini-3.5-flash": "gemini-3.5-flash",
     "cartesia/sonic-3.5": "sonic-3.5",
     "elevenlabs/flash-2.5": "eleven_flash_v2_5",
     "openai/gpt-4o-mini-tts": "gpt-4o-mini-tts",
@@ -137,7 +137,7 @@ class DefaultProviderFactory:
                     ),
                 ),
             )
-        if model_id == "google/gemini-3.6-flash":
+        if model_id == "google/gemini-3.5-flash":
             return cast(
                 "LLMService[Any]",
                 GoogleLLMService(

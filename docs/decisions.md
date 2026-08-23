@@ -890,6 +890,10 @@ These choices apply the documented proposals authorized in the build mandate and
 - Replace the supported Google catalog entry with `google/gemini-3.6-flash`.
   The same authenticated free-tier account listed both versions but rejected
   2.5 generation for new users and completed a direct 3.6 generation call.
+- Supersede that probe-only choice with `google/gemini-3.5-flash`. The 3.6
+  endpoint passed a minimal request but repeatedly returned 504 for LiveKit's
+  full appointment prompt and native tool schema. The same key completed a
+  direct 3.5 tool call; the cloud worker is the final acceptance gate.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

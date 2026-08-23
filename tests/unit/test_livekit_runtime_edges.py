@@ -166,7 +166,7 @@ def test_livekit_provider_factory_all_catalog_edges() -> None:
     )
     voice = Voice(id="voice-id", language="en-US", speed=1.2)
     assert factory.create_vad() is not None
-    assert factory.create_llm("google/gemini-3.6-flash") is not None
+    assert factory.create_llm("google/gemini-3.5-flash") is not None
     assert factory.create_tts("openai/gpt-4o-mini-tts", voice) is not None
     assert factory.create_tts("cartesia/sonic-3.5", voice) is not None
     assert factory.create_tts("elevenlabs/flash-2.5", voice) is not None

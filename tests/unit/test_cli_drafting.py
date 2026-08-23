@@ -57,12 +57,12 @@ def _response(status: int, payload: object) -> httpx.Response:
             "https://api.openai.com/v1/responses",
         ),
         (
-            "google/gemini-3.6-flash",
+            "google/gemini-3.5-flash",
             {"GEMINI_API_KEY": "gemini"},  # pragma: allowlist secret
             {"candidates": [{"content": {"parts": [{"text": "Google draft"}]}}]},
             (
                 "https://generativelanguage.googleapis.com/v1beta/models/"
-                "gemini-3.6-flash:generateContent"
+                "gemini-3.5-flash:generateContent"
             ),
         ),
     ],
