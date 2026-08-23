@@ -61,7 +61,11 @@ On first deploy it calls `lk agent create`; subsequent deployments use
 required before smoke. For `lk==2.16.2`, Voicey parses the exact `Status`
 column in the Unicode agent-status table; only a ready terminal value such as
 `Running` passes, while `CrashLoop`, `Deploying`, and unknown values fail
-closed. The web smoke creates a real room with named agent
+closed. Because the current CLI returns from `agent deploy` while that status
+can still be `Building`, Voicey polls it for up to ten minutes. If a run ends
+after deployment but before readiness, rerunning the exact same artifact
+resumes the ledgered readiness and smoke steps without deploying a duplicate
+version. The web smoke creates a real room with named agent
 dispatch, waits for durable `runtime.admitted`, deletes the room, and waits for
 the terminal relay event. A successful room smoke does not replace a real
 browser conversation as media evidence.

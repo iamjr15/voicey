@@ -915,7 +915,11 @@ class LiveKitCloudDeploymentManager:
         runner: CloudCommandRunner | None = None,
         relay_client_factory: (Callable[[str, RelayCredential], RelayClient] | None) = None,
         session_smoke_runner: LiveKitCloudSessionSmoke | None = None,
+        ready_timeout_s: float = 600,
+        ready_poll_interval_s: float = 5,
     ) -> None:
+        if ready_timeout_s <= 0 or ready_poll_interval_s < 0:
+            raise ValueError("LiveKit readiness timeout must be positive and polling nonnegative")
         self.project_root = project_root.resolve()
         self.runner = runner or PlatformCliRunner("lk")
         self.store = CloudResourceStore(self.project_root, "livekit-cloud")
@@ -924,6 +928,8 @@ class LiveKitCloudDeploymentManager:
         self._session_smoke_runner = session_smoke_runner or LiveKitCloudSessionSmoke(
             relay_client_factory=relay_client_factory,
         )
+        self._ready_timeout_s = ready_timeout_s
+        self._ready_poll_interval_s = ready_poll_interval_s
 
     async def deploy(
         self,
@@ -959,6 +965,7 @@ class LiveKitCloudDeploymentManager:
             client_factory=self._relay_client_factory,
         )
         state = self.store.load()
+        resume_deployed_artifact = False
         if state is None:
             state = CloudResourceState.initial(
                 platform="livekit-cloud",
@@ -979,6 +986,11 @@ class LiveKitCloudDeploymentManager:
                 region=plan.region,
                 relay_url=plan.relay_url,
                 relay_fingerprint=relay_fingerprint,
+            )
+            resume_deployed_artifact = (
+                state.deployed
+                and not state.platform_ready
+                and state.artifact_digest == artifacts.digest
             )
             state = state.checkpoint(artifact_digest=artifacts.digest)
             self.store.save(state)
@@ -1047,69 +1059,65 @@ class LiveKitCloudDeploymentManager:
             )
             versions_before = _current_version(versions.stdout) or ""
 
-        with _secret_file(worker_secrets) as secret_file:
-            if state.agent_id is None:
-                created = self.runner.run(
-                    [
-                        "agent",
-                        "create",
-                        str(artifacts.context),
-                        "--secrets-file",
-                        str(secret_file),
-                        "--region",
-                        plan.region,
-                        "--silent",
-                        "--project",
-                        plan.project,
-                        "--yes",
-                    ],
-                    cwd=artifacts.context,
-                    timeout_s=1800,
-                )
-                agent_id = _livekit_agent_id(config, created.stdout)
-                state = state.checkpoint(
-                    agent_created=True,
-                    agent_id=agent_id,
-                    secrets_synced=True,
-                    deployed=True,
-                )
-            else:
-                self.runner.run(
-                    [
-                        "agent",
-                        "deploy",
-                        str(artifacts.context),
-                        "--secrets-file",
-                        str(secret_file),
-                        "--region",
-                        plan.region,
-                        "--silent",
-                        "--project",
-                        plan.project,
-                        "--yes",
-                    ],
-                    cwd=artifacts.context,
-                    timeout_s=1800,
-                )
-                state = state.checkpoint(
-                    previous_version=versions_before or state.previous_version,
-                    secrets_synced=True,
-                    deployed=True,
-                )
+        if not resume_deployed_artifact:
+            with _secret_file(worker_secrets) as secret_file:
+                if state.agent_id is None:
+                    created = self.runner.run(
+                        [
+                            "agent",
+                            "create",
+                            str(artifacts.context),
+                            "--secrets-file",
+                            str(secret_file),
+                            "--region",
+                            plan.region,
+                            "--silent",
+                            "--project",
+                            plan.project,
+                            "--yes",
+                        ],
+                        cwd=artifacts.context,
+                        timeout_s=1800,
+                    )
+                    agent_id = _livekit_agent_id(config, created.stdout)
+                    state = state.checkpoint(
+                        agent_created=True,
+                        agent_id=agent_id,
+                        secrets_synced=True,
+                        deployed=True,
+                    )
+                else:
+                    self.runner.run(
+                        [
+                            "agent",
+                            "deploy",
+                            str(artifacts.context),
+                            "--secrets-file",
+                            str(secret_file),
+                            "--region",
+                            plan.region,
+                            "--silent",
+                            "--project",
+                            plan.project,
+                            "--yes",
+                        ],
+                        cwd=artifacts.context,
+                        timeout_s=1800,
+                    )
+                    state = state.checkpoint(
+                        previous_version=versions_before or state.previous_version,
+                        secrets_synced=True,
+                        deployed=True,
+                    )
         self.store.save(state)
-        status = self.runner.run(
-            [
-                "agent",
-                "status",
-                "--id",
-                state.agent_id or "",
-                "--project",
-                plan.project,
-            ],
-            cwd=artifacts.context,
-            timeout_s=120,
+        await _wait_livekit_ready(
+            self.runner,
+            context=artifacts.context,
+            agent_id=state.agent_id or "",
+            project=plan.project,
+            timeout_s=self._ready_timeout_s,
+            poll_interval_s=self._ready_poll_interval_s,
         )
-        _require_ready(status.stdout, platform="LiveKit Cloud")
         session_green = False
         if not skip_session_smoke:
             session_green = await self._session_smoke_runner.run(
@@ -1606,6 +1614,33 @@ def _require_ready(output: str, *, platform: str) -> None:
     )
     if not positive or negative:
         raise VoiceyError("VY-DEP-004", detail=f"{platform} did not report ready.")
+
+
+async def _wait_livekit_ready(
+    runner: CloudCommandRunner,
+    *,
+    context: Path,
+    agent_id: str,
+    project: str,
+    timeout_s: float,
+    poll_interval_s: float,
+) -> None:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
+    while True:
+        status = runner.run(
+            ["agent", "status", "--id", agent_id, "--project", project],
+            cwd=context,
+            timeout_s=120,
+        )
+        try:
+            _require_ready(status.stdout, platform="LiveKit Cloud")
+        except VoiceyError:
+            if loop.time() >= deadline:
+                raise
+            await asyncio.sleep(poll_interval_s)
+        else:
+            return
 
 
 def _require_region(output: str, region: str, *, platform: str) -> None:

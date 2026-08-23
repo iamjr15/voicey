@@ -846,6 +846,10 @@ These choices apply the documented proposals authorized in the build mandate and
   Accept only ready terminal cells and reject `CrashLoop`, transitional, and
   unknown cells; the legacy line-oriented shapes remain supported for earlier
   certified fixtures.
+- Poll readiness for a bounded ten minutes because `lk agent deploy` returns
+  while the status is still `Building`. A retry after post-deploy verification
+  failure resumes the same ledgered artifact when its digest is unchanged and
+  readiness has not passed, avoiding a duplicate deployment version.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

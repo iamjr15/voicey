@@ -38,6 +38,7 @@ from voicey.deploy.cloud import (
     _secret_file,
     _session_id,
     _stage_wheel,
+    _wait_livekit_ready,
     _wait_relay_call,
 )
 from voicey.errors import VoiceyError
@@ -131,7 +132,7 @@ class FakePipecatCloudRunner:
 
 
 class FakeLiveKitCloudRunner:
-    def __init__(self) -> None:
+    def __init__(self, *, status_responses: list[str] | None = None) -> None:
         self.agent_id = "agent_123456"
         self.commands: list[tuple[str, ...]] = []
         self.secret_file_paths: list[Path] = []
@@ -139,6 +140,7 @@ class FakeLiveKitCloudRunner:
         self.deleted = False
         self.rolled_back = False
         self.deployed_versions = 0
+        self.status_responses = status_responses or ["Status: running"]
 
     def run(
         self,
@@ -177,7 +179,9 @@ class FakeLiveKitCloudRunner:
             self.deployed_versions += 1
             return _result(f"Created {self.agent_id}\nStatus: deployed")
         if command[:2] == ("agent", "status"):
-            return _result("Status: running")
+            if len(self.status_responses) > 1:
+                return _result(self.status_responses.pop(0))
+            return _result(self.status_responses[0])
         if command[:2] == ("agent", "rollback"):
             self.rolled_back = True
             return _result("Rollback deployed")
@@ -596,10 +600,22 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
         engine_wheel=_wheel(tmp_path),
         skip_session_smoke=True,
     )
+    pending = manager.store.load()
+    assert pending is not None
+    manager.store.save(pending.checkpoint(platform_ready=False))
+    deployed_versions = runner.deployed_versions
+    resumed = await manager.deploy(
+        _lk_plan(),
+        environment={},
+        engine_wheel=_wheel(tmp_path),
+        skip_session_smoke=True,
+    )
     assert first.state.agent_created
     assert first.state.agent_id == runner.agent_id
     assert second.state.previous_version == "v1"
     assert second.state.platform_ready
+    assert resumed.state.platform_ready
+    assert runner.deployed_versions == deployed_versions
     assert first.smoke.session_smoke
     assert session_smoke.to_numbers == ["+14155550199"]
     assert session_smoke.environments[0]["LIVEKIT_URL"] == ("wss://voicey-test.livekit.cloud")
@@ -846,6 +862,20 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
         "voicey-test",
     )
     _require_livekit_project('{"Projects":[{"Name":"voicey-test"}]}', "voicey-test")
+
+
+@pytest.mark.asyncio
+async def test_livekit_readiness_polls_through_building(tmp_path: Path) -> None:
+    runner = FakeLiveKitCloudRunner(status_responses=["Status: Building", "Status: Running"])
+    await _wait_livekit_ready(
+        runner,
+        context=tmp_path,
+        agent_id=runner.agent_id,
+        project="voicey-test",
+        timeout_s=1,
+        poll_interval_s=0,
+    )
+    assert sum(command[:2] == ("agent", "status") for command in runner.commands) == 2
     with pytest.raises(VoiceyError, match="did not return JSON"):
         _require_livekit_project("not json", "voicey-test")
     with pytest.raises(VoiceyError, match="does not contain project"):
