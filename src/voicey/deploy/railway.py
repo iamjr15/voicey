@@ -55,6 +55,7 @@ _SERVICE_REGION_IDENTIFIERS = {
 _CALLBACK_PROVIDERS = frozenset({"twilio", "telnyx", "vobiz", "plivo"})
 _SUCCESS_STATUSES = frozenset({"SUCCESS", "HEALTHY", "RUNNING"})
 _FAILURE_STATUSES = frozenset({"CRASHED", "FAILED", "REMOVED", "CANCELLED", "CANCELED", "SKIPPED"})
+_REFERENCE_SYNC_ATTEMPTS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -1061,16 +1062,9 @@ class RailwayDeploymentManager:
         otlp_endpoint = environment.get("VOICEY_OTLP_ENDPOINT", "").strip()
         if otlp_endpoint:
             values["VOICEY_OTLP_ENDPOINT"] = otlp_endpoint
-        self.runner.run(
-            [
-                "variable",
-                "set",
-                *(f"{name}={value}" for name, value in sorted(values.items())),
-                *self._context_args(state),
-                "--skip-deploys",
-                "--json",
-            ],
-            timeout_s=120,
+        self._sync_reference_variables(
+            state,
+            [f"{name}={value}" for name, value in sorted(values.items())],
         )
         secret_values = bundle.platform_values()
         otlp_headers = environment.get("VOICEY_OTLP_HEADERS", "").strip()
@@ -1108,6 +1102,34 @@ class RailwayDeploymentManager:
         )
         self.store.save(checkpoint)
         return checkpoint
+
+    def _sync_reference_variables(
+        self,
+        state: RailwayResourceState,
+        assignments: Sequence[str],
+    ) -> None:
+        """Wait for newly created Railway resources to resolve in references."""
+        arguments = [
+            "variable",
+            "set",
+            *assignments,
+            *self._context_args(state),
+            "--skip-deploys",
+            "--json",
+        ]
+        for attempt in range(_REFERENCE_SYNC_ATTEMPTS):
+            result = self.runner.run(arguments, check=False, timeout_s=120)
+            if result.returncode == 0:
+                return
+            if attempt + 1 < _REFERENCE_SYNC_ATTEMPTS:
+                time.sleep(min(self.poll_interval_s * (2**attempt), 8.0))
+        raise VoiceyError(
+            "VY-DEP-006",
+            detail=(
+                "Railway did not resolve newly created database or bucket variable "
+                "references after bounded retries. Rerun this exact deploy."
+            ),
+        )
 
     def _deploy_release(
         self,

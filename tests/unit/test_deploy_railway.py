@@ -74,6 +74,7 @@ class FakeRailwayRunner:
         self.deployment_status = deployment_status
         self.regions: dict[str, dict[str, int]] = {"ams": {"numReplicas": 2}}
         self.postgres_regions: dict[str, dict[str, int]] = {"us-east4-eqdc4a": {"numReplicas": 1}}
+        self.reference_failures_remaining = 0
         self.commands: list[tuple[str, ...]] = []
         self.secret_payloads: list[tuple[str, str]] = []
 
@@ -166,6 +167,9 @@ class FakeRailwayRunner:
             if "--stdin" in command:
                 assert stdin is not None
                 self.secret_payloads.append((command[2], stdin))
+            elif self.reference_failures_remaining:
+                self.reference_failures_remaining -= 1
+                return _result(returncode=1, stderr="resource reference is not ready")
             return _result(stdout='{"updated":true}')
         if command[0] == "up":
             return _result(stdout='{"deploymentId":"deployment_123"}')
@@ -444,6 +448,37 @@ def test_railway_rejects_cross_region_postgres_before_release(tmp_path: Path) ->
     runner.postgres_regions = {"us-east4-eqdc4a": {"numReplicas": 2}}
     with pytest.raises(VoiceyError, match="exactly one volume-backed replica"):
         manager._verify_postgres_placement(_plan(), state)
+
+
+def test_railway_retries_eventually_consistent_resource_references(tmp_path: Path) -> None:
+    runner = FakeRailwayRunner()
+    runner.reference_failures_remaining = 2
+    manager = RailwayDeploymentManager(tmp_path, runner=runner, poll_interval_s=0)
+    state = replace(
+        RailwayResourceState.initial(_plan()),
+        project_id=runner.project_id,
+        environment_id=runner.environment_id,
+        service_id=runner.service_id,
+    )
+
+    manager._sync_reference_variables(state, ["DATABASE_URL=${{Postgres.DATABASE_URL}}"])
+
+    reference_commands = [
+        command
+        for command in runner.commands
+        if command[:3] == ("variable", "set", "DATABASE_URL=${{Postgres.DATABASE_URL}}")
+    ]
+    assert len(reference_commands) == 3
+
+    runner.reference_failures_remaining = 5
+    with pytest.raises(VoiceyError, match="did not resolve newly created"):
+        manager._sync_reference_variables(state, ["AWS_REGION=${{bucket.REGION}}"])
+    failed_commands = [
+        command
+        for command in runner.commands
+        if command[:3] == ("variable", "set", "AWS_REGION=${{bucket.REGION}}")
+    ]
+    assert len(failed_commands) == 5
 
 
 def test_railway_artifacts_support_published_install_and_reject_bad_wheels(
