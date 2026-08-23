@@ -529,7 +529,7 @@ class RailwayDeploymentManager:
                     "domain",
                     "delete",
                     state.domain_id or state.public_base,
-                    *common,
+                    *self._context_args(state),
                     "--yes",
                     "--json",
                 ]

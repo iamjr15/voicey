@@ -24,8 +24,14 @@ to PEP 440.
 
 - `voicey doctor` now reports an installed but uncertified Pipecat or LiveKit
   version as a loud warning instead of failing an otherwise usable project.
+- Railway created-only rollback now scopes service-domain deletion with the
+  exact ledgered application service, matching the installed 5.30.3 CLI and
+  preserving resumable reverse-order cleanup.
 
 ### Security
 
+- Raise the Telnyx/companion cryptography floor to 50 and pin the audited
+  development installer to pip 26.2+, resolving PYSEC-2026-3552 and
+  PYSEC-2026-3721 without suppressions.
 - Release workflows produce private CI artifacts only. Public package
   publishing remains an explicit human-only action after rename and review.

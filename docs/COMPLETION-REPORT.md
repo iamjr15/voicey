@@ -1,11 +1,12 @@
 # Completion report
 
 Implementation of the P0–P4 build plan is complete. Every credential-free,
-locally runnable phase gate is green. The product is not represented as fully
-released or externally certified: paid provider media, external cloud
-deployments, live PSTN, human audio/handset checks, the full 24-hour soak, final
-naming, and public publishing remain pending under the repository's reality
-boundary.
+locally runnable phase gate is green. The free-tier Railway companion and both
+cloud runtimes passed real web/model/audio certification. The product is not
+represented as fully released or fully externally certified: paid provider
+media, live PSTN, human audio/handset checks, active-call drain, managed-object
+compatibility, Fly, the full 24-hour soak, and public publishing remain pending
+under the repository's reality boundary.
 
 ## Phase gate summary
 
@@ -26,9 +27,9 @@ all four pending rows name their unpromoted evidence class.
 
 - Full Python suite: 1,127 passed, 41 truthful skips, 90.42% branch coverage on
   Python 3.11.
-- Post-certification regression: 1,146 passed and 41 truthful skips without
-  coverage instrumentation; Ruff, formatting, strict Pyright, 11 frontend
-  tests, frontend type checking, and the production frontend build are green.
+- Current post-certification regression: 1,177 passed, 41 truthful skips, and
+  90.00% coverage; Ruff, formatting, strict Pyright, 11 frontend tests,
+  frontend type checking/build, and Python/npm dependency audits are green.
 - Reference-provider text certification: fresh appointment and P3 recipe
   projects on both runtimes used Claude Sonnet 5, native Anthropic judges,
   production typed tools, and durable result assertions. Appointment passed
@@ -43,6 +44,17 @@ all four pending rows name their unpromoted evidence class.
   account friendly name is `prod-voice`; neither `settle` nor `nudgely`
   remains. No unrelated API key was renamed or rotated, and no paid call was
   placed.
+- Free-tier cloud evidence: Railway deployed a two-replica Singapore companion,
+  singleton managed Postgres/volume, private bucket, and domain. Migration,
+  object, fencing/rolling-generation, liveness, and five signed-readiness probes
+  at 0.195–0.248 seconds passed. Pipecat Cloud and LiveKit Cloud in `ap-south`
+  each passed native session startup, graceful `completed` terminal, explicit
+  relay migration, and a Deepgram→Gemini→Cartesia model/audio probe through
+  that relay. Pipecat captured 41,234 voiced samples; LiveKit captured 21,519.
+  No Ollama request contributed to this evidence. Ownership-scoped teardown
+  then removed both agents, Pipecat's disposable credentials, all Railway
+  resources, and temporary Railway SSH access; the provider-retained
+  soft-deleted project has zero services/buckets.
 - Aggregate P3 regression: all eight local groups green, including SQLite and
   disposable PostgreSQL 17.
 - Bounded hardening run: 864 calls started and terminalized across Pipecat and
@@ -74,9 +86,9 @@ all four pending rows name their unpromoted evidence class.
 | Telephony | local suites plus Twilio/Vobiz account and no-call LiveKit control planes green; paid PSTN pending-live | `uv run pytest -m live --no-cov tests/live`; only actually executed account/control-plane rows are promoted. Run paid media, recording, and handset commands from [GAPS](GAPS.md). |
 | Webhook invariant | green | P1/P3/P4 aggregate chaos covers transaction rollback, provider/carrier/tool failure, actual SIGKILL, dual sweepers, and stale fencing. |
 | CLI | automated contract green; human usability pending-human | Run the guided-wizard and deliberately broken-machine doctor procedures in [GAPS](GAPS.md). |
-| Deploy | local artifact/preflight/rolling invariants green; external smoke/drain pending-live | Run each target's exact provision, paid smoke, active-call replacement, and rollback sequence in [GAPS](GAPS.md). |
+| Deploy | local invariants and Railway/Pipecat/LiveKit web smokes green; paid/drain/Fly pending-live | The Railway companion and both cloud workers passed real platform plus model/audio smokes. Run each target's remaining paid smoke, active-call replacement, and rollback sequence in [GAPS](GAPS.md). |
 | Storage | green locally on SQLite and PostgreSQL 17; managed bucket pending-live | `VOICEY_LIVE_OBJECT_ACK=I_ACKNOWLEDGE_OBJECT_STORE_MUTATION uv run pytest -m live --no-cov tests/live/test_s3_artifacts_live.py` |
-| Cloud relay | protocol and durable companion code green; external deploy pending-live | Pipecat Cloud and LiveKit Cloud CLIs authenticate, but no signed companion or immutable worker image is deployed; Fly and Railway are unauthenticated. Run the exact sequences in [GAPS](GAPS.md). |
+| Cloud relay | Railway companion and both immutable cloud workers green; paid PSTN/Fly pending-live | Signed relay admission, migration, platform sessions, durable completed terminals, and full model/audio probes passed on Railway, Pipecat Cloud, and LiveKit Cloud. Fly and paid carrier paths remain in [GAPS](GAPS.md). |
 | Docs | green | `uv run python tests/verification/run_p4_docs_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl` |
 | Reliability | bounded chaos/soak green; full soak pending-time | `uv run python tests/verification/p4_soak.py --duration-s 86400 --max-concurrent 8 --runtime both --report .voicey/verification/p4-24h-soak-report.json` |
 | Security | green | `uv run python tests/verification/run_p4_security_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl` |
@@ -88,8 +100,9 @@ all four pending rows name their unpromoted evidence class.
 - The reference stack is Deepgram Nova-3, Anthropic Claude, and Cartesia Sonic
   3.5.
 - The simulator judge defaults to local Ollama with an explicit cloud override.
-  The 2026-08-03 reference text certification selected the native Anthropic
-  override and did not use Ollama.
+  The reference text certification selected the native Anthropic override;
+  the 2026-08-23 cloud model/audio evidence used Gemini. No current live
+  certification request used Ollama.
 - Pipecat is pinned at 1.6.0 and imports Flows from `pipecat.flows`; no
   standalone Flows package, custom flow DSL, or MCP product surface exists.
 - LiveKit Agents is pinned at 1.6.7 and conversation behavior remains native
@@ -115,14 +128,15 @@ command/checklist. No skipped live test is counted as green.
 
 The remaining human-owned actions are:
 
-1. Select and collision-check the public name, then execute
-   [RENAME.md](../RENAME.md) in one dedicated reviewable commit.
-2. Run the full 24-hour soak and retain its machine report.
-3. Execute the remaining provider-audio, carrier, cloud-deploy, managed-object,
-   microphone, guided-wizard, doctor-usability, active-call drain, and physical
-   handset procedures.
-4. Review the renamed wheel/sdist and canary evidence.
-5. Create any public repository/package/domain resources and publish manually.
+1. Run the full 24-hour soak only if release policy requires it; the user
+   explicitly declined that wall-clock exercise for the current validation.
+2. Execute the remaining provider-audio/JUnit, paid carrier, managed-object,
+   microphone, guided-wizard, doctor-usability, active-call drain, Fly, and
+   physical-handset procedures when their accounts, balance, or human input
+   exist.
+3. Review the Voicey wheel/sdist and canary evidence.
+4. Create any public repository/package/domain resources and publish manually.
 
 Until those items pass, the accurate release state is: implementation complete,
-local automation green, external certification and public release pending.
+local automation and free-tier cloud web/model/audio certification green;
+paid/human/time certification and public release pending.

@@ -24,16 +24,49 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
 | P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
 | P3 managed object-store compatibility | ready-to-run, pending credentials | Command below | Private S3-compatible bucket with create/read/delete permission |
-| P3 Fly results companion | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Fly CLI, organization billing, Managed Postgres, and Tigris |
-| P3 cloud-worker deploys | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated Pipecat Cloud and LiveKit Cloud projects, deployed companion, registry, provider credentials, and paid PSTN |
-| P4 Railway deploy | ready-to-run, pending credentials/paid cloud | Commands below | Authenticated billed Railway workspace, managed Postgres, private bucket, and paired cloud worker for paid media evidence |
+| P3 Fly results companion | ready-to-run, pending account access | Commands below | Fly signup/account access (the attempted signup was blocked as too many accounts), organization billing, Managed Postgres, and Tigris |
+| P3 cloud-worker deploys | web platform + model/audio green; paid PSTN/human pending | Commands below | Funded carrier route and physical/human endpoint for the remaining phone/browser gates |
+| P4 Railway deploy | companion + paired web model/audio green; paid active-call drain pending | Commands below | Funded carrier call held open across a replacement deployment |
 | P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
 | P4 live rolling drain on every target | ready-to-run, pending credentials/paid calls | P4.1 procedure below, using each target's exact deploy command above | Public Docker ingress plus authenticated Fly, Pipecat Cloud, LiveKit Cloud, and Railway targets with active paid calls |
-| P4 public canary/stable publication | human-only, pending final name/review | Run private `Prepare release artifacts`, then execute `RENAME.md`; no public-upload command is automated | Final name, package-index ownership, human artifact review and explicit publish approval |
+| P4 public canary/stable publication | human-only, pending review/publication | Run private `Prepare release artifacts`; no public-upload command is automated | Package-index ownership, human artifact review, and explicit publish approval |
 
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+## 2026-08-23 free-tier cloud evidence already green
+
+The following evidence is complete and is not a gap:
+
+- Railway deployed a two-replica results companion plus singleton managed
+  Postgres/volume and a private bucket in Singapore. Migration, object-store,
+  fencing/rolling-generation, liveness, and signed readiness passed; five
+  signed readiness samples ranged from 0.195 to 0.248 seconds.
+- Pipecat Cloud in `ap-south` passed the platform smoke through that relay with
+  a real non-publishing Daily participant, durable
+  `runtime.flow_initialized`, graceful disconnect, and `completed` terminal.
+  A full model/audio probe persisted “I want to book an appointment,” received
+  a later Gemini response, captured 41,234 voiced Cartesia PCM samples, and
+  terminalized `completed`.
+- LiveKit Cloud in `ap-south` passed named-dispatch room smoke and a full
+  model/audio probe through the same relay. It persisted the caller transcript,
+  received a later Gemini response, captured 21,519 voiced Cartesia PCM
+  samples, and terminalized `completed`.
+- Explicit relay migration forced complete secret resync and rollout on both
+  clouds before those smokes. No Ollama request contributed to any evidence.
+- Teardown then removed both disposable cloud agents, the Pipecat secret set
+  and dedicated public API key, every Railway domain/bucket/database/service/
+  project identity in the created-only ledger, and the temporary Railway SSH
+  key/host trust. Railway retains only its soft-deleted project record with zero
+  services and buckets. The workspace preferred region remains Singapore:
+  Railway's UI offers no unset value and its GraphQL update ignores null, so no
+  guessed replacement region was applied.
+
+No PSTN call is included: Twilio authentication had expired and the Vobiz
+account showed a negative balance. The user asked not to run a 24-hour soak, so
+that wall-clock gate remains pending by choice. Fly signup was blocked by its
+“too many accounts” response; no card or paid plan was added.
 
 ## P3 managed object-store compatibility
 
@@ -66,9 +99,10 @@ It does not promote the Fly companion or either cloud deployment.
 
 Local tests prove command selection, explicit adoption, owner-only checkpoints,
 secret rotation continuity, reverse rollback ownership, generated topology,
-platform/signed smoke behavior, and the service's real Postgres preflight. The
-Fly CLI is installed but `fly auth whoami` is unauthenticated as of 2026-08-03,
-so no external resource or paid service is represented as green.
+platform/signed smoke behavior, and the service's real Postgres preflight. A
+Fly signup attempt on 2026-08-23 was rejected by the provider as too many
+accounts. No card or paid plan was added, so no external Fly resource is
+represented as green.
 
 Install and authenticate the Fly CLI, choose a disposable web-only voicey
 agent project, and run the complete gate from this repository:
@@ -140,17 +174,17 @@ The local suite proves secret-free images, native runtime entrypoints,
 worker-secret filtering, signed relay preflight, ownership/adoption drift
 fences, hosted carrier answers, resumable deploys, created-only/version
 rollback, platform session/room smoke, paid phone-smoke orchestration, and
-durable begin/terminal invariants. It does not prove either paid cloud control
-plane. This machine has `pipecat-ai-cli==1.3.0` with
-`pipecatcloud==1.1.0`, and `lk==2.16.2`; both CLIs can
-read their authenticated organizations/projects as of 2026-08-03. Deployment
-still cannot start without a signed results companion, a selected immutable
-registry image, and the paid smoke destination. Docker is installed but its
-daemon is stopped. No platform resource or call is represented as green.
+durable begin/terminal invariants. The external web control planes are now
+green: on 2026-08-23 the installed `pipecat-ai-cli==1.3.0` with
+`pipecatcloud==1.1.0` and `lk==2.16.2` deployed real workers against the
+signed Railway companion, and both full Deepgram→Gemini→Cartesia model/audio
+probes completed. The remaining gap is a funded phone route/call and human
+browser/handset evidence, not cloud-worker boot or model audio.
 
-First complete the Fly companion gate above and retain its public base and
-generated `VOICEY_RELAY_CREDENTIAL` in the agent project's ignored,
-owner-only `.env`. From this repository, build the unpublished engine wheel:
+To reproduce against any validated Fly, Railway, or equivalent user-owned
+companion, retain its public base and generated `VOICEY_RELAY_CREDENTIAL` in
+the agent project's ignored, owner-only `.env`. From this repository, build
+the unpublished engine wheel:
 
 ```bash
 export VOICEY_REPO_ROOT="$PWD"
@@ -219,8 +253,9 @@ export VOICEY_CLOUD_SMOKE_TO='+14155550199'
 )
 ```
 
-The JSON must report ready platform/relay/session smoke, a terminal
-`smoke_call_id`, and no credential value. The companion must contain both the
+The web-only platform/relay/session portion already passed on both runtimes.
+For the remaining phone gate, the JSON must also report a terminal
+`smoke_call_id` and no credential value. The companion must contain both the
 platform-session begin/terminal record and paid-call terminal result with
 delivered webhook status. Repeat the identical command and verify it resumes
 without creating a second agent. For Telnyx, first configure its TeXML
@@ -296,9 +331,10 @@ Then run:
 
 Verify that a second version rolls back to the exact checkpointed previous
 version; a disposable first version created by voicey is deleted instead.
-Neither command may delete an adopted agent. Both cloud rows remain
-pending-live until these commands and one real browser-media conversation per
-web runtime pass.
+Neither command may delete an adopted agent. Only the paid phone,
+active-call-drain, physical-handset, and human browser-microphone portions
+remain pending; synthetic web model/audio and completed terminal evidence is
+already green on both cloud runtimes.
 
 ## P3 tier-3 paid PSTN loopback
 
@@ -1282,9 +1318,12 @@ contain the required funded Twilio/public-host evidence.
 The local gate executed Railway CLI 5.30.1, exercised create/resume/adopt/
 rotation/reverse-rollback command contracts, checked that secret values appear
 only on stdin, generated the two-replica non-root deployment, and passed the
-real migration/object/fencing preflight against disposable PostgreSQL 17. This
-machine is not authenticated to a billed Railway workspace, so no external
-resource is represented as green.
+real migration/object/fencing preflight against disposable PostgreSQL 17. The
+authenticated free-tier gate then deployed the complete Singapore topology on
+2026-08-23. Migration/object/fencing, liveness, five signed-readiness probes,
+and paired Pipecat Cloud plus LiveKit Cloud web/model/audio smokes passed. That
+external web path is green; only the paid active-call replacement exercise
+below remains pending.
 
 Choose a disposable voicey phone-agent project and empty Railway project
 identity. Authenticate, build the unpublished engine wheel, and run:
@@ -1298,8 +1337,8 @@ export VOICEY_RAILWAY_WORKSPACE='exact-workspace-id-or-name'
 export VOICEY_RAILWAY_ENVIRONMENT='production'
 export VOICEY_RAILWAY_SERVICE='voicey-results-cert'
 export VOICEY_RAILWAY_BUCKET='voicey-results-cert-objects'
-export VOICEY_RAILWAY_SERVICE_REGION='us-east'
-export VOICEY_RAILWAY_BUCKET_REGION='iad'
+export VOICEY_RAILWAY_SERVICE_REGION='southeast-asia'
+export VOICEY_RAILWAY_BUCKET_REGION='sin'
 railway whoami
 uv build --wheel --out-dir dist
 (

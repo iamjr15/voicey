@@ -1007,6 +1007,11 @@ async def test_railway_failure_version_and_created_only_rollback(
         ("service", "delete"),
         ("delete", "--project"),
     ]
+    domain_delete = next(
+        command for command in runner.commands if command[:2] == ("domain", "delete")
+    )
+    assert domain_delete.count("--service") == 1
+    assert domain_delete[domain_delete.index("--service") + 1] == runner.service_id
     service_deletes = [
         command for command in runner.commands if command[:2] == ("service", "delete")
     ]

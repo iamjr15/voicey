@@ -838,6 +838,11 @@ These choices apply the documented proposals authorized in the build mandate and
   `runtime.flow_initialized`, and disconnect it normally. Only the resulting
   `completed` relay terminal promotes the smoke; `agent stop` remains
   best-effort cleanup.
+- Treat Railway 5.30.3 domain deletion as service-scoped. The live created-only
+  teardown proved that domain id plus project/environment still fails with
+  `No service linked`; pass the ledgered application-service id explicitly.
+  Preserve the existing reverse-order, per-deletion checkpointing so the same
+  rollback resumes safely after any provider-side failure.
 
 ## 2026-08-23 — LiveKit Cloud CLI project shape
 
