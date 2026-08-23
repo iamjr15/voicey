@@ -6,7 +6,7 @@ worker performs signed relay readiness before registering for jobs and requires
 an acknowledged durable call reservation before admitting each job.
 
 The implementation is verified against `lk==2.16.2`,
-`livekit-agents==1.6.7`, and `livekit-api==1.2.0`. It uses the installed
+`livekit-agents==1.6.7`, `anthropic==0.120.0`, and `livekit-api==1.2.0`. It uses the installed
 `AgentServer`, named agent dispatch, and SIP participant APIs.
 
 ## Prerequisites
@@ -72,8 +72,10 @@ after deployment but before readiness, rerunning the exact same artifact
 resumes the ledgered readiness and smoke steps without deploying a duplicate
 version. The web smoke creates a real room with named agent
 dispatch, waits for durable `runtime.admitted`, deletes the room, and waits for
-the terminal relay event. A successful room smoke does not replace a real
-browser conversation as media evidence.
+the terminal relay event. That terminal record must be `completed`; durable
+`call.failed` persistence is valuable crash evidence but never satisfies
+deployment smoke. A successful room smoke does not replace a real browser
+conversation as media evidence.
 
 A project whose manifest includes `phone` must provide a paid destination
 unless the operator explicitly uses `--skip-smoke`:

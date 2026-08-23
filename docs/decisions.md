@@ -861,6 +861,13 @@ These choices apply the documented proposals authorized in the build mandate and
   parent instead reconciles admission bookkeeping against the authoritative
   `AgentServer.active_jobs` table, retaining a short grace window across the
   accept-to-process-start transition.
+- Pin `anthropic==0.120.0` in the LiveKit extra. A live Python 3.14 room job
+  proved that Anthropic 1.0's new `httpx2` contract is incompatible with the
+  `httpx.AsyncClient` supplied by `livekit-plugins-anthropic==1.6.7`.
+- Require a `completed` terminal call record in LiveKit deployment smoke. A
+  failed job correctly persisted `runtime.admitted` plus `call.failed`, which
+  proved the crash contract but exposed that terminal existence alone could
+  create a false deployment green.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

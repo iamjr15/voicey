@@ -9,7 +9,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Pipecat Flows | core `pipecat.flows` from `pipecat-ai==1.6.0` | `FlowManager` and `NodeConfig` import from core; `pipecat-ai-flows` is not installed |
 | Pipecat Evals | `pipecat-ai[evals]==1.6.0` | Installed `pipecat eval run/suite`, `EvalRunnerArguments`, `EvalTransportParams`, text/audio scenario parser, and 0/1 exit contract verified 2026-07-27 |
 | Rich | `>=13.9.4,<16` (`13.9.4` selected) | Pipecat 1.6.0's CLI extra requires Rich below 14; the full voicey CLI suite is green on the resolver-selected version |
-| LiveKit Agents | certified `>=1.6.7,<1.6.8`; project extra pins `livekit-agents==1.6.7` | Installed from PyPI; the only current edge, 1.6.7, runs on Python 3.11 and 3.14 in scheduled CI; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-07-28 |
+| LiveKit Agents | certified `>=1.6.7,<1.6.8`; project extra pins `livekit-agents==1.6.7` and `anthropic==0.120.0` | Installed from PyPI; the only current edge, 1.6.7, runs on Python 3.11 and 3.14 in scheduled CI; the Anthropic pin was live-verified after 1.0's `httpx2` client contract broke the plugin's `httpx.AsyncClient` construction; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-08-23 |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
 | Plivo Python | `plivo==4.61.0` | Installed on 2026-07-27; Voice/number/recording calls and the six-argument V3 signature helper were introspected and exercised |

@@ -49,7 +49,7 @@ class FakeApi:
 
 
 class FakeSmokeRelay:
-    def __init__(self) -> None:
+    def __init__(self, *, failed: bool = False) -> None:
         self.opened = False
         self.closed = False
         self.claimed = False
@@ -58,6 +58,7 @@ class FakeSmokeRelay:
         self.call: NewCall | None = None
         self.dispatched_call_id: str | None = None
         self.timeline: list[TimelineEvent] = []
+        self.failed = failed
 
     async def open(self) -> FakeSmokeRelay:
         self.opened = True
@@ -103,12 +104,14 @@ class FakeSmokeRelay:
             from_number=None,
             to_number=None,
             config_hash=_agent().config_hash if stored is None else stored.config_hash,
-            status="completed" if self.ended else "active",
+            status=("failed" if self.failed else "completed") if self.ended else "active",
             webhook_status="pending" if self.ended else "not_ready",
             started_at=now,
             updated_at=now,
             ended_at=now if self.ended else None,
-            terminal_reason="caller_hangup" if self.ended else None,
+            terminal_reason=("setup_error" if self.failed else "caller_hangup")
+            if self.ended
+            else None,
             timeline=tuple(timeline),
             transcript=(),
             tool_calls=(),
@@ -219,6 +222,37 @@ async def test_livekit_cloud_smoke_requires_credentials_before_mutation() -> Non
             environment={},
         )
     assert not relay.opened
+
+
+@pytest.mark.asyncio
+async def test_livekit_cloud_smoke_rejects_failed_terminal_call() -> None:
+    relay = FakeSmokeRelay(failed=True)
+    api_client = FakeApi(relay)
+
+    def api_factory(*, url: str, api_key: str, api_secret: str) -> FakeApi:
+        del url, api_key, api_secret
+        return api_client
+
+    def relay_factory(_url: str, _credential: RelayCredential) -> FakeSmokeRelay:
+        return relay
+
+    smoke = LiveKitCloudSessionSmoke(
+        api_factory=api_factory,
+        relay_client_factory=relay_factory,
+        poll_interval_s=0,
+    )
+    with pytest.raises(VoiceyError, match="without a completed call"):
+        await smoke.run(
+            agent=_agent(),
+            relay_url="https://relay.example.test",
+            relay_credential=RelayCredential.issue("smoke-key"),
+            environment={
+                "LIVEKIT_URL": "wss://voicey.livekit.cloud",
+                "LIVEKIT_API_KEY": "api-key",
+                "LIVEKIT_API_SECRET": "api-secret",
+            },
+        )
+    assert relay.terminalized == 0
 
 
 @pytest.mark.asyncio

@@ -176,7 +176,7 @@ class LiveKitCloudSessionSmoke:
             )
             await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
             room_created = False
-            await self._wait_for(
+            terminal_record = await self._wait_for(
                 relay,
                 call_id,
                 timeout_s=self._terminal_timeout_s,
@@ -184,6 +184,11 @@ class LiveKitCloudSessionSmoke:
                 failure="LiveKit Cloud room close produced no terminal relay event.",
             )
             terminal = True
+            if terminal_record.status != "completed":
+                raise VoiceyError(
+                    "VY-DEP-004",
+                    detail="LiveKit Cloud smoke terminated without a completed call.",
+                )
             return True
         finally:
             if room_created:

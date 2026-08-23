@@ -4552,6 +4552,7 @@ companion = [
     { name = "twilio" },
 ]
 livekit = [
+    { name = "anthropic" },
     { name = "livekit-agents", extra = ["anthropic", "cartesia", "deepgram", "elevenlabs", "google", "openai", "silero"] },
     { name = "livekit-api" },
 ]
@@ -4594,6 +4595,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22,<1" },
+    { name = "anthropic", marker = "extra == 'livekit'", specifier = "==0.120.0" },
     { name = "boto3", marker = "extra == 'cloud'", specifier = ">=1.40,<2" },
     { name = "boto3", marker = "extra == 'companion'", specifier = ">=1.40,<2" },
     { name = "cryptography", marker = "extra == 'companion'", specifier = ">=49,<50" },
