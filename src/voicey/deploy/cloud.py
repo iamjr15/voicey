@@ -715,8 +715,13 @@ class PipecatCloudDeploymentManager:
         state = state.checkpoint(secrets_synced=True)
         self.store.save(state)
 
-        if state.deployed:
-            _require_pipecat_image(status.stdout, plan.image)
+        current_image = _pipecat_image(status.stdout)
+        if state.deployed and current_image is None:
+            raise VoiceyError(
+                "VY-DEP-010",
+                detail="ledgered Pipecat Cloud deployment omitted its platform image.",
+            )
+        if state.deployed and current_image == plan.image:
             ready = status
         else:
             command = [
@@ -1537,13 +1542,10 @@ def _pipecat_agent_exists(result: CloudCommandResult) -> bool:
     )
 
 
-def _require_pipecat_image(output: str, image: str) -> None:
+def _pipecat_image(output: str) -> str | None:
     normalized = re.sub(r"\x1b\[[0-9;]*m", "", output)
-    if re.search(rf"(?m)^\s*Image:\s*{re.escape(image)}\s*$", normalized) is None:
-        raise VoiceyError(
-            "VY-DEP-010",
-            detail="ledgered Pipecat Cloud deployment image does not match the platform.",
-        )
+    matched = re.search(r"(?m)^\s*Image:\s*(\S+)\s*$", normalized)
+    return matched.group(1) if matched is not None else None
 
 
 def _require_ready(output: str, *, platform: str) -> None:

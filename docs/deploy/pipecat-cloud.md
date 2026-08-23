@@ -106,6 +106,7 @@ platform session and proves both its durable begin and terminal records.
 A retry after a post-deploy interruption reconciles the current `Agent:`,
 `Ready:`, `Deployment Phase:`, and exact `Image:` status fields against the
 owner-only ledger, then resumes at readiness/session smoke without redeploying.
+An explicitly requested different immutable tag performs a normal replacement.
 `Ready: False` always fails closed.
 A successful control-plane smoke is not browser-media evidence; complete one
 real browser conversation before promoting a web deployment.

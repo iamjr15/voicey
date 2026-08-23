@@ -6,6 +6,7 @@ import stat
 import subprocess
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,9 +28,9 @@ from voicey.deploy.cloud import (
     _current_version,
     _livekit_agent_id,
     _pipecat_agent_exists,
+    _pipecat_image,
     _project_requirements,
     _require_livekit_project,
-    _require_pipecat_image,
     _require_ready,
     _require_region,
     _require_secret_names,
@@ -71,6 +72,7 @@ class FakePipecatCloudRunner:
     def __init__(self, *, exists: bool = False) -> None:
         self.exists = exists
         self.ready = exists
+        self.image = "registry.example.test/voicey/agent:sha-123"
         self.commands: list[tuple[str, ...]] = []
         self.secret_names: set[str] = set()
         self.secret_file_paths: list[Path] = []
@@ -99,7 +101,7 @@ class FakePipecatCloudRunner:
                 "Agent: voicey-agent\n"
                 f"Ready: {ready}\n"
                 f"Deployment Phase: {phase}\n"
-                "Image: registry.example.test/voicey/agent:sha-123"
+                f"Image: {self.image}"
             )
         if command[:3] == ("cloud", "secrets", "set"):
             path = Path(command[command.index("--file") + 1])
@@ -115,6 +117,7 @@ class FakePipecatCloudRunner:
         if command[:2] == ("cloud", "deploy"):
             self.exists = True
             self.ready = True
+            self.image = command[3]
             return _result("Agent deployment 'voicey-agent' is ready")
         if command[:3] == ("cloud", "agent", "start"):
             return _result("Agent started\nSession ID: session_123")
@@ -482,6 +485,17 @@ async def test_pipecat_cloud_deploy_syncs_without_argv_secrets_smokes_and_resume
     )
     assert relay_value not in ledger
 
+    sys.modules.pop("agent", None)
+    replacement = await manager.deploy(
+        replace(_pcc_plan(), image="registry.example.test/voicey/agent:sha-124"),
+        environment={},
+        engine_wheel=_wheel(tmp_path),
+        skip_session_smoke=True,
+    )
+    assert replacement.state.platform_ready
+    assert runner.image == "registry.example.test/voicey/agent:sha-124"
+    assert sum(command[:2] == ("cloud", "deploy") for command in runner.commands) == 2
+
 
 @pytest.mark.asyncio
 async def test_pipecat_cloud_requires_adoption_and_never_deletes_adopted_agent(
@@ -780,15 +794,11 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
         _require_ready("Agent: demo\nReady: False\nDeployment Phase: Validating", platform="test")
     with pytest.raises(VoiceyError, match="did not report ready"):
         _require_ready("Status: stopped", platform="test")
-    _require_pipecat_image(
-        "Image: registry.example.test/voicey/agent:sha-123",
-        "registry.example.test/voicey/agent:sha-123",
+    assert (
+        _pipecat_image("Image: registry.example.test/voicey/agent:sha-123")
+        == "registry.example.test/voicey/agent:sha-123"
     )
-    with pytest.raises(VoiceyError, match="image does not match"):
-        _require_pipecat_image(
-            "Image: registry.example.test/voicey/agent:other",
-            "registry.example.test/voicey/agent:sha-123",
-        )
+    assert _pipecat_image("Ready: True") is None
     _require_region("us-west Oregon", "us-west", platform="test")
     with pytest.raises(VoiceyError, match="does not expose region"):
         _require_region("us-east", "us-west", platform="test")

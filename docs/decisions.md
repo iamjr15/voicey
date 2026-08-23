@@ -811,8 +811,9 @@ These choices apply the documented proposals authorized in the build mandate and
 - Parse the current CLI's structured status lines (`Agent:`, `Ready:`,
   `Deployment Phase:`, and `Image:`) rather than the removed `Status for
   agent` sentence. `Ready: False` must never satisfy readiness. If the durable
-  ledger already records deployment, reconcile the exact immutable image and
-  resume at readiness/session smoke without creating another deployment.
+  ledger already records deployment, reconcile a matching immutable image and
+  resume at readiness/session smoke without creating another deployment; an
+  explicitly requested different immutable tag performs a normal replacement.
 - Preload and build-assert NLTK `punkt_tab` outside the application virtual
   environment, copy it as a read-only layer, and set the non-root worker's home
   and cache to `/tmp`. A live cold start otherwise attempted to download the
