@@ -1187,7 +1187,14 @@ class RailwayDeploymentManager:
                 "VY-DEP-004",
                 detail="Railway deployment did not reach a healthy terminal status.",
             )
-        self._scale_service(plan, state)
+        if self._scale_service(plan, state):
+            deployment = self._wait_for_deployment(state, after_id=deployment_id)
+            deployment_id = _item_text(deployment, "id")
+            if not deployment_id:
+                raise VoiceyError(
+                    "VY-DEP-004",
+                    detail="Railway scaling rollout omitted its deployment identity.",
+                )
         service_status = self.runner.run(
             ["service", "status", *self._context_args(state), "--json"],
             timeout_s=60,
@@ -1201,7 +1208,7 @@ class RailwayDeploymentManager:
         self.store.save(checkpoint)
         return checkpoint
 
-    def _scale_service(self, plan: RailwayPlan, state: RailwayResourceState) -> None:
+    def _scale_service(self, plan: RailwayPlan, state: RailwayResourceState) -> bool:
         if state.service_id is None:
             raise VoiceyError("VY-DEP-007", detail="Railway service id is missing.")
         self.runner.run(["service", "link", state.service_id], timeout_s=60)
@@ -1216,6 +1223,13 @@ class RailwayDeploymentManager:
                 "VY-DEP-007",
                 detail="Railway project status omitted the ledgered service.",
             ) from exc
+        identifiers = _SERVICE_REGION_IDENTIFIERS[plan.service_region]
+        if (
+            len(before) == 1
+            and next(iter(before)) in identifiers
+            and next(iter(before.values())) == 2
+        ):
+            return False
         scaled = self.runner.run(
             ["scale", "--json", f"{plan.service_region}=2"],
             timeout_s=120,
@@ -1235,7 +1249,7 @@ class RailwayDeploymentManager:
             )
         desired = {resolved: 2}
         if after == desired:
-            return
+            return True
         assignments = [f"{region}=0" for region in sorted(after) if region != resolved]
         assignments.append(f"{resolved}=2")
         reconciled = self.runner.run(
@@ -1250,10 +1264,13 @@ class RailwayDeploymentManager:
                 "VY-DEP-007",
                 detail="Railway replica placement did not converge to one selected region.",
             )
+        return True
 
     def _wait_for_deployment(
         self,
         state: RailwayResourceState,
+        *,
+        after_id: str | None = None,
     ) -> dict[str, object]:
         deadline = time.monotonic() + self.deployment_timeout_s
         while True:
@@ -1271,10 +1288,13 @@ class RailwayDeploymentManager:
             deployments = _json_items(_parse_json(result.stdout, label="Railway deployment list"))
             if deployments:
                 latest = deployments[0]
+                deployment_id = _item_text(latest, "id")
                 status = _item_text(latest, "status").upper()
-                if status in _SUCCESS_STATUSES:
+                if after_id is not None and deployment_id == after_id:
+                    status = ""
+                elif status in _SUCCESS_STATUSES:
                     return latest
-                if status in _FAILURE_STATUSES:
+                elif status in _FAILURE_STATUSES:
                     raise VoiceyError(
                         "VY-DEP-004",
                         detail=f"Railway deployment ended with status {status}.",

@@ -61,7 +61,10 @@ and misparses valued context flags on that command. Voicey first links the
 exact ledgered service, snapshots its current placement, then runs a
 context-free `REGION=2` scale. It resolves Railway's canonical region id from
 the response and explicitly scales every prior region to zero, leaving exactly
-two replicas in the operator-selected region.
+two replicas in the operator-selected region. Promotion waits for any newer
+scale-generated deployment to reach a successful terminal state and records
+that final deployment identity; an already-converged placement is not scaled
+again.
 
 Railway volumes follow their attached service's region, and moving an existing
 volume between regions causes downtime. Voicey therefore fails closed with

@@ -77,6 +77,8 @@ class FakeRailwayRunner:
         self.reference_failures_remaining = 0
         self.variable_delete_error: str | None = None
         self.variables: set[str] = set()
+        self.scale_deployment_started = False
+        self.scale_reconciliation_stuck = False
         self.commands: list[tuple[str, ...]] = []
         self.secret_payloads: list[tuple[str, str]] = []
 
@@ -185,17 +187,23 @@ class FakeRailwayRunner:
         if command[0] == "up":
             return _result(stdout='{"deploymentId":"deployment_123"}')
         if command[:2] == ("deployment", "list"):
+            deployment_id = (
+                "deployment_scale_123" if self.scale_deployment_started else "deployment_123"
+            )
             return _result(
                 stdout=json.dumps(
                     [
                         {
-                            "id": "deployment_123",
+                            "id": deployment_id,
                             "status": self.deployment_status,
                         }
                     ]
                 )
             )
         if command[0] == "scale":
+            self.scale_deployment_started = True
+            if self.scale_reconciliation_stuck and len(command) > 3:
+                return _result(stdout=json.dumps({"regions": self.regions}))
             aliases = {"us-east": "us-east4-eqdc4a"}
             for assignment in command[1:]:
                 if "=" not in assignment:
@@ -406,10 +414,35 @@ def test_railway_output_normalization_and_state_validation(tmp_path: Path) -> No
 def test_railway_scale_maps_missing_ledgered_service_to_catalog_error(tmp_path: Path) -> None:
     runner = FakeRailwayRunner()
     manager = RailwayDeploymentManager(tmp_path, runner=runner)
+    with pytest.raises(VoiceyError, match="service id is missing"):
+        manager._scale_service(_plan(), RailwayResourceState.initial(_plan()))
+
     state = replace(RailwayResourceState.initial(_plan()), service_id="missing-service")
 
     with pytest.raises(VoiceyError, match="VY-DEP-007"):
         manager._scale_service(_plan(), state)
+
+    direct = FakeRailwayRunner()
+    direct.regions = {}
+    direct_manager = RailwayDeploymentManager(tmp_path / "direct", runner=direct)
+    direct_state = replace(
+        RailwayResourceState.initial(_plan()),
+        service_id=direct.service_id,
+    )
+    assert direct_manager._scale_service(
+        replace(_plan(), service_region="eu-west", bucket_region="ams"),
+        direct_state,
+    )
+
+    stuck = FakeRailwayRunner()
+    stuck.scale_reconciliation_stuck = True
+    stuck_manager = RailwayDeploymentManager(tmp_path / "stuck", runner=stuck)
+    stuck_state = replace(
+        RailwayResourceState.initial(_plan()),
+        service_id=stuck.service_id,
+    )
+    with pytest.raises(VoiceyError, match="did not converge"):
+        stuck_manager._scale_service(_plan(), stuck_state)
 
     state = RailwayResourceState.initial(_plan())
     with pytest.raises(VoiceyError, match="does not match"):
@@ -756,6 +789,8 @@ async def test_railway_deploy_resumes_and_keeps_secrets_out_of_arguments(
     assert report.state.domain_created
     assert report.state.preflight_green
     assert report.state.smoke_green
+    assert report.state.deployment_id == "deployment_scale_123"
+    assert report.smoke.deployment_id == "deployment_scale_123"
     assert stat.S_IMODE(manager.store.path.stat().st_mode) == 0o600
 
     flattened = "\n".join(" ".join(command) for command in runner.commands)
@@ -801,6 +836,7 @@ async def test_railway_deploy_resumes_and_keeps_secrets_out_of_arguments(
     )
     assert resumed.state.project_id == report.state.project_id
     assert resumed_create_count == create_count
+    assert [command for command in runner.commands if command[0] == "scale"] == scales
 
 
 @pytest.mark.asyncio
@@ -1013,6 +1049,22 @@ async def test_railway_rejects_ambiguous_identity_and_nonterminal_timeout(
             engine_wheel=_wheel(tmp_path / "timeout-wheel"),
             skip_smoke=True,
         )
+
+    previous = FakeRailwayRunner(deployment_status="SUCCESS")
+    scale_timeout = RailwayDeploymentManager(
+        tmp_path / "scale-timeout",
+        runner=previous,
+        poll_interval_s=0,
+        deployment_timeout_s=0,
+    )
+    state = replace(
+        RailwayResourceState.initial(_plan()),
+        project_id=previous.project_id,
+        environment_id=previous.environment_id,
+        service_id=previous.service_id,
+    )
+    with pytest.raises(VoiceyError, match="timed out"):
+        scale_timeout._wait_for_deployment(state, after_id="deployment_123")
 
 
 def test_railway_resource_store_rejects_public_or_drifted_ledgers(
