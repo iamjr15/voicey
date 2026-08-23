@@ -307,8 +307,12 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     config = artifacts.platform_config.read_text(encoding="utf-8")  # type: ignore[union-attr]
     bot = artifacts.bot.read_text(encoding="utf-8")  # type: ignore[union-attr]
     assert "USER 10001:10001" in dockerfile
-    assert '"--host", "0.0.0.0", "--port", "7860"' in dockerfile
+    assert "FROM dailyco/pipecat-base:0.1.0-py3.13" in dockerfile
+    assert "VOICEY_PROJECT_ROOT=/voicey/project" in dockerfile
+    assert "PORT=8080" in dockerfile
+    assert "CMD" not in dockerfile
     assert "voicey.deploy.cloud_runtime" in bot
+    assert "pipecat.runner.run" not in bot
     assert 'agent_name = "voicey-agent"' in config
     assert "CUSTOM_TOOL_TOKEN" not in _context_text(artifacts.context)
     assert "do-not-copy" not in _context_text(artifacts.context)

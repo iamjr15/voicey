@@ -34,6 +34,7 @@ _NAME = re.compile(r"^[a-z][a-z0-9-]{1,53}$")
 _IMAGE = re.compile(r"^[^\s:@]+(?:/[^\s:@]+)+:[^\s:@]+$")
 _LIVEKIT_ID = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 _SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+_PIPECAT_CLOUD_BASE = "dailyco/pipecat-base:0.1.0-py3.13"
 _EXCLUDED_PARTS = {
     ".git",
     ".hg",
@@ -1235,12 +1236,38 @@ def _cloud_dockerfile(
         else f'"voicey[{extras}]=={__version__}"'
     )
     wheel_copy = f"COPY {wheel.name} /tmp/{wheel.name}\n" if wheel is not None else ""
-    entrypoint = (
-        "COPY bot.py /app/bot.py\n"
-        'CMD ["python", "/app/bot.py", "--host", "0.0.0.0", "--port", "7860"]'
-        if platform == "pipecat-cloud"
-        else 'CMD ["python", "-m", "voicey.deploy.cloud_runtime", "livekit"]'
-    )
+    if platform == "pipecat-cloud":
+        return f"""# syntax=docker/dockerfile:1.7
+FROM {_PIPECAT_CLOUD_BASE} AS build
+USER root
+RUN python -m pip install --no-cache-dir uv==0.11.7 \\
+    && python -m venv --system-site-packages /opt/voicey
+{wheel_copy}COPY project-requirements.txt /tmp/project-requirements.txt
+RUN uv pip install --python /opt/voicey/bin/python {package} \\
+    && if [ -s /tmp/project-requirements.txt ]; then \\
+         uv pip install --python /opt/voicey/bin/python -r /tmp/project-requirements.txt; \\
+       fi
+
+FROM {_PIPECAT_CLOUD_BASE} AS runtime
+USER root
+RUN if ! getent group 10001 >/dev/null; then \\
+      groupadd --system --gid 10001 voicey; \\
+    fi \\
+    && if ! getent passwd 10001 >/dev/null; then \\
+      useradd --system --uid 10001 --gid 10001 --home-dir /nonexistent \\
+        --shell /usr/sbin/nologin voicey; \\
+    fi
+COPY --from=build /opt/voicey /opt/voicey
+COPY --chown=10001:10001 project /voicey/project
+COPY --chown=10001:10001 bot.py /app/bot.py
+ENV PATH="/opt/voicey/bin:$PATH" \\
+    PYTHONUNBUFFERED=1 \\
+    PYTHONDONTWRITEBYTECODE=1 \\
+    VOICEY_PROJECT_ROOT=/voicey/project \\
+    PORT=8080
+WORKDIR /app
+USER 10001:10001
+"""
     return f"""# syntax=docker/dockerfile:1.7
 FROM python:3.14-slim-bookworm AS build
 RUN python -m pip install --no-cache-dir uv==0.11.7 \\
@@ -1260,7 +1287,7 @@ RUN apt-get update \\
          --shell /usr/sbin/nologin voicey
 COPY --from=build /opt/voicey /opt/voicey
 COPY project /app/project
-{entrypoint}
+CMD ["python", "-m", "voicey.deploy.cloud_runtime", "livekit"]
 ENV PATH="/opt/voicey/bin:$PATH" \\
     PYTHONUNBUFFERED=1 \\
     PYTHONDONTWRITEBYTECODE=1 \\
@@ -1273,18 +1300,11 @@ USER 10001:10001
 def _pipecat_bot() -> str:
     return '''"""Generated Pipecat Cloud entrypoint. Do not add secrets here."""
 
-from pipecat.runner.run import main
-from pipecat.runner.types import RunnerArguments
-
 from voicey.deploy.cloud_runtime import run_pipecat_cloud_session
 
 
-async def bot(runner_args: RunnerArguments) -> None:
-    await run_pipecat_cloud_session(runner_args)
-
-
-if __name__ == "__main__":
-    main()
+async def bot(session_args: object) -> None:
+    await run_pipecat_cloud_session(session_args)
 '''
 
 

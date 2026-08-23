@@ -60,12 +60,14 @@ docker push registry.example.com/voicey/my-agent:git-sha
 
 Pipecat Cloud accepts only `linux/arm64` images. Voicey pins that platform in
 the printed build command so x86 and Arm development machines produce the same
-deployable artifact. The multi-stage image uses a glibc Python base and
-UID/GID 10001 and binds the installed runner to `0.0.0.0:7860` so Pipecat
-Cloud's validation plane can reach it from outside the container's loopback
-interface. The generated bot accepts the installed native `RunnerArguments` forms for Daily,
-SmallWebRTC, and Twilio/Telnyx/Vobiz/Plivo WebSockets. It does not introduce a
-conversation DSL.
+deployable artifact. The multi-stage image derives from the versioned,
+glibc-based `dailyco/pipecat-base:0.1.0-py3.13`, retains its platform-owned
+`POST /bot` and `/ws` server on port 8080, and hardens the derived runtime to
+UID/GID 10001. The project is copied outside the base image's reserved `/app`
+directory. The generated bot strictly adapts the base image's
+`pipecatcloud.agent` Daily and WebSocket session arguments to the installed
+native Pipecat runner types; a generic session with no transport identity is
+rejected with `VY-DEP-008`. It does not introduce a conversation DSL.
 
 ## Deploy and verify
 

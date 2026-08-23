@@ -436,7 +436,7 @@ my-bot/
 Key flags (discover via `pipecat init --help` / `--list-options` JSON): `--bot-type web|telephony`, `-t/--transport` (`daily,smallwebrtc,twilio,telnyx,plivo,exotel,daily_pstn,twilio_daily_sip`, repeatable), `--mode cascade|realtime`, `--stt/--llm/--tts <id>`, `--realtime openai_realtime|gemini_live_realtime`, `--client-framework react|vanilla|none`, `--client-server vite|nextjs`, `--eval`, `--deploy-to-cloud`, `--enable-krisp`, `--config <json>`, `--dry-run`.
 
 ### 10.2 Development runner (recap, §2) — the production caveat
-`pipecat.runner` is a **local-dev tool, explicitly not for production**. Canonical bot: `async def bot(runner_args): transport = await create_transport(runner_args, transport_params); …` + `if __name__=="__main__": from pipecat.runner.run import main; main()`. Serves `localhost:7860`, UI at `/client`, session start `POST /start` (**same contract as Pipecat Cloud** — a client built against the runner runs unchanged on PCC). Client picks transport per session via `"transport"` in the `/start` body. `RunnerArguments` subclasses (`pipecat.runner.types`): `DailyRunnerArguments(room_url, token)`, `SmallWebRTCRunnerArguments(webrtc_connection)`, `WebSocketRunnerArguments(websocket, transport_type)`, `LiveKitRunnerArguments`, `EvalRunnerArguments`; base fields `body`, `call_data`, `session_id`, `cli_args`.
+`pipecat.runner` is a **local-dev tool, explicitly not for production**. Canonical local bot: `async def bot(runner_args): transport = await create_transport(runner_args, transport_params); …` + `if __name__=="__main__": from pipecat.runner.run import main; main()`. It serves `localhost:7860`, exposes local session start at `POST /start`, and selects transport through the request body. `RunnerArguments` subclasses (`pipecat.runner.types`): `DailyRunnerArguments(room_url, token)`, `SmallWebRTCRunnerArguments(webrtc_connection)`, `WebSocketRunnerArguments(websocket, transport_type)`, `LiveKitRunnerArguments`, `EvalRunnerArguments`; base fields `body`, `call_data`, `session_id`, `cli_args`. **Observed correction 2026-08-23:** `/start` is not the current Pipecat Cloud container contract. Deploying that local server bound to `0.0.0.0` remained in Cloud's `Validating` phase.
 
 ### 10.3 Pipecat Cloud deploy + `pcc-deploy.toml`
 `pipecat cloud deploy [AGENT] [IMAGE] [OPTS]`. Container-based. Secrets = **secret sets** (`pipecat cloud secrets …`, bind `--secrets`). Agent name: lowercase/digits/hyphens, ≤54 chars.
@@ -448,8 +448,18 @@ allowed omitting the image does not describe this pin. Voicey therefore
 generates a secret-free build context with `--prepare-only`, prints the exact
 `docker build` and `docker push` commands for an operator-selected immutable
 tag, and deploys that exact tag. It does not claim a Pipecat-managed build.
-The generated image uses a glibc Python base, a non-root runtime user, and the
-installed `RunnerArguments`/`main` entrypoint.
+The platform contract was reverified against both a live deployment and the
+published base image on 2026-08-23. Pipecat Cloud requires `linux/arm64`; the
+versioned tag available and pulled successfully is
+`dailyco/pipecat-base:0.1.0-py3.13`. Its inherited `/app/app.py` owns
+`POST /bot` and `/ws` on `0.0.0.0:8080`, imports `bot` from `/app/bot.py`, and
+passes `pipecatcloud.agent.DailySessionArguments`,
+`WebSocketSessionArguments`, or transport-free `PipecatSessionArguments`.
+Voicey derives from that exact base, keeps `/app` reserved for its server,
+runs the derived image as non-root UID/GID 10001, and explicitly converts only
+the Daily and WebSocket argument classes to the installed runner types. The
+transport-free form fails closed. The mutable documented Python 3.14 tag is
+not used because the tested versioned `0.1.0-py3.14` tag did not exist.
 ```toml
 agent_name = "my-voice-agent"          # required
 image = "you/my-agent:0.1"             # or build_id / cloud build
@@ -485,7 +495,7 @@ Sources: https://docs.pipecat.ai/api-reference/cli/{overview,init} · https://do
 ## Build recommendations for our toolchain (synthesis)
 
 1. **Target the new API surface now** — `PipelineWorker`/`WorkerRunner` (`pipecat.pipeline.worker`, `pipecat.workers.runner`), per-provider transport paths, `LLMContext`+`LLMContextAggregatorPair`, `Service.Settings(...)`, `PipecatClient`. Old names work but are 2.0.0-removal aliases; every online example is stale.
-2. **Adopt the `bot(runner_args)` + `create_transport` shape** so one codebase serves browser (SmallWebRTC), Twilio, and Pipecat Cloud unchanged. Own the `/start` + `/api/offer` contract.
+2. **Keep one native conversation engine behind explicit host adapters.** The local host owns `/start` + `/api/offer` and passes installed runner arguments; the Pipecat Cloud host owns `/bot` + `/ws` and passes `pipecatcloud.agent` session arguments. Convert the latter strictly at the boundary, then reuse the same `create_transport`-based engine.
 3. **For a long-lived FastAPI host:** one process, many concurrent `PipelineWorker`s; `WorkerRunner()` then `await runner.run(auto_end=False)`. Cap calls with a manual `asyncio` timer → `EndFrame`; rely on `idle_timeout_secs` for dead-air.
 4. **Observability:** `enable_metrics=enable_usage_metrics=True` + `TranscriptProcessor` (or aggregator turn events) + `TurnTrackingObserver`/`UserBotLatencyObserver`; OTel (`enable_tracing=True`) for per-turn/per-service spans.
 5. **Resilience:** `ServiceSwitcher(strategy_type=ServiceSwitcherStrategyFailover)` for STT/LLM/TTS fallback (validate on your pin); `on_pipeline_error`/`on_pipeline_finished` for cleanup.

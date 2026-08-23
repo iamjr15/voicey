@@ -398,6 +398,69 @@ async def test_pipecat_transport_maps_pinned_daily_webrtc_and_telephony(
     assert call.to_number == "+14155550101"
 
 
+def test_pipecat_cloud_base_arguments_are_strictly_normalized() -> None:
+    daily_type = type(
+        "DailySessionArguments",
+        (),
+        {"__module__": "pipecatcloud.agent"},
+    )
+    daily = cast(Any, daily_type())
+    daily.room_url = "https://daily.example.test/room"
+    daily.token = "token"
+    daily.body = {"transport": "daily"}
+    daily.session_id = "session-123"
+
+    normalized = cast(Any, cloud_runtime._normalize_pipecat_cloud_arguments(daily))
+    assert type(normalized).__name__ == "DailyRunnerArguments"
+    assert normalized.room_url == daily.room_url
+    assert normalized.token == daily.token
+    assert normalized.body == daily.body
+    assert normalized.session_id == daily.session_id
+
+    websocket_type = type(
+        "WebSocketSessionArguments",
+        (),
+        {"__module__": "pipecatcloud.agent"},
+    )
+    websocket = cast(Any, websocket_type())
+    websocket.websocket = object()
+    websocket.body = None
+    websocket.session_id = "session-456"
+    normalized_websocket = cast(
+        Any,
+        cloud_runtime._normalize_pipecat_cloud_arguments(websocket),
+    )
+    assert type(normalized_websocket).__name__ == "WebSocketRunnerArguments"
+    assert normalized_websocket.websocket is websocket.websocket
+    assert normalized_websocket.session_id == websocket.session_id
+
+
+def test_pipecat_cloud_base_arguments_fail_closed() -> None:
+    generic_type = type(
+        "PipecatSessionArguments",
+        (),
+        {"__module__": "pipecatcloud.agent"},
+    )
+    with pytest.raises(VoiceyError, match="do not identify a supported transport"):
+        cloud_runtime._normalize_pipecat_cloud_arguments(generic_type())
+
+    daily_type = type(
+        "DailySessionArguments",
+        (),
+        {"__module__": "pipecatcloud.agent"},
+    )
+    with pytest.raises(VoiceyError, match="Daily session arguments are incomplete"):
+        cloud_runtime._normalize_pipecat_cloud_arguments(daily_type())
+
+    lookalike_type = type(
+        "DailySessionArguments",
+        (),
+        {"__module__": "untrusted.module"},
+    )
+    lookalike = lookalike_type()
+    assert cloud_runtime._normalize_pipecat_cloud_arguments(lookalike) is lookalike
+
+
 @pytest.mark.asyncio
 async def test_pipecat_transport_rejects_wire_mismatch_and_unsupported_args(
     monkeypatch: pytest.MonkeyPatch,

@@ -785,6 +785,25 @@ These choices apply the documented proposals authorized in the build mandate and
   failure. Never restore or overwrite an unexpected source mutation
   automatically; leave it visible for version-control review.
 
+## 2026-08-23 — Pipecat Cloud image protocol drift
+
+- Treat the generic `pipecat.runner.run` server as local development only. A
+  real Cloud deployment with that server reachable on `0.0.0.0:7860` remained
+  in `Validating`; the current production image protocol is the platform base
+  server's `POST /bot` and `/ws` surface on port 8080.
+- Pin the derived worker to the empirically available versioned image
+  `dailyco/pipecat-base:0.1.0-py3.13`. The documented versioned Python 3.14 tag
+  did not exist when pulled, while mutable `latest-*` tags are not a release
+  contract. Keep the platform-required `linux/arm64`, glibc, and derived-image
+  UID/GID 10001 invariants.
+- Reserve `/app` for the base image's server and copy the Voicey project to
+  `/voicey/project`. Inherit the base command rather than reproducing its
+  private server implementation.
+- Accept only exact `pipecatcloud.agent.DailySessionArguments` and
+  `WebSocketSessionArguments` at the boundary, converting them to the pinned
+  native runner types. Reject the generic transport-free argument and unknown
+  lookalikes with `VY-DEP-008`.
+
 ## 2026-07-28 — Release compatibility and promotion evidence
 
 - Keep empirically supported runtime windows narrow: Pipecat

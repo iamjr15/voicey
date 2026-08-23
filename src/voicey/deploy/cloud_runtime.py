@@ -244,6 +244,7 @@ async def _pipecat_transport_and_call(
 
     from voicey.runtimes.pipecat.lifecycle import PipecatCall
 
+    runner_args = _normalize_pipecat_cloud_arguments(runner_args)
     session_id = str(getattr(runner_args, "session_id", "") or uuid.uuid4().hex)
     if isinstance(runner_args, WebSocketRunnerArguments):
         parsed = cast(
@@ -336,6 +337,53 @@ async def _pipecat_transport_and_call(
     raise VoiceyError(
         "VY-DEP-008",
         detail=f"unsupported Pipecat Cloud runner arguments {type(runner_args).__name__}.",
+    )
+
+
+def _normalize_pipecat_cloud_arguments(session_args: object) -> object:
+    """Translate only the pinned Pipecat Cloud base-image session contract."""
+    argument_type = type(session_args)
+    if argument_type.__module__ != "pipecatcloud.agent":
+        return session_args
+
+    from pipecat.runner.types import DailyRunnerArguments, WebSocketRunnerArguments
+
+    session_id = getattr(session_args, "session_id", None)
+    body = getattr(session_args, "body", None)
+    if argument_type.__name__ == "DailySessionArguments":
+        room_url = getattr(session_args, "room_url", None)
+        token = getattr(session_args, "token", None)
+        if not isinstance(room_url, str) or not room_url or not isinstance(token, str):
+            raise VoiceyError(
+                "VY-DEP-008",
+                detail="Pipecat Cloud Daily session arguments are incomplete.",
+            )
+        return DailyRunnerArguments(
+            room_url=room_url,
+            token=token,
+            body=body,
+            session_id=session_id,
+        )
+    if argument_type.__name__ == "WebSocketSessionArguments":
+        websocket = getattr(session_args, "websocket", None)
+        if websocket is None:
+            raise VoiceyError(
+                "VY-DEP-008",
+                detail="Pipecat Cloud WebSocket session arguments are incomplete.",
+            )
+        return WebSocketRunnerArguments(
+            websocket=websocket,
+            body=body,
+            session_id=session_id,
+        )
+    if argument_type.__name__ == "PipecatSessionArguments":
+        raise VoiceyError(
+            "VY-DEP-008",
+            detail="generic Pipecat Cloud sessions do not identify a supported transport.",
+        )
+    raise VoiceyError(
+        "VY-DEP-008",
+        detail=f"unsupported Pipecat Cloud session arguments {argument_type.__name__}.",
     )
 
 
