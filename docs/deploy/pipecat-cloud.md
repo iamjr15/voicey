@@ -5,7 +5,8 @@ result delivery, carrier observations, and stale-call recovery remain on the
 user-owned results companion. A worker fails closed unless that companion
 passes signed readiness and acknowledges `begin_call`.
 
-The installed deployment contract is `pipecat-cli==0.1.15`. This version
+The installed deployment contract is `pipecat-ai-cli==1.3.0` with the
+separately versioned `pipecatcloud==1.1.0` extension. This combination
 requires a pre-pushed image; it does not expose the cloud-build fields shown in
 some newer documentation. Voicey therefore separates secret-free image
 preparation from paid platform mutation.
@@ -15,7 +16,13 @@ preparation from paid platform mutation.
 1. Deploy and verify a [Fly results companion](fly-companion.md), or an
    equivalent user-owned relay that passes the same signed protocol/storage
    readiness contract.
-2. Install and authenticate the Pipecat CLI with `pipecat cloud auth login`.
+2. Install the exact CLI pair with
+   `uv tool install pipecat-ai-cli==1.3.0 --with pipecatcloud==1.1.0`, then
+   authenticate with `pipecat cloud auth login`.
+   Create or select an organization public API key for session smoke with
+   `pipecat cloud organizations keys create --name NAME --default` or
+   `pipecat cloud organizations keys use`; the OAuth login and public start key
+   are separate credentials.
 3. Choose the exact organization, current region from
    `pipecat cloud regions list`, secret-set name, immutable registry tag,
    scaling bounds, and agent profile. Voicey chooses none of them.
@@ -67,7 +74,10 @@ UID/GID 10001. The project is copied outside the base image's reserved `/app`
 directory. The generated bot strictly adapts the base image's
 `pipecatcloud.agent` Daily and WebSocket session arguments to the installed
 native Pipecat runner types; a generic session with no transport identity is
-rejected with `VY-DEP-008`. It does not introduce a conversation DSL.
+rejected with `VY-DEP-008`. The build downloads and asserts `punkt_tab` into a
+read-only runtime path and gives the non-root worker only `/tmp`-backed home and
+cache paths, so a cold session never attempts a package-data download. It does
+not introduce a conversation DSL.
 
 ## Deploy and verify
 

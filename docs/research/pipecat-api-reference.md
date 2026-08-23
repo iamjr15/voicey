@@ -441,8 +441,11 @@ Key flags (discover via `pipecat init --help` / `--list-options` JSON): `--bot-t
 ### 10.3 Pipecat Cloud deploy + `pcc-deploy.toml`
 `pipecat cloud deploy [AGENT] [IMAGE] [OPTS]`. Container-based. Secrets = **secret sets** (`pipecat cloud secrets …`, bind `--secrets`). Agent name: lowercase/digits/hyphens, ≤54 chars.
 
-**Installed-pin correction (verified 2026-07-28):** the resolved `pipecat-cli==0.1.15`
-requires the positional `IMAGE`; its installed `DeployConfigParams` has no
+**Installed-pin correction (reverified live 2026-08-23):**
+`pipecat-ai-cli==1.3.0` loads the separately versioned
+`pipecatcloud==1.1.0` extension. The earlier `pipecat-cli==0.1.15` package pin
+was superseded by this extension split. The installed combination requires the
+positional `IMAGE`; its installed `DeployConfigParams` has no
 cloud-build/context/Dockerfile fields. The earlier upstream example that
 allowed omitting the image does not describe this pin. Voicey therefore
 generates a secret-free build context with `--prepare-only`, prints the exact

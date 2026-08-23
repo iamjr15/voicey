@@ -1250,7 +1250,11 @@ RUN python -m pip install --no-cache-dir uv==0.11.7 \\
 RUN uv pip install --python /opt/voicey/bin/python {package} \\
     && if [ -s /tmp/project-requirements.txt ]; then \\
          uv pip install --python /opt/voicey/bin/python -r /tmp/project-requirements.txt; \\
-       fi
+       fi \\
+    && mkdir -p /opt/nltk_data \\
+    && NLTK_DATA=/opt/nltk_data \\
+       /opt/voicey/bin/python -m nltk.downloader -q -d /opt/nltk_data punkt_tab \\
+    && test -f /opt/nltk_data/tokenizers/punkt_tab/english/abbrev_types.txt
 
 FROM {_PIPECAT_CLOUD_BASE} AS runtime
 USER root
@@ -1262,9 +1266,13 @@ RUN if ! getent group 10001 >/dev/null; then \\
         --shell /usr/sbin/nologin voicey; \\
     fi
 COPY --from=build /opt/voicey /opt/voicey
+COPY --from=build /opt/nltk_data /opt/nltk_data
 COPY --chown=10001:10001 project /voicey/project
 COPY --chown=10001:10001 bot.py /app/bot.py
 ENV PATH="/opt/voicey/bin:$PATH" \\
+    HOME="/tmp" \\
+    XDG_CACHE_HOME="/tmp/voicey-cache" \\
+    NLTK_DATA="/opt/nltk_data" \\
     PYTHONUNBUFFERED=1 \\
     PYTHONDONTWRITEBYTECODE=1 \\
     VOICEY_PROJECT_ROOT=/voicey/project \\

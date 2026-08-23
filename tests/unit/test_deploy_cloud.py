@@ -317,6 +317,9 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     assert "FROM dailyco/pipecat-base:0.1.0-py3.13" in dockerfile
     assert "VOICEY_PROJECT_ROOT=/voicey/project" in dockerfile
     assert "PORT=8080" in dockerfile
+    assert 'HOME="/tmp"' in dockerfile
+    assert 'NLTK_DATA="/opt/nltk_data"' in dockerfile
+    assert "test -f /opt/nltk_data/tokenizers/punkt_tab/english/abbrev_types.txt" in dockerfile
     assert "CMD" not in dockerfile
     assert "voicey.deploy.cloud_runtime" in bot
     assert "pipecat.runner.run" not in bot

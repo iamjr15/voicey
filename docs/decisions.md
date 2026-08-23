@@ -662,7 +662,8 @@ These choices apply the documented proposals authorized in the build mandate and
 ## 2026-07-28 — Managed cloud worker deployment
 
 - Pin the operator tooling contract to the installed
-  `pipecat-cli==0.1.15` and `lk==2.16.2`. Pipecat CLI 0.1.15 requires the
+  `pipecat-ai-cli==1.3.0` with `pipecatcloud==1.1.0`, and `lk==2.16.2`.
+  The Pipecat Cloud extension requires the
   positional image and exposes no cloud-build fields, so generate a
   secret-free context and require the operator to build and push an immutable
   tag before platform deployment.
@@ -791,6 +792,10 @@ These choices apply the documented proposals authorized in the build mandate and
   real Cloud deployment with that server reachable on `0.0.0.0:7860` remained
   in `Validating`; the current production image protocol is the platform base
   server's `POST /bot` and `/ws` surface on port 8080.
+- Re-resolve the installed Cloud CLI as `pipecat-ai-cli==1.3.0` plus its
+  separately released `pipecatcloud==1.1.0` extension. The prior standalone
+  `pipecat-cli==0.1.15` pin no longer describes the executable that passed the
+  live control plane; installation and upgrade commands must pin both parts.
 - Pin the derived worker to the empirically available versioned image
   `dailyco/pipecat-base:0.1.0-py3.13`. The documented versioned Python 3.14 tag
   did not exist when pulled, while mutable `latest-*` tags are not a release
@@ -808,6 +813,15 @@ These choices apply the documented proposals authorized in the build mandate and
   agent` sentence. `Ready: False` must never satisfy readiness. If the durable
   ledger already records deployment, reconcile the exact immutable image and
   resume at readiness/session smoke without creating another deployment.
+- Preload and build-assert NLTK `punkt_tab` outside the application virtual
+  environment, copy it as a read-only layer, and set the non-root worker's home
+  and cache to `/tmp`. A live cold start otherwise attempted to download the
+  tokenizer into `/nonexistent`; a completed control-plane smoke does not make
+  that production-safe.
+- Treat Pipecat Cloud OAuth and the organization public API key as separate
+  credentials. The former manages deployments; `agent start` uses the latter.
+  Live certification creates an explicitly named disposable public key and
+  revokes it during teardown.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

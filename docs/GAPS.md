@@ -141,7 +141,8 @@ worker-secret filtering, signed relay preflight, ownership/adoption drift
 fences, hosted carrier answers, resumable deploys, created-only/version
 rollback, platform session/room smoke, paid phone-smoke orchestration, and
 durable begin/terminal invariants. It does not prove either paid cloud control
-plane. This machine has `pipecat-cli==0.1.15` and `lk==2.16.2`; both CLIs can
+plane. This machine has `pipecat-ai-cli==1.3.0` with
+`pipecatcloud==1.1.0`, and `lk==2.16.2`; both CLIs can
 read their authenticated organizations/projects as of 2026-08-03. Deployment
 still cannot start without a signed results companion, a selected immutable
 registry image, and the paid smoke destination. Docker is installed but its
