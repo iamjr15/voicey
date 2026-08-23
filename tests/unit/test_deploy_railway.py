@@ -75,6 +75,8 @@ class FakeRailwayRunner:
         self.regions: dict[str, dict[str, int]] = {"ams": {"numReplicas": 2}}
         self.postgres_regions: dict[str, dict[str, int]] = {"us-east4-eqdc4a": {"numReplicas": 1}}
         self.reference_failures_remaining = 0
+        self.variable_delete_error: str | None = None
+        self.variables: set[str] = set()
         self.commands: list[tuple[str, ...]] = []
         self.secret_payloads: list[tuple[str, str]] = []
 
@@ -170,7 +172,16 @@ class FakeRailwayRunner:
             elif self.reference_failures_remaining:
                 self.reference_failures_remaining -= 1
                 return _result(returncode=1, stderr="resource reference is not ready")
+            self.variables.add(command[2].split("=", maxsplit=1)[0])
             return _result(stdout='{"updated":true}')
+        if command[:2] == ("variable", "delete"):
+            name = command[2]
+            if self.variable_delete_error is not None:
+                return _result(returncode=1, stderr=self.variable_delete_error)
+            if name not in self.variables:
+                return _result(returncode=1, stderr=f"Variable '{name}' not found")
+            self.variables.remove(name)
+            return _result(stdout='{"deleted":true}')
         if command[0] == "up":
             return _result(stdout='{"deploymentId":"deployment_123"}')
         if command[:2] == ("deployment", "list"):
@@ -461,7 +472,7 @@ def test_railway_retries_eventually_consistent_resource_references(tmp_path: Pat
         service_id=runner.service_id,
     )
 
-    manager._sync_reference_variables(
+    manager._sync_nonsecret_variables(
         state,
         [
             "DATABASE_URL=${{Postgres.DATABASE_URL}}",
@@ -485,13 +496,33 @@ def test_railway_retries_eventually_consistent_resource_references(tmp_path: Pat
 
     runner.reference_failures_remaining = 5
     with pytest.raises(VoiceyError, match="did not resolve a newly created"):
-        manager._sync_reference_variables(state, ["AWS_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}"])
+        manager._sync_nonsecret_variables(state, ["AWS_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}"])
     failed_commands = [
         command
         for command in runner.commands
         if command[:3] == ("variable", "set", "AWS_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}")
     ]
     assert len(failed_commands) == 5
+
+
+def test_railway_removes_empty_callback_variable_without_reading_secrets(tmp_path: Path) -> None:
+    runner = FakeRailwayRunner()
+    manager = RailwayDeploymentManager(tmp_path, runner=runner, poll_interval_s=0)
+    state = replace(
+        RailwayResourceState.initial(_plan()),
+        project_id=runner.project_id,
+        environment_id=runner.environment_id,
+        service_id=runner.service_id,
+    )
+
+    runner.variables.add("VOICEY_CALLBACK_PROVIDERS")
+    manager._remove_variable_if_present(state, "VOICEY_CALLBACK_PROVIDERS")
+    assert "VOICEY_CALLBACK_PROVIDERS" not in runner.variables
+    manager._remove_variable_if_present(state, "VOICEY_CALLBACK_PROVIDERS")
+
+    runner.variable_delete_error = "permission denied"
+    with pytest.raises(VoiceyError, match="could not remove the stale"):
+        manager._remove_variable_if_present(state, "VOICEY_CALLBACK_PROVIDERS")
 
 
 def test_railway_artifacts_support_published_install_and_reject_bad_wheels(

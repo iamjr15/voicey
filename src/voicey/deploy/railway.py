@@ -1047,7 +1047,6 @@ class RailwayDeploymentManager:
             "VOICEY_DEPLOY_TARGET": "railway",
             "VOICEY_STORAGE_BACKEND": "postgres",
             "VOICEY_ARTIFACT_BACKEND": "s3",
-            "VOICEY_CALLBACK_PROVIDERS": callbacks,
             "VOICEY_DB_POOL_MIN": "1",
             "VOICEY_DB_POOL_MAX": "5",
             "VOICEY_DB_CONNECTION_BUDGET": "20",
@@ -1062,10 +1061,14 @@ class RailwayDeploymentManager:
         otlp_endpoint = environment.get("VOICEY_OTLP_ENDPOINT", "").strip()
         if otlp_endpoint:
             values["VOICEY_OTLP_ENDPOINT"] = otlp_endpoint
-        self._sync_reference_variables(
+        if callbacks:
+            values["VOICEY_CALLBACK_PROVIDERS"] = callbacks
+        self._sync_nonsecret_variables(
             state,
             [f"{name}={value}" for name, value in sorted(values.items())],
         )
+        if not callbacks:
+            self._remove_variable_if_present(state, "VOICEY_CALLBACK_PROVIDERS")
         secret_values = bundle.platform_values()
         otlp_headers = environment.get("VOICEY_OTLP_HEADERS", "").strip()
         if otlp_headers:
@@ -1103,12 +1106,12 @@ class RailwayDeploymentManager:
         self.store.save(checkpoint)
         return checkpoint
 
-    def _sync_reference_variables(
+    def _sync_nonsecret_variables(
         self,
         state: RailwayResourceState,
         assignments: Sequence[str],
     ) -> None:
-        """Wait for newly created Railway resources to resolve in references."""
+        """Set non-secret values individually and wait for fresh references."""
         for assignment in assignments:
             arguments = [
                 "variable",
@@ -1132,6 +1135,29 @@ class RailwayDeploymentManager:
                         "variable reference after bounded retries. Rerun this exact deploy."
                     ),
                 )
+
+    def _remove_variable_if_present(
+        self,
+        state: RailwayResourceState,
+        name: str,
+    ) -> None:
+        result = self.runner.run(
+            [
+                "variable",
+                "delete",
+                name,
+                *self._context_args(state),
+                "--json",
+            ],
+            check=False,
+            timeout_s=120,
+        )
+        if result.returncode == 0 or f"Variable '{name}' not found" in result.stderr:
+            return
+        raise VoiceyError(
+            "VY-DEP-006",
+            detail=f"Railway could not remove the stale {name} variable.",
+        )
 
     def _deploy_release(
         self,
