@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -98,6 +99,7 @@ agent = Agent(
         encoding="utf-8",
     )
     ManifestStore(path / "voicey.jsonc").save(_manifest(runtime))
+    (path / "tools.py").write_text('IMPORT_MARKER = "project-tools"\n', encoding="utf-8")
 
 
 def test_cloud_worker_settings_are_fail_closed(tmp_path: Path) -> None:
@@ -190,6 +192,7 @@ async def test_livekit_cloud_worker_uses_native_host_and_per_job_relay(
             hosts.append(self)
 
         async def run(self, *, devmode: bool) -> None:
+            assert str(tmp_path) in sys.path
             self.devmode = devmode
 
     import voicey.runtimes.livekit as livekit_runtime
@@ -205,6 +208,7 @@ async def test_livekit_cloud_worker_uses_native_host_and_per_job_relay(
     settings = hosts[0].kwargs["settings"]
     assert settings.health_port == 8081  # type: ignore[union-attr]
     assert isinstance(hosts[0].kwargs["repository_factory"], RelayRepositoryFactory)
+    assert str(tmp_path) not in sys.path
 
 
 @pytest.mark.asyncio
@@ -275,6 +279,7 @@ async def test_pipecat_cloud_session_runs_native_worker_and_closes_relay(
             assert selected_repository.repository is repository
 
         def build(self, **kwargs: object) -> FakeSession:
+            assert str(tmp_path) in sys.path
             assert kwargs["sample_rate"] == 16000
             return FakeSession()
 
@@ -331,6 +336,7 @@ async def test_pipecat_cloud_session_runs_native_worker_and_closes_relay(
     assert "runner.run" in events
     assert "session.wait" in events
     assert events[-1] == "relay.close"
+    assert str(tmp_path) not in sys.path
 
 
 @pytest.mark.asyncio
@@ -569,6 +575,13 @@ def test_cloud_project_loading_and_helpers(tmp_path: Path) -> None:
     manifest, agent = cloud_runtime._load_project(settings)
     assert manifest.runtime == "pipecat"
     assert agent.name == "voicey-agent"
+    sys.modules.pop("tools", None)
+    with cloud_runtime._project_imports(settings.project_root):
+        lazy_tools = importlib.import_module("tools")
+        assert lazy_tools.IMPORT_MARKER == "project-tools"
+        assert str(settings.project_root) in sys.path
+    sys.modules.pop("tools", None)
+    assert str(settings.project_root) not in sys.path
     assert cloud_runtime._call_data_text({"from": "+14155550100"}, "from") == "+14155550100"
     assert cloud_runtime._integer({}, "VALUE", default=2) == 2
     with pytest.raises(VoiceyError, match="must be an integer"):

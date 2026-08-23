@@ -1749,8 +1749,24 @@ async def _wait_relay_call(
             if exc.code != "VY-OBS-003":
                 raise
             call = None
-        if call is not None and (not terminal or call.ended_at is not None):
-            return
+        if call is not None:
+            if terminal and call.ended_at is not None:
+                if call.status != "completed":
+                    raise VoiceyError(
+                        "VY-DEP-004",
+                        detail=(
+                            f"cloud session {call_id!r} terminated with status "
+                            f"{call.status!r}, not 'completed'."
+                        ),
+                    )
+                return
+            if not terminal:
+                if call.ended_at is not None:
+                    raise VoiceyError(
+                        "VY-DEP-004",
+                        detail=f"cloud session {call_id!r} failed before media readiness.",
+                    )
+                return
         if asyncio.get_running_loop().time() >= deadline:
             raise VoiceyError("VY-DEP-004", detail=failure)
         await asyncio.sleep(poll_interval_s)

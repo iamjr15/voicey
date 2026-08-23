@@ -7,8 +7,8 @@ import importlib
 import os
 import sys
 import uuid
-from collections.abc import Mapping
-from contextlib import suppress
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -106,8 +106,20 @@ async def run_pipecat_cloud_session(
     *,
     environment: Mapping[str, str] | None = None,
 ) -> None:
-    """Run one current Pipecat ``RunnerArguments`` session against the relay."""
+    """Keep the immutable project importable for the full hosted session."""
     values = dict(os.environ if environment is None else environment)
+    settings = CloudWorkerSettings.from_environment(values, expected_runtime="pipecat")
+    with _project_imports(settings.project_root):
+        await _run_pipecat_cloud_session(runner_args, environment=values)
+
+
+async def _run_pipecat_cloud_session(
+    runner_args: object,
+    *,
+    environment: Mapping[str, str],
+) -> None:
+    """Run one current Pipecat ``RunnerArguments`` session against the relay."""
+    values = dict(environment)
     settings = CloudWorkerSettings.from_environment(values, expected_runtime="pipecat")
     manifest, agent = _load_project(settings)
     if manifest.runtime != "pipecat" or agent.runtime != "pipecat":
@@ -195,8 +207,19 @@ async def run_livekit_cloud_worker(
     *,
     environment: Mapping[str, str] | None = None,
 ) -> None:
-    """Start the pinned native ``AgentServer`` with a per-job relay factory."""
+    """Keep the immutable project importable for every dispatched hosted job."""
     values = dict(os.environ if environment is None else environment)
+    settings = CloudWorkerSettings.from_environment(values, expected_runtime="livekit")
+    with _project_imports(settings.project_root):
+        await _run_livekit_cloud_worker(environment=values)
+
+
+async def _run_livekit_cloud_worker(
+    *,
+    environment: Mapping[str, str],
+) -> None:
+    """Start the pinned native ``AgentServer`` with a per-job relay factory."""
+    values = dict(environment)
     settings = CloudWorkerSettings.from_environment(values, expected_runtime="livekit")
     manifest, agent = _load_project(settings)
     if manifest.runtime != "livekit" or agent.runtime != "livekit":
@@ -534,25 +557,36 @@ def _load_project(settings: CloudWorkerSettings) -> tuple[ProjectManifest, Agent
     if not root.is_dir():
         raise VoiceyError("VY-DEP-008", detail="cloud project directory is unavailable.")
     manifest = ManifestStore(root / "voicey.jsonc").load()
-    text = str(root)
-    sys.path.insert(0, text)
-    try:
-        module = importlib.import_module(manifest.agent_module)
-        value: object = cast(Any, module).agent
-    except (ImportError, AttributeError) as exc:
-        raise VoiceyError(
-            "VY-DEP-008",
-            detail=f"{manifest.agent_module}.py must export an Agent named `agent`.",
-        ) from exc
-    finally:
-        with suppress(ValueError):
-            sys.path.remove(text)
+    with _project_imports(root):
+        try:
+            module = importlib.import_module(manifest.agent_module)
+            value: object = cast(Any, module).agent
+        except (ImportError, AttributeError) as exc:
+            raise VoiceyError(
+                "VY-DEP-008",
+                detail=f"{manifest.agent_module}.py must export an Agent named `agent`.",
+            ) from exc
     if not isinstance(value, Agent):
         raise VoiceyError(
             "VY-DEP-008",
             detail=f"{manifest.agent_module}.agent is not a voicey Agent.",
         )
     return manifest, value
+
+
+@contextmanager
+def _project_imports(root: Path) -> Generator[None]:
+    """Scope lazy flow/tool imports to one immutable cloud project."""
+    text = str(root)
+    inserted = text not in sys.path
+    if inserted:
+        sys.path.insert(0, text)
+    try:
+        yield
+    finally:
+        if inserted:
+            with suppress(ValueError):
+                sys.path.remove(text)
 
 
 def _call_data_text(call_data: object, *names: str) -> str | None:

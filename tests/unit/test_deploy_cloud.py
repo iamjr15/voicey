@@ -50,6 +50,7 @@ class FakeRelayClient:
 
     def __init__(self, _url: str, _credential: RelayCredential) -> None:
         self.closed = False
+        self.call_reads = 0
 
     async def __aenter__(self) -> FakeRelayClient:
         type(self).opens += 1
@@ -66,7 +67,12 @@ class FakeRelayClient:
         self.closed = True
 
     async def get_call(self, _call_id: str) -> object:
-        return SimpleNamespace(ended_at=datetime.now(UTC))
+        self.call_reads += 1
+        terminal = self.call_reads > 1
+        return SimpleNamespace(
+            ended_at=datetime.now(UTC) if terminal else None,
+            status="completed" if terminal else "active",
+        )
 
 
 class FakePipecatCloudRunner:
@@ -1052,7 +1058,7 @@ async def test_wait_relay_call_retries_absence_and_propagates_other_errors() -> 
             self.calls += 1
             if self.calls == 1:
                 raise VoiceyError("VY-OBS-003")
-            return SimpleNamespace(ended_at=datetime.now(UTC))
+            return SimpleNamespace(ended_at=datetime.now(UTC), status="completed")
 
     client = Client()
     await _wait_relay_call(
@@ -1064,6 +1070,30 @@ async def test_wait_relay_call_retries_absence_and_propagates_other_errors() -> 
         failure="timeout",
     )
     assert client.calls == 2
+
+    class Failed:
+        async def get_call(self, _call_id: str) -> object:
+            return SimpleNamespace(ended_at=datetime.now(UTC), status="failed")
+
+    with pytest.raises(VoiceyError, match="not 'completed'"):
+        await _wait_relay_call(
+            cast("object", Failed()),  # type: ignore[arg-type]
+            "call_test",
+            timeout_s=1,
+            poll_interval_s=0,
+            terminal=True,
+            failure="timeout",
+        )
+
+    with pytest.raises(VoiceyError, match="before media readiness"):
+        await _wait_relay_call(
+            cast("object", Failed()),  # type: ignore[arg-type]
+            "call_test",
+            timeout_s=1,
+            poll_interval_s=0,
+            terminal=False,
+            failure="timeout",
+        )
 
     class Broken:
         async def get_call(self, _call_id: str) -> object:

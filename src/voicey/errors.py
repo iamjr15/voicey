@@ -376,7 +376,10 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
     "VY-DEP-004": ErrorDefinition(
         code="VY-DEP-004",
         cause="Post-deploy smoke verification failed or lacks a required live-call input.",
-        fix="Correct the printed URL/number/credential requirement and rerun the smoke command.",
+        fix=(
+            "Correct the printed URL/number/credential or failed terminal state, then rerun "
+            "the smoke command."
+        ),
     ),
     "VY-DEP-005": ErrorDefinition(
         code="VY-DEP-005",

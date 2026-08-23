@@ -451,8 +451,8 @@ invalid.
 **Cause:** Post-deploy smoke verification failed or lacks a required live-call
 input.
 
-**Fix:** Correct the printed URL, number, or credential requirement and rerun
-the smoke command.
+**Fix:** Correct the printed URL, number, credential, or failed terminal state,
+then rerun the smoke command.
 
 ## VY-DEP-005
 
