@@ -892,6 +892,12 @@ async def test_railway_failure_version_and_created_only_rollback(
         ("service", "delete"),
         ("delete", "--project"),
     ]
+    service_deletes = [
+        command for command in runner.commands if command[:2] == ("service", "delete")
+    ]
+    assert [command.count("--service") for command in service_deletes] == [1, 1]
+    assert service_deletes[0][service_deletes[0].index("--service") + 1] == runner.postgres_id
+    assert service_deletes[1][service_deletes[1].index("--service") + 1] == runner.service_id
 
 
 @pytest.mark.asyncio

@@ -145,7 +145,8 @@ voicey deploy railway \
 
 Voicey deletes only resources marked created in its checkpoint, in this
 order: service domain, private bucket, Postgres service, application service,
-project. Failed deployments are left checkpointed for inspection and resume;
+project. Each target service identity is passed exactly once and each successful
+deletion is checkpointed. Failed deployments are left checkpointed for inspection and resume;
 there is no automatic destructive rollback. Never use the rollback command on
 a production or incompletely reviewed ledger.
 

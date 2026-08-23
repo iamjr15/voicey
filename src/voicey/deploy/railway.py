@@ -521,7 +521,7 @@ class RailwayDeploymentManager:
         state.validate_plan(plan)
         self._authenticate()
         self._link(state)
-        common = self._context_args(state)
+        common = self._project_environment_args(state)
         if state.domain_created and state.public_base is not None:
             self.runner.run(
                 [
@@ -1362,18 +1362,24 @@ class RailwayDeploymentManager:
         return state.checkpoint(environment_id=environment_id)
 
     def _context_args(self, state: RailwayResourceState) -> list[str]:
-        if state.project_id is None or state.service_id is None:
+        if state.service_id is None:
             raise VoiceyError(
                 "VY-DEP-007",
-                detail="Railway project/service context is incomplete.",
+                detail="Railway service context is incomplete.",
+            )
+        return [*self._project_environment_args(state), "--service", state.service_id]
+
+    def _project_environment_args(self, state: RailwayResourceState) -> list[str]:
+        if state.project_id is None:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail="Railway project context is incomplete.",
             )
         return [
             "--project",
             state.project_id,
             "--environment",
             state.environment_id or state.environment,
-            "--service",
-            state.service_id,
         ]
 
 
