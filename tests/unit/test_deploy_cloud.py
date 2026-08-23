@@ -307,6 +307,7 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     config = artifacts.platform_config.read_text(encoding="utf-8")  # type: ignore[union-attr]
     bot = artifacts.bot.read_text(encoding="utf-8")  # type: ignore[union-attr]
     assert "USER 10001:10001" in dockerfile
+    assert '"--host", "0.0.0.0", "--port", "7860"' in dockerfile
     assert "voicey.deploy.cloud_runtime" in bot
     assert 'agent_name = "voicey-agent"' in config
     assert "CUSTOM_TOOL_TOKEN" not in _context_text(artifacts.context)

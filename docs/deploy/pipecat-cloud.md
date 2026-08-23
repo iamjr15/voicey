@@ -61,7 +61,9 @@ docker push registry.example.com/voicey/my-agent:git-sha
 Pipecat Cloud accepts only `linux/arm64` images. Voicey pins that platform in
 the printed build command so x86 and Arm development machines produce the same
 deployable artifact. The multi-stage image uses a glibc Python base and
-UID/GID 10001. The generated bot accepts the installed native `RunnerArguments` forms for Daily,
+UID/GID 10001 and binds the installed runner to `0.0.0.0:7860` so Pipecat
+Cloud's validation plane can reach it from outside the container's loopback
+interface. The generated bot accepts the installed native `RunnerArguments` forms for Daily,
 SmallWebRTC, and Twilio/Telnyx/Vobiz/Plivo WebSockets. It does not introduce a
 conversation DSL.
 

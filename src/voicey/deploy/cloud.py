@@ -1236,7 +1236,8 @@ def _cloud_dockerfile(
     )
     wheel_copy = f"COPY {wheel.name} /tmp/{wheel.name}\n" if wheel is not None else ""
     entrypoint = (
-        'COPY bot.py /app/bot.py\nCMD ["python", "/app/bot.py"]'
+        "COPY bot.py /app/bot.py\n"
+        'CMD ["python", "/app/bot.py", "--host", "0.0.0.0", "--port", "7860"]'
         if platform == "pipecat-cloud"
         else 'CMD ["python", "-m", "voicey.deploy.cloud_runtime", "livekit"]'
     )
