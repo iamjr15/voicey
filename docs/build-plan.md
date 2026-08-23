@@ -210,7 +210,11 @@ mutation, passes database and bucket values through Railway variable
 references, passes every credential through stdin, retains current/previous
 relay and result credentials during rotation, runs the real migration/object/
 rolling-generation preflight before release, and requires platform success,
-unsigned liveness, and signed relay readiness. Failed work remains resumable;
+unsigned liveness, and signed relay readiness. The live free-tier gate on
+2026-08-23 exposed a Railway preferred-region mismatch (Singapore companion,
+Amsterdam Postgres) that made signed requests take 2.8–5.2 seconds. The deploy
+contract now rejects a non-singleton or cross-region volume-backed Postgres
+before upload and accepts only co-located service/bucket region pairs. Failed work remains resumable;
 explicit rollback deletes only voicey-created domain, bucket, Postgres,
 service, and project in reverse order. The local P4.3 gate executed Railway CLI
 5.30.1 and a disposable PostgreSQL 17 preflight successfully. The external

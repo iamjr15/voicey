@@ -756,6 +756,13 @@ These choices apply the documented proposals authorized in the build mandate and
   probe. Run two service replicas in one explicitly selected region with a
   30-second deployment overlap, then require release success, `/healthz`, and
   authenticated `/v1/ready`.
+- Require the two stateless replicas, singleton volume-backed Postgres, and
+  private bucket to be geographically co-located. Railway creates databases in
+  the workspace preferred region and volume migration is a downtime operation;
+  therefore voicey validates the actual Postgres placement before uploading a
+  release and rejects mismatched service/bucket pairs. This follows Railway's
+  [region and volume contract](https://docs.railway.com/deployments/regions)
+  instead of masking cross-region latency with longer worker leases.
 - Checkpoint every mutation and do not auto-delete failed work. Explicit
   rollback removes only voicey-created domain, bucket, Postgres service,
   application service, and project in reverse order. Adopted resources are

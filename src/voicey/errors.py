@@ -390,10 +390,14 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
     ),
     "VY-DEP-007": ErrorDefinition(
         code="VY-DEP-007",
-        cause="Managed deployment resource identity, ownership, or checkpoint evidence drifted.",
+        cause=(
+            "Managed deployment resource identity, ownership, placement, or checkpoint "
+            "evidence drifted."
+        ),
         fix=(
             "Inspect the platform resources and owner-only resource ledger; explicitly adopt "
-            "only verified resources or restore the recorded identity before retrying."
+            "only verified resources, restore the recorded identity, or co-locate managed "
+            "storage with its service before retrying."
         ),
     ),
     "VY-DEP-008": ErrorDefinition(

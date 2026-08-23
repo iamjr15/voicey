@@ -40,6 +40,18 @@ _NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 _ENVIRONMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,62}$")
 _SERVICE_REGIONS = frozenset({"us-west", "us-east", "eu-west", "southeast-asia"})
 _BUCKET_REGIONS = frozenset({"sjc", "iad", "ams", "sin"})
+_COLOCATED_REGIONS = {
+    "us-west": "sjc",
+    "us-east": "iad",
+    "eu-west": "ams",
+    "southeast-asia": "sin",
+}
+_SERVICE_REGION_IDENTIFIERS = {
+    "us-west": frozenset({"us-west", "us-west2"}),
+    "us-east": frozenset({"us-east", "us-east4-eqdc4a"}),
+    "eu-west": frozenset({"eu-west", "ams", "europe-west4-drams3a"}),
+    "southeast-asia": frozenset({"southeast-asia", "sin", "asia-southeast1-eqsg3a"}),
+}
 _CALLBACK_PROVIDERS = frozenset({"twilio", "telnyx", "vobiz", "plivo"})
 _SUCCESS_STATUSES = frozenset({"SUCCESS", "HEALTHY", "RUNNING"})
 _FAILURE_STATUSES = frozenset({"CRASHED", "FAILED", "REMOVED", "CANCELLED", "CANCELED", "SKIPPED"})
@@ -69,6 +81,7 @@ class RailwayPlan:
             or not _ENVIRONMENT.fullmatch(self.environment)
             or self.service_region not in _SERVICE_REGIONS
             or self.bucket_region not in _BUCKET_REGIONS
+            or _COLOCATED_REGIONS.get(self.service_region) != self.bucket_region
             or (self.project_id is not None and not self.project_id.strip())
             or any(provider not in _CALLBACK_PROVIDERS for provider in self.callback_providers)
             or len(set(self.callback_providers)) != len(self.callback_providers)
@@ -249,6 +262,7 @@ class RailwayResourceState:
             or not _ENVIRONMENT.fullmatch(state.environment)
             or state.service_region not in _SERVICE_REGIONS
             or state.bucket_region not in _BUCKET_REGIONS
+            or _COLOCATED_REGIONS.get(state.service_region) != state.bucket_region
         ):
             raise VoiceyError(
                 "VY-DEP-007",
@@ -481,6 +495,7 @@ class RailwayDeploymentManager:
         state = await asyncio.to_thread(self._ensure_project, plan, state, adopt)
         state = await asyncio.to_thread(self._ensure_service, plan, state, adopt)
         state = await asyncio.to_thread(self._ensure_postgres, plan, state, adopt)
+        await asyncio.to_thread(self._verify_postgres_placement, plan, state)
         state = await asyncio.to_thread(self._ensure_bucket, plan, state, adopt)
         state = await asyncio.to_thread(self._ensure_domain, plan, state, adopt)
         state = await asyncio.to_thread(
@@ -873,6 +888,42 @@ class RailwayDeploymentManager:
         checkpoint = state.checkpoint(bucket_id=bucket_id, bucket_created=True)
         self.store.save(checkpoint)
         return checkpoint
+
+    def _verify_postgres_placement(
+        self,
+        plan: RailwayPlan,
+        state: RailwayResourceState,
+    ) -> None:
+        """Reject a volume-backed database outside the selected compute region."""
+        if state.postgres_id is None:
+            raise VoiceyError("VY-DEP-007", detail="Railway Postgres id is missing.")
+        status = self.runner.run(["status", "--json"], timeout_s=60)
+        try:
+            regions = _service_region_counts(
+                _parse_json(status.stdout, label="Railway project status"),
+                state.postgres_id,
+            )
+        except LookupError as exc:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail="Railway project status omitted the ledgered Postgres service.",
+            ) from exc
+        identifiers = _SERVICE_REGION_IDENTIFIERS[plan.service_region]
+        if len(regions) != 1 or next(iter(regions.values()), 0) != 1:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail="Railway Postgres must have exactly one volume-backed replica.",
+            )
+        actual = next(iter(regions))
+        if actual not in identifiers:
+            raise VoiceyError(
+                "VY-DEP-007",
+                detail=(
+                    "Railway Postgres is outside the selected companion region. Set the "
+                    "workspace preferred region before creating Postgres, or migrate its "
+                    "volume in Railway, then rerun this exact deploy."
+                ),
+            )
 
     def _ensure_domain(
         self,

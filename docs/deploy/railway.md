@@ -32,12 +32,18 @@ voicey deploy railway \
 ```
 
 Published releases omit `--engine-wheel`. No resource or region is selected by
-default. The command:
+default. Before the first deploy, set the Railway workspace preferred region to
+the same region selected by `--service-region`; Railway creates the
+volume-backed Postgres service there. The only accepted co-located pairs are
+`us-west`/`sjc`, `us-east`/`iad`, `eu-west`/`ams`, and
+`southeast-asia`/`sin`. The command:
 
 1. validates the plan, callback credentials, wheel, CLI range, authentication,
    and owner-only checkpoint before mutation;
 2. creates the exact project/environment, application service, managed
-   Postgres service, private Railway bucket, and service domain;
+   Postgres service, private Railway bucket, and service domain, then verifies
+   Postgres has exactly one replica in the selected service region before any
+   release upload;
 3. connects Postgres and bucket variables with Railway references and sends
    relay/results/carrier secrets one at a time over stdin;
 4. generates a secret-free, non-root companion image and current
@@ -53,6 +59,14 @@ exact ledgered service, snapshots its current placement, then runs a
 context-free `REGION=2` scale. It resolves Railway's canonical region id from
 the response and explicitly scales every prior region to zero, leaving exactly
 two replicas in the operator-selected region.
+
+Railway volumes follow their attached service's region, and moving an existing
+volume between regions causes downtime. Voicey therefore fails closed with
+`VY-DEP-007` when the workspace preferred region created Postgres somewhere
+else. Set the preferred region before creating a new stack, or explicitly
+migrate the existing Postgres volume in Railway, then rerun the exact command.
+Voicey never silently stretches the relay across regions or migrates a stateful
+volume. See Railway's [region contract](https://docs.railway.com/deployments/regions).
 
 Generated artifacts live in `.voicey/deploy/railway/`. The owner-only,
 non-secret checkpoint is `.voicey/deploy/railway-resources.json`. It stores

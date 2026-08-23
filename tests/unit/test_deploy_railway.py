@@ -73,6 +73,7 @@ class FakeRailwayRunner:
         )
         self.deployment_status = deployment_status
         self.regions: dict[str, dict[str, int]] = {"ams": {"numReplicas": 2}}
+        self.postgres_regions: dict[str, dict[str, int]] = {"us-east4-eqdc4a": {"numReplicas": 1}}
         self.commands: list[tuple[str, ...]] = []
         self.secret_payloads: list[tuple[str, str]] = []
 
@@ -219,7 +220,23 @@ class FakeRailwayRunner:
                                                             }
                                                         },
                                                     }
-                                                }
+                                                },
+                                                {
+                                                    "node": {
+                                                        "serviceId": self.postgres_id,
+                                                        "latestDeployment": {
+                                                            "meta": {
+                                                                "serviceManifest": {
+                                                                    "deploy": {
+                                                                        "multiRegionConfig": (
+                                                                            self.postgres_regions
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                    }
+                                                },
                                             ]
                                         }
                                     }
@@ -340,6 +357,8 @@ def test_railway_plan_artifacts_and_helpers_are_strict_and_secret_free(
             service_region="us-east",
             bucket_region="iad",
         )
+    with pytest.raises(VoiceyError, match="VY-DEP-003"):
+        replace(_plan(), bucket_region="ams")
     with pytest.raises(VoiceyError, match="VY-DEP-007"):
         _variable_reference("unsafe}}", "DATABASE_URL")
     with pytest.raises(VoiceyError, match="VY-DEP-007"):
@@ -407,6 +426,24 @@ def test_railway_scale_maps_missing_ledgered_service_to_catalog_error(tmp_path: 
         RailwayResourceStore(link).load()
     with pytest.raises(VoiceyError, match="VY-SEC-002"):
         RailwayResourceStore(link).save(state)
+
+
+def test_railway_rejects_cross_region_postgres_before_release(tmp_path: Path) -> None:
+    runner = FakeRailwayRunner()
+    runner.postgres_regions = {"ams": {"numReplicas": 1}}
+    manager = RailwayDeploymentManager(tmp_path, runner=runner)
+    state = replace(
+        RailwayResourceState.initial(_plan()),
+        postgres_id=runner.postgres_id,
+        postgres_name="Postgres",
+    )
+
+    with pytest.raises(VoiceyError, match="outside the selected companion region"):
+        manager._verify_postgres_placement(_plan(), state)
+
+    runner.postgres_regions = {"us-east4-eqdc4a": {"numReplicas": 2}}
+    with pytest.raises(VoiceyError, match="exactly one volume-backed replica"):
+        manager._verify_postgres_placement(_plan(), state)
 
 
 def test_railway_artifacts_support_published_install_and_reject_bad_wheels(

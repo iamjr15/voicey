@@ -471,12 +471,12 @@ command.
 
 ## VY-DEP-007
 
-**Cause:** Managed deployment resource identity, ownership, or checkpoint
-evidence drifted.
+**Cause:** Managed deployment resource identity, ownership, placement, or
+checkpoint evidence drifted.
 
 **Fix:** Inspect the platform resources and owner-only resource ledger;
-explicitly adopt only verified resources or restore the recorded identity
-before retrying.
+explicitly adopt only verified resources, restore the recorded identity, or
+co-locate managed storage with its service before retrying.
 
 ## VY-DEP-008
 
