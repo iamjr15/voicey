@@ -894,6 +894,11 @@ These choices apply the documented proposals authorized in the build mandate and
   endpoint passed a minimal request but repeatedly returned 504 for LiveKit's
   full appointment prompt and native tool schema. The same key completed a
   direct 3.5 tool call; the cloud worker is the final acceptance gate.
+- Prioritize a waiting relay lease renewal over queued observation writes while
+  retaining one in-flight ordered update per call. LiveKit's native state and
+  tool events exposed a cross-region backpressure case where FIFO observation
+  writes consumed the entire 30-second lease. Renewal priority preserves exact
+  sequence/replay and fixes the shared Pipecat/LiveKit ownership invariant.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

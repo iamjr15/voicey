@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
@@ -43,13 +45,46 @@ from voicey.storage.models import (
 )
 
 
+class _PriorityLock:
+    """Serialize a relay stream while letting lease renewal bound fence risk."""
+
+    def __init__(self) -> None:
+        self._condition = asyncio.Condition()
+        self._locked = False
+        self._urgent_waiters = 0
+
+    @asynccontextmanager
+    async def hold(self, *, urgent: bool) -> AsyncGenerator[None]:
+        acquired = False
+        try:
+            async with self._condition:
+                if urgent:
+                    self._urgent_waiters += 1
+                try:
+                    await self._condition.wait_for(
+                        lambda: not self._locked and (urgent or self._urgent_waiters == 0)
+                    )
+                    self._locked = True
+                    acquired = True
+                finally:
+                    if urgent:
+                        self._urgent_waiters -= 1
+                        self._condition.notify_all()
+            yield
+        finally:
+            if acquired:
+                async with self._condition:
+                    self._locked = False
+                    self._condition.notify_all()
+
+
 @dataclass(slots=True)
 class _CallState:
     lease: CallLease
     fence_token: str
     next_sequence: int
     pending: RelayUpdateRequest | None = None
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    lock: _PriorityLock = field(default_factory=_PriorityLock)
 
 
 class RelayClient:
@@ -303,7 +338,10 @@ class RelayClient:
                 "VY-REL-004",
                 detail=f"call {call_id!r} has no server-issued fence in this worker.",
             ) from exc
-        async with state.lock:
+        # Timeline and transcript bursts can otherwise occupy the ordered stream
+        # until its lease expires. Renewal may overtake queued work, but never the
+        # current request, so sequence and exact replay remain unchanged.
+        async with state.lock.hold(urgent=operation == "renew_lease"):
             if state.pending is not None:
                 pending = state.pending
                 same_operation = pending.operation == operation and pending.payload == payload

@@ -92,6 +92,12 @@ terminalization, and recording ready/failed state. Delivery claims, retention,
 and stale-call recovery stay on the durable companion; cloud-worker
 credentials do not receive those repository operations.
 
+Each call still has exactly one in-flight ordered update. Lease renewal has
+priority over observation writes waiting for that stream, while the current
+request is never interrupted or reordered. This bounds recovery risk under a
+burst of native runtime events without weakening exact replay or the
+server-issued sequence.
+
 Carrier status and recording callbacks terminate on the companion when their
 provider is explicitly configured. Carrier-native signatures are verified
 before a status observation is persisted or recording bytes are downloaded.

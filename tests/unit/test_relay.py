@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -62,6 +63,27 @@ class _CancelFirstUpdateResponse(httpx.AsyncBaseTransport):
             await response.aclose()
             raise asyncio.CancelledError
         return response
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+class _BlockFirstObservation(httpx.AsyncBaseTransport):
+    def __init__(self, app: object) -> None:
+        self._inner = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+        self.first_observation_started = asyncio.Event()
+        self.release_first_observation = asyncio.Event()
+        self.operations: list[str] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/updates"):
+            payload = json.loads(request.content)
+            operation = payload["operation"]
+            self.operations.append(operation)
+            if operation == "append_timeline" and not self.first_observation_started.is_set():
+                self.first_observation_started.set()
+                await self.release_first_observation.wait()
+        return await self._inner.handle_async_request(request)
 
     async def aclose(self) -> None:
         await self._inner.aclose()
@@ -226,6 +248,52 @@ async def test_relay_stream_survives_cancelled_ack_exactly_once(
         assert event.event_type == "call.completed"
         assert [item.event_type for item in call.timeline] == ["runtime.admitted"]
         assert await journal.next_sequence(lease.call_id) == 3
+
+
+@pytest.mark.asyncio
+async def test_relay_renewal_overtakes_queued_observations(tmp_path: Path) -> None:
+    credential = RelayCredential.issue("current-key")
+    keyring = RelayKeyring(current=credential)
+    async with (
+        SQLiteRepository(tmp_path / "calls.sqlite3") as repository,
+        SQLiteRelayJournal(tmp_path / "relay.sqlite3") as journal,
+    ):
+        app = create_relay_app(
+            RepositoryRelayBackend(repository, journal, fences=FenceSigner(keyring)),
+            keyring=keyring,
+        )
+        transport = _BlockFirstObservation(app)
+        http = httpx.AsyncClient(transport=transport, base_url="https://relay.test")
+        async with RelayClient("https://relay.test", credential, client=http) as client:
+            lease = await client.begin_call(
+                _call("call_renewal_priority"),
+                owner_id="worker-a",
+                delivery=_delivery(),
+                lease_ttl=timedelta(seconds=30),
+            )
+            first = asyncio.create_task(
+                client.append_timeline(
+                    lease.call_id,
+                    TimelineEvent(event_type="runtime.first"),
+                )
+            )
+            await transport.first_observation_started.wait()
+            second = asyncio.create_task(
+                client.append_timeline(
+                    lease.call_id,
+                    TimelineEvent(event_type="runtime.second"),
+                )
+            )
+            await asyncio.sleep(0)
+            renewal = asyncio.create_task(
+                client.renew_lease(lease, lease_ttl=timedelta(seconds=30))
+            )
+            await asyncio.sleep(0)
+            transport.release_first_observation.set()
+            await asyncio.gather(first, second, renewal)
+        await http.aclose()
+        assert transport.operations == ["append_timeline", "renew_lease", "append_timeline"]
+        assert await journal.next_sequence(lease.call_id) == 4
 
 
 @pytest.mark.asyncio
