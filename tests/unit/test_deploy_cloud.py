@@ -29,6 +29,7 @@ from voicey.deploy.cloud import (
     _pipecat_agent_exists,
     _project_requirements,
     _require_livekit_project,
+    _require_pipecat_image,
     _require_ready,
     _require_region,
     _require_secret_names,
@@ -92,8 +93,14 @@ class FakePipecatCloudRunner:
         if command[:3] == ("cloud", "agent", "status"):
             if not self.exists:
                 return _result("No deployment data found for agent with name 'voicey-agent'")
-            health = "Ready" if self.ready else "Stopped"
-            return _result(f"Status for agent voicey-agent\nHealth: {health}")
+            ready = "True" if self.ready else "False"
+            phase = "Active" if self.ready else "Failed"
+            return _result(
+                "Agent: voicey-agent\n"
+                f"Ready: {ready}\n"
+                f"Deployment Phase: {phase}\n"
+                "Image: registry.example.test/voicey/agent:sha-123"
+            )
         if command[:3] == ("cloud", "secrets", "set"):
             path = Path(command[command.index("--file") + 1])
             assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -462,7 +469,7 @@ async def test_pipecat_cloud_deploy_syncs_without_argv_secrets_smokes_and_resume
     assert "CUSTOM_TOOL_TOKEN" in runner.secret_names
     assert "VOICEY_WEBHOOK_SECRET" not in runner.secret_names
     assert "VOICEY_RESULTS_SECRET" not in runner.secret_names
-    assert sum(command[:2] == ("cloud", "deploy") for command in runner.commands) == 2
+    assert sum(command[:2] == ("cloud", "deploy") for command in runner.commands) == 1
     ledger = manager.store.path.read_text(encoding="utf-8")
     dotenv = (project / ".env").read_text(encoding="utf-8")
     relay_value = next(
@@ -761,11 +768,24 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
     assert _current_version("current version: release_8") == "release_8"
     assert _current_version("no versions") is None
     assert _pipecat_agent_exists(_result("\x1b[32mStatus for agent demo\x1b[0m"))
+    assert _pipecat_agent_exists(_result("Agent: demo\nReady: True\nDeployment Phase: Active"))
     assert not _pipecat_agent_exists(_result("No deployment data found for agent demo"))
 
     _require_ready("Status: RUNNING", platform="test")
+    _require_ready("Agent: demo\nReady: True\nDeployment Phase: Active", platform="test")
+    with pytest.raises(VoiceyError, match="did not report ready"):
+        _require_ready("Agent: demo\nReady: False\nDeployment Phase: Validating", platform="test")
     with pytest.raises(VoiceyError, match="did not report ready"):
         _require_ready("Status: stopped", platform="test")
+    _require_pipecat_image(
+        "Image: registry.example.test/voicey/agent:sha-123",
+        "registry.example.test/voicey/agent:sha-123",
+    )
+    with pytest.raises(VoiceyError, match="image does not match"):
+        _require_pipecat_image(
+            "Image: registry.example.test/voicey/agent:other",
+            "registry.example.test/voicey/agent:sha-123",
+        )
     _require_region("us-west Oregon", "us-west", platform="test")
     with pytest.raises(VoiceyError, match="does not expose region"):
         _require_region("us-east", "us-west", platform="test")

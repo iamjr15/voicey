@@ -460,6 +460,12 @@ runs the derived image as non-root UID/GID 10001, and explicitly converts only
 the Daily and WebSocket argument classes to the installed runner types. The
 transport-free form fails closed. The mutable documented Python 3.14 tag is
 not used because the tested versioned `0.1.0-py3.14` tag did not exist.
+The installed CLI's live status output now uses separate `Agent:`, `Ready:`,
+`Deployment Phase:`, and `Image:` fields rather than the earlier `Status for
+agent` sentence. The platform made the deployment Active after probing
+`GET /readyz` (the versioned base returned 404), so readiness is determined by
+the control-plane status fields, not by assuming that probe response is the
+operator contract.
 ```toml
 agent_name = "my-voice-agent"          # required
 image = "you/my-agent:0.1"             # or build_id / cloud build

@@ -93,6 +93,10 @@ authenticates the CLI, validates the selected region, refuses an unledgered
 existing agent, syncs secrets through a temporary `0600` file, deploys the
 exact image, and requires ready status. It then starts a real Daily-backed
 platform session and proves both its durable begin and terminal records.
+A retry after a post-deploy interruption reconciles the current `Agent:`,
+`Ready:`, `Deployment Phase:`, and exact `Image:` status fields against the
+owner-only ledger, then resumes at readiness/session smoke without redeploying.
+`Ready: False` always fails closed.
 A successful control-plane smoke is not browser-media evidence; complete one
 real browser conversation before promoting a web deployment.
 

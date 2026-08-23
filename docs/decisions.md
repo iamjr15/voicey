@@ -803,6 +803,11 @@ These choices apply the documented proposals authorized in the build mandate and
   `WebSocketSessionArguments` at the boundary, converting them to the pinned
   native runner types. Reject the generic transport-free argument and unknown
   lookalikes with `VY-DEP-008`.
+- Parse the current CLI's structured status lines (`Agent:`, `Ready:`,
+  `Deployment Phase:`, and `Image:`) rather than the removed `Status for
+  agent` sentence. `Ready: False` must never satisfy readiness. If the durable
+  ledger already records deployment, reconcile the exact immutable image and
+  resume at readiness/session smoke without creating another deployment.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

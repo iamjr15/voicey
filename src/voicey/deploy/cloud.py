@@ -715,46 +715,50 @@ class PipecatCloudDeploymentManager:
         state = state.checkpoint(secrets_synced=True)
         self.store.save(state)
 
-        command = [
-            "cloud",
-            "deploy",
-            plan.agent_name,
-            plan.image,
-            "--min-agents",
-            str(plan.min_agents),
-            "--max-agents",
-            str(plan.max_agents),
-            "--secrets",
-            plan.secret_set,
-            "--organization",
-            plan.organization,
-            "--profile",
-            plan.profile,
-            "--region",
-            plan.region,
-            "--force",
-        ]
-        if plan.image_pull_secret is None:
-            command.append("--no-credentials")
+        if state.deployed:
+            _require_pipecat_image(status.stdout, plan.image)
+            ready = status
         else:
-            command.extend(["--credentials", plan.image_pull_secret])
-        self.runner.run(command, cwd=artifacts.context, timeout_s=1800)
-        if not exists:
-            state = state.checkpoint(agent_created=True)
-        state = state.checkpoint(deployed=True)
-        self.store.save(state)
-        ready = self.runner.run(
-            [
+            command = [
                 "cloud",
-                "agent",
-                "status",
+                "deploy",
                 plan.agent_name,
+                plan.image,
+                "--min-agents",
+                str(plan.min_agents),
+                "--max-agents",
+                str(plan.max_agents),
+                "--secrets",
+                plan.secret_set,
                 "--organization",
                 plan.organization,
-            ],
-            cwd=artifacts.context,
-            timeout_s=60,
-        )
+                "--profile",
+                plan.profile,
+                "--region",
+                plan.region,
+                "--force",
+            ]
+            if plan.image_pull_secret is None:
+                command.append("--no-credentials")
+            else:
+                command.extend(["--credentials", plan.image_pull_secret])
+            self.runner.run(command, cwd=artifacts.context, timeout_s=1800)
+            if not exists:
+                state = state.checkpoint(agent_created=True)
+            state = state.checkpoint(deployed=True)
+            self.store.save(state)
+            ready = self.runner.run(
+                [
+                    "cloud",
+                    "agent",
+                    "status",
+                    plan.agent_name,
+                    "--organization",
+                    plan.organization,
+                ],
+                cwd=artifacts.context,
+                timeout_s=60,
+            )
         _require_ready(ready.stdout, platform="Pipecat Cloud")
         session_green = False
         if not skip_session_smoke:
@@ -1517,17 +1521,42 @@ def _pipecat_agent_exists(result: CloudCommandResult) -> bool:
         "",
         f"{result.stdout}\n{result.stderr}",
     ).casefold()
+    current_shape = re.search(r"(?m)^\s*agent:\s*\S+\s*$", normalized) is not None
     return (
         result.returncode == 0
         and "no deployment data found" not in normalized
-        and "status for agent" in normalized
+        and ("status for agent" in normalized or current_shape)
     )
+
+
+def _require_pipecat_image(output: str, image: str) -> None:
+    normalized = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    if re.search(rf"(?m)^\s*Image:\s*{re.escape(image)}\s*$", normalized) is None:
+        raise VoiceyError(
+            "VY-DEP-010",
+            detail="ledgered Pipecat Cloud deployment image does not match the platform.",
+        )
 
 
 def _require_ready(output: str, *, platform: str) -> None:
     normalized = re.sub(r"\x1b\[[0-9;]*m", "", output).casefold()
-    positive = any(word in normalized for word in ("ready", "running", "active", "deployed"))
-    negative = any(word in normalized for word in ("failed", "unhealthy", "stopped", "error"))
+    positive = any(
+        re.search(pattern, normalized) is not None
+        for pattern in (
+            r"(?m)^\s*ready:\s*true\s*$",
+            r"(?m)^\s*deployment phase:\s*active\s*$",
+            r"(?m)^\s*status:\s*(?:running|active|deployed|ready)\s*$",
+            r"(?m)^\s*health:\s*ready\s*$",
+        )
+    )
+    negative = any(
+        re.search(pattern, normalized) is not None
+        for pattern in (
+            r"(?m)^\s*ready:\s*false\s*$",
+            r"(?m)^\s*(?:deployment phase|status|health):\s*"
+            r"(?:failed|unhealthy|stopped|error)\s*$",
+        )
+    )
     if not positive or negative:
         raise VoiceyError("VY-DEP-004", detail=f"{platform} did not report ready.")
 
