@@ -363,8 +363,10 @@ class CloudResourceState:
         account_scope: str,
         region: str,
         relay_url: str,
+        relay_key_id: str,
         relay_fingerprint: str,
-    ) -> None:
+        migrate_relay: bool = False,
+    ) -> bool:
         if self.rolled_back:
             raise VoiceyError(
                 "VY-DEP-010",
@@ -375,13 +377,25 @@ class CloudResourceState:
             or self.agent_name != agent_name
             or self.account_scope != account_scope
             or self.region != region
-            or self.relay_origin != _origin(relay_url)
-            or self.relay_fingerprint != relay_fingerprint
         ):
             raise VoiceyError(
                 "VY-DEP-010",
-                detail="cloud deployment identity or relay credential drifted.",
+                detail="cloud deployment identity drifted.",
             )
+        relay_drifted = (
+            self.relay_origin != _origin(relay_url)
+            or self.relay_key_id != relay_key_id
+            or self.relay_fingerprint != relay_fingerprint
+        )
+        if relay_drifted and not migrate_relay:
+            raise VoiceyError(
+                "VY-DEP-010",
+                detail=(
+                    "cloud relay origin or credential drifted; pass --migrate-relay only "
+                    "after validating the replacement companion."
+                ),
+            )
+        return relay_drifted
 
     def checkpoint(self, **changes: object) -> CloudResourceState:
         return replace(self, **changes)
@@ -611,6 +625,7 @@ class PipecatCloudDeploymentManager:
         engine_wheel: Path | None,
         adopt: bool = False,
         skip_session_smoke: bool = False,
+        migrate_relay: bool = False,
     ) -> CloudDeploymentReport:
         manifest = ManifestStore(self.project_root / "voicey.jsonc").load()
         agent = _load_agent(self.project_root, manifest)
@@ -656,15 +671,34 @@ class PipecatCloudDeploymentManager:
             )
             self.store.save(state)
         else:
-            state.validate(
+            relay_migrated = state.validate(
                 platform="pipecat-cloud",
                 agent_name=plan.agent_name,
                 account_scope=plan.organization,
                 region=plan.region,
                 relay_url=plan.relay_url,
+                relay_key_id=relay.key_id,
                 relay_fingerprint=relay_fingerprint,
+                migrate_relay=migrate_relay,
             )
-            state = state.checkpoint(artifact_digest=artifacts.digest)
+            worker_secrets_changed = state.worker_secrets_fingerprint != worker_secrets_fingerprint
+            changes: dict[str, object] = {"artifact_digest": artifacts.digest}
+            if relay_migrated:
+                changes.update(
+                    relay_origin=_origin(plan.relay_url),
+                    relay_key_id=relay.key_id,
+                    relay_fingerprint=relay_fingerprint,
+                )
+            if relay_migrated or worker_secrets_changed:
+                changes.update(
+                    worker_secrets_fingerprint=None,
+                    secrets_synced=False,
+                    deployed=False,
+                    platform_ready=False,
+                    relay_ready=False,
+                    smoke_call_id=None,
+                )
+            state = state.checkpoint(**changes)
             self.store.save(state)
 
         self.runner.run(["cloud", "auth", "whoami"], cwd=artifacts.context, timeout_s=30)
@@ -891,6 +925,7 @@ class PipecatCloudDeploymentManager:
             account_scope=plan.organization,
             region=plan.region,
             relay_url=plan.relay_url,
+            relay_key_id=state.relay_key_id,
             relay_fingerprint=state.relay_fingerprint,
         )
         if not state.agent_created:
@@ -960,6 +995,7 @@ class LiveKitCloudDeploymentManager:
         adopt: bool = False,
         skip_session_smoke: bool = False,
         smoke_to: str | None = None,
+        migrate_relay: bool = False,
     ) -> CloudDeploymentReport:
         manifest = ManifestStore(self.project_root / "voicey.jsonc").load()
         agent = _load_agent(self.project_root, manifest)
@@ -1001,20 +1037,36 @@ class LiveKitCloudDeploymentManager:
             )
             self.store.save(state)
         else:
-            state.validate(
+            relay_migrated = state.validate(
                 platform="livekit-cloud",
                 agent_name=plan.agent_name,
                 account_scope=plan.project,
                 region=plan.region,
                 relay_url=plan.relay_url,
+                relay_key_id=relay.key_id,
                 relay_fingerprint=relay_fingerprint,
+                migrate_relay=migrate_relay,
             )
             resume_deployed_artifact = (
-                state.deployed
+                not relay_migrated
+                and state.deployed
                 and state.artifact_digest == artifacts.digest
                 and state.worker_secrets_fingerprint == worker_secrets_fingerprint
             )
-            state = state.checkpoint(artifact_digest=artifacts.digest)
+            changes: dict[str, object] = {"artifact_digest": artifacts.digest}
+            if relay_migrated:
+                changes.update(
+                    relay_origin=_origin(plan.relay_url),
+                    relay_key_id=relay.key_id,
+                    relay_fingerprint=relay_fingerprint,
+                    worker_secrets_fingerprint=None,
+                    secrets_synced=False,
+                    deployed=False,
+                    platform_ready=False,
+                    relay_ready=False,
+                    smoke_call_id=None,
+                )
+            state = state.checkpoint(**changes)
             self.store.save(state)
 
         projects = self.runner.run(
@@ -1179,6 +1231,7 @@ class LiveKitCloudDeploymentManager:
             account_scope=plan.project,
             region=plan.region,
             relay_url=plan.relay_url,
+            relay_key_id=state.relay_key_id,
             relay_fingerprint=state.relay_fingerprint,
         )
         cwd = self.project_root / ".voicey" / "deploy" / "livekit-cloud" / "context"

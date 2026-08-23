@@ -1426,6 +1426,13 @@ def deploy_pipecat_cloud_command(
         str,
         typer.Option("--relay-url", help="Validated user-owned results companion URL."),
     ],
+    migrate_relay: Annotated[
+        bool,
+        typer.Option(
+            "--migrate-relay",
+            help="Acknowledge and redeploy to a validated replacement companion.",
+        ),
+    ] = False,
     image_pull_secret: Annotated[
         str | None,
         typer.Option("--image-pull-secret", help="Private-registry credential name."),
@@ -1509,7 +1516,7 @@ def deploy_pipecat_cloud_command(
         manager = PipecatCloudDeploymentManager(context.root)
         manifest_store = ManifestStore(context.root / "voicey.jsonc")
         if prepare_only:
-            if adopt or rollback_created or smoke_to is not None or skip_smoke:
+            if adopt or migrate_relay or rollback_created or smoke_to is not None or skip_smoke:
                 raise VoiceyError(
                     "VY-CLI-010",
                     detail=(
@@ -1579,6 +1586,11 @@ def deploy_pipecat_cloud_command(
                 detail="phone deployment smoke requires --smoke-to E164 or --skip-smoke.",
             )
         if rollback_created:
+            if migrate_relay:
+                raise VoiceyError(
+                    "VY-CLI-010",
+                    detail="--migrate-relay cannot be combined with rollback.",
+                )
             _confirm(
                 (
                     f"Restore any ledgered carrier cutover and delete only the "
@@ -1621,6 +1633,7 @@ def deploy_pipecat_cloud_command(
         _confirm(
             (
                 f"Deploy {agent_name} to Pipecat Cloud in {region}"
+                + (" and migrate its relay companion" if migrate_relay else "")
                 + (
                     f", point {manifest.phone_number}, and place one paid smoke call"
                     if phone_provider is not None and cutover and not skip_smoke
@@ -1636,6 +1649,7 @@ def deploy_pipecat_cloud_command(
             engine_wheel=engine_wheel,
             adopt=adopt,
             skip_session_smoke=skip_smoke,
+            migrate_relay=migrate_relay,
         )
         state = report.state
         adapter = None
@@ -1744,6 +1758,13 @@ def deploy_livekit_cloud_command(
         str,
         typer.Option("--relay-url", help="Validated user-owned results companion URL."),
     ],
+    migrate_relay: Annotated[
+        bool,
+        typer.Option(
+            "--migrate-relay",
+            help="Acknowledge and redeploy to a validated replacement companion.",
+        ),
+    ] = False,
     agent_id: Annotated[
         str | None,
         typer.Option("--agent-id", help="Exact existing agent id for adoption."),
@@ -1805,7 +1826,13 @@ def deploy_livekit_cloud_command(
         manager = LiveKitCloudDeploymentManager(context.root)
         manifest_store = ManifestStore(context.root / "voicey.jsonc")
         if rollback:
-            if adopt or skip_smoke or smoke_to is not None or engine_wheel is not None:
+            if (
+                adopt
+                or migrate_relay
+                or skip_smoke
+                or smoke_to is not None
+                or engine_wheel is not None
+            ):
                 raise VoiceyError(
                     "VY-CLI-010",
                     detail="--rollback cannot be combined with deploy or smoke options.",
@@ -1831,6 +1858,7 @@ def deploy_livekit_cloud_command(
         _confirm(
             (
                 f"Deploy {agent_name} to LiveKit Cloud project {project} in {region}"
+                + (" and migrate its relay companion" if migrate_relay else "")
                 + (" and place one paid SIP smoke call" if smoke_to is not None else "")
                 + "? This can incur charges."
             ),
@@ -1843,6 +1871,7 @@ def deploy_livekit_cloud_command(
             adopt=adopt,
             skip_session_smoke=skip_smoke,
             smoke_to=smoke_to,
+            migrate_relay=migrate_relay,
         )
         manifest_store.save(manifest.model_copy(update={"deploy_target": "livekit-cloud"}))
         payload = {

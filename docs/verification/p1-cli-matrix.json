@@ -217,7 +217,7 @@
       "interaction": "confirmed-external-mutation",
       "json": "required",
       "arguments": [],
-      "options": ["--adopt", "--agent", "--cutover", "--engine-wheel", "--image", "--image-pull-secret", "--json", "--max-agents", "--min-agents", "--no-cutover", "--org", "--prepare-only", "--profile", "--region", "--relay-url", "--rollback-created", "--secret-set", "--skip-smoke", "--smoke-to", "--telnyx-texml-ready", "--yes"],
+      "options": ["--adopt", "--agent", "--cutover", "--engine-wheel", "--image", "--image-pull-secret", "--json", "--max-agents", "--migrate-relay", "--min-agents", "--no-cutover", "--org", "--prepare-only", "--profile", "--region", "--relay-url", "--rollback-created", "--secret-set", "--skip-smoke", "--smoke-to", "--telnyx-texml-ready", "--yes"],
       "paired_options": [["--cutover", "--no-cutover"]]
     },
     {
@@ -226,7 +226,7 @@
       "interaction": "confirmed-external-mutation",
       "json": "required",
       "arguments": [],
-      "options": ["--adopt", "--agent", "--agent-id", "--engine-wheel", "--json", "--project", "--region", "--relay-url", "--rollback", "--skip-smoke", "--smoke-to", "--yes"],
+      "options": ["--adopt", "--agent", "--agent-id", "--engine-wheel", "--json", "--migrate-relay", "--project", "--region", "--relay-url", "--rollback", "--skip-smoke", "--smoke-to", "--yes"],
       "paired_options": []
     },
     {

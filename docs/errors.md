@@ -500,7 +500,8 @@ output, then rerun the same resumable voicey command.
 is unsafe.
 
 **Fix:** Inspect the owner-only cloud ledger and platform agent; adopt the exact
-id explicitly or restore the ledgered version before retrying.
+id explicitly, restore the ledgered version, or pass `--migrate-relay` only
+after the replacement companion passes signed readiness.
 
 ## VY-TST-001
 

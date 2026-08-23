@@ -132,6 +132,13 @@ An existing `livekit.toml` without matching ledger/adoption evidence stops the
 run. Account, project, region, relay credential, or agent-id drift also fails
 closed.
 
+To move an existing worker to a replacement companion, validate that
+companion's signed readiness and rerun the deploy with its new `--relay-url`
+plus `--migrate-relay`. The explicit migration resyncs every worker secret,
+forces a new `lk agent deploy`, waits for ready status, and reruns room/phone
+smoke before accepting the new ledger identity. Unacknowledged relay drift
+remains `VY-DEP-010`.
+
 Rollback is explicit:
 
 ```bash

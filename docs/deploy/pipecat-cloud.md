@@ -107,6 +107,9 @@ A retry after a post-deploy interruption reconciles the current `Agent:`,
 `Ready:`, `Deployment Phase:`, and exact `Image:` status fields against the
 owner-only ledger, then resumes at readiness/session smoke without redeploying.
 An explicitly requested different immutable tag performs a normal replacement.
+Any model/tool secret change also forces a deployment even when the immutable
+image tag is unchanged; syncing a secret set alone never counts as worker
+promotion.
 `Ready: False` always fails closed.
 A successful control-plane smoke is not browser-media evidence; complete one
 real browser conversation before promoting a web deployment.
@@ -155,6 +158,14 @@ token, and smoke call id—never raw credentials.
 An exact existing agent requires `--adopt`. Identity, region, relay
 credential, or account drift stops the run. Adopted agents are never deleted.
 Rerunning the same command resumes and revalidates each checkpoint.
+
+To move the worker to a replacement companion, first prove that companion's
+signed readiness, then rerun the normal deploy command with its new
+`--relay-url` and `--migrate-relay`. Voicey validates the replacement before
+mutation, updates the owner ledger transactionally, resyncs the complete
+worker-secret set, forces a worker deployment even when the image tag is
+unchanged, and reruns session/phone smoke. Without the explicit flag, relay
+origin or credential drift remains `VY-DEP-010`.
 
 Rollback uses the same required identity flags:
 

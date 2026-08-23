@@ -1187,6 +1187,7 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
     state = _cloud_state("pipecat-cloud", agent_name="phone-agent")
     saved: list[CloudResourceState] = []
     plans: list[PipecatCloudPlan] = []
+    deploy_options: list[dict[str, object]] = []
     verified: list[str] = []
 
     class Store:
@@ -1206,9 +1207,10 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
         async def deploy(
             self,
             plan: PipecatCloudPlan,
-            **_options: object,
+            **options: object,
         ) -> CloudDeploymentReport:
             plans.append(plan)
+            deploy_options.append(options)
             return CloudDeploymentReport(
                 state=state,
                 artifacts=_cloud_artifacts(tmp_path, "pipecat-cloud"),
@@ -1263,6 +1265,7 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
             "https://test-results.fly.dev",
             "--smoke-to",
             "+14155550199",
+            "--migrate-relay",
             "--yes",
             "--json",
         ],
@@ -1271,6 +1274,7 @@ def test_pipecat_cloud_deploy_cuts_over_and_verifies_paid_phone_smoke(
     assert result.exit_code == 0, result.stderr
     payload = json.loads(result.stdout)
     assert plans[0].agent_name == "phone-agent"
+    assert deploy_options[0]["migrate_relay"] is True
     assert payload["answer_url"].endswith("/us-west/test-org/phone-agent/twilio/answer")
     assert verified == ["CA" + "1" * 32]
     assert saved[-1].cutover_provider == "twilio"
@@ -1330,6 +1334,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
             "us-west",
             "--relay-url",
             "https://test-results.fly.dev",
+            "--migrate-relay",
             "--skip-smoke",
             "--yes",
             "--json",
@@ -1340,6 +1345,7 @@ def test_livekit_cloud_deploy_passes_explicit_smoke_and_updates_manifest(
     payload = json.loads(result.stdout)
     assert payload["target"] == "livekit-cloud"
     assert captured[0][1]["skip_session_smoke"] is True
+    assert captured[0][1]["migrate_relay"] is True
     assert captured[0][1]["smoke_to"] is None
     assert ManifestStore(tmp_path / "voicey.jsonc").load().deploy_target == ("livekit-cloud")
 

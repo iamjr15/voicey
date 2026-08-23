@@ -511,6 +511,30 @@ async def test_pipecat_cloud_deploy_syncs_without_argv_secrets_smokes_and_resume
     assert runner.image == "registry.example.test/voicey/agent:sha-124"
     assert sum(command[:2] == ("cloud", "deploy") for command in runner.commands) == 2
 
+    migrated_plan = replace(
+        _pcc_plan(),
+        image="registry.example.test/voicey/agent:sha-124",
+        relay_url="https://voicey-results.up.railway.app",
+    )
+    sys.modules.pop("agent", None)
+    with pytest.raises(VoiceyError, match="--migrate-relay"):
+        await manager.deploy(
+            migrated_plan,
+            environment={},
+            engine_wheel=_wheel(tmp_path),
+            skip_session_smoke=True,
+        )
+    sys.modules.pop("agent", None)
+    migrated = await manager.deploy(
+        migrated_plan,
+        environment={},
+        engine_wheel=_wheel(tmp_path),
+        skip_session_smoke=True,
+        migrate_relay=True,
+    )
+    assert migrated.state.relay_origin == "https://voicey-results.up.railway.app"
+    assert sum(command[:2] == ("cloud", "deploy") for command in runner.commands) == 3
+
 
 @pytest.mark.asyncio
 async def test_pipecat_cloud_requires_adoption_and_never_deletes_adopted_agent(
@@ -618,12 +642,35 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
         engine_wheel=_wheel(tmp_path),
         skip_session_smoke=True,
     )
+    migrated_plan = replace(
+        _lk_plan(),
+        relay_url="https://voicey-results.up.railway.app",
+    )
+    sys.modules.pop("agent", None)
+    with pytest.raises(VoiceyError, match="--migrate-relay"):
+        await manager.deploy(
+            migrated_plan,
+            environment={},
+            engine_wheel=_wheel(tmp_path),
+            skip_session_smoke=True,
+        )
+    before_migration = runner.deployed_versions
+    sys.modules.pop("agent", None)
+    migrated = await manager.deploy(
+        migrated_plan,
+        environment={},
+        engine_wheel=_wheel(tmp_path),
+        skip_session_smoke=True,
+        migrate_relay=True,
+    )
     assert first.state.agent_created
     assert first.state.agent_id == runner.agent_id
     assert second.state.previous_version == "v1"
     assert second.state.platform_ready
     assert resumed.state.platform_ready
-    assert runner.deployed_versions == deployed_versions
+    assert before_migration == deployed_versions
+    assert runner.deployed_versions == deployed_versions + 1
+    assert migrated.state.relay_origin == "https://voicey-results.up.railway.app"
     assert first.smoke.session_smoke
     assert session_smoke.to_numbers == ["+14155550199"]
     assert session_smoke.environments[0]["LIVEKIT_URL"] == ("wss://voicey-test.livekit.cloud")
@@ -632,7 +679,7 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
     assert "LIVEKIT_API_KEY" not in secret_payload
     assert "LIVEKIT_API_SECRET" not in secret_payload
     assert all(not path.exists() for path in runner.secret_file_paths)
-    state = manager.rollback(_lk_plan())
+    state = manager.rollback(migrated_plan)
     assert state.rolled_back
     assert runner.rolled_back
     assert not runner.deleted
@@ -774,6 +821,7 @@ def test_cloud_resource_store_rejects_permissions_symlink_and_drift(
             account_scope="voicey-test",
             region="us-west",
             relay_url="https://relay.example.test",
+            relay_key_id=credential.key_id,
             relay_fingerprint="a" * 64,
         )
 
@@ -821,6 +869,7 @@ def test_cloud_validation_and_parsing_fail_closed(tmp_path: Path) -> None:
             account_scope="voicey-test",
             region="us-west",
             relay_url="https://relay.example.test",
+            relay_key_id=credential.key_id,
             relay_fingerprint="a" * 64,
         )
 

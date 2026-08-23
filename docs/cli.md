@@ -229,6 +229,9 @@ printed hosted-answer URL on its TeXML Application and
 `--telnyx-texml-ready`. Existing agents require `--adopt`; destructive
 created-only rollback is `--rollback-created --yes`. See the
 [Pipecat Cloud guide](deploy/pipecat-cloud.md).
+Changing a ledgered companion URL or relay credential requires the replacement
+to pass signed readiness and an explicit `--migrate-relay`; this always
+resyncs secrets, redeploys the worker, and reruns smoke.
 
 ## LiveKit Cloud
 
@@ -248,6 +251,9 @@ Phone projects require `VOICEY_LIVEKIT_OUTBOUND_TRUNK_ID` and
 `--agent-id <id> --adopt`. `--rollback --yes` deletes a first version created
 by voicey or restores the exact ledgered previous version. See the
 [LiveKit Cloud guide](deploy/livekit-cloud.md).
+Changing a ledgered companion URL or relay credential requires the validated
+replacement URL plus `--migrate-relay`; the worker is redeployed and smoked
+before the new relay identity is accepted.
 
 ## Doctor
 

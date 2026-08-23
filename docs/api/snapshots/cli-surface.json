@@ -647,6 +647,23 @@
               },
               {
                 "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--migrate-relay"
+                ],
+                "help": "Acknowledge and redeploy to a validated replacement companion.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "migrate_relay",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
+              },
+              {
+                "count": false,
                 "default": null,
                 "envvar": null,
                 "flags": [
@@ -939,6 +956,23 @@
                 "nargs": 1,
                 "required": true,
                 "type": "str"
+              },
+              {
+                "count": false,
+                "default": false,
+                "envvar": null,
+                "flags": [
+                  "--migrate-relay"
+                ],
+                "help": "Acknowledge and redeploy to a validated replacement companion.",
+                "hidden": false,
+                "is_flag": true,
+                "kind": "option",
+                "multiple": false,
+                "name": "migrate_relay",
+                "nargs": 1,
+                "required": false,
+                "type": "boolean"
               },
               {
                 "count": false,

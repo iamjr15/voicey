@@ -424,7 +424,8 @@ ERROR_CATALOG: dict[str, ErrorDefinition] = {
         cause="Cloud agent ownership, secret-sync, deployment, or rollback evidence is unsafe.",
         fix=(
             "Inspect the owner-only cloud ledger and platform agent; adopt the exact id "
-            "explicitly or restore the ledgered version before retrying."
+            "explicitly, restore the ledgered version, or pass --migrate-relay only after "
+            "the replacement companion passes signed readiness."
         ),
     ),
     "VY-TST-001": ErrorDefinition(
