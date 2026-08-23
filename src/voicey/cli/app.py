@@ -1523,7 +1523,8 @@ def deploy_pipecat_cloud_command(
                 engine_wheel=engine_wheel,
             )
             build = (
-                f"docker build -t {shlex.quote(plan.image)} {shlex.quote(str(artifacts.context))}"
+                "docker build --platform linux/arm64 "
+                f"-t {shlex.quote(plan.image)} {shlex.quote(str(artifacts.context))}"
             )
             push = f"docker push {shlex.quote(plan.image)}"
             payload = {

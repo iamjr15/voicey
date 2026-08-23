@@ -187,6 +187,7 @@ pipecat cloud regions list
     --engine-wheel "$VOICEY_ENGINE_WHEEL" \
     --prepare-only
   docker build \
+    --platform linux/arm64 \
     -t "$VOICEY_PCC_IMAGE" \
     .voicey/deploy/pipecat-cloud/context
   docker push "$VOICEY_PCC_IMAGE"

@@ -52,13 +52,16 @@ rejects symlinks, copies no `.env`, and prints the exact next command:
 
 ```bash
 docker build \
+  --platform linux/arm64 \
   -t registry.example.com/voicey/my-agent:git-sha \
   .voicey/deploy/pipecat-cloud/context
 docker push registry.example.com/voicey/my-agent:git-sha
 ```
 
-The multi-stage image uses a glibc Python base and UID/GID 10001. The generated
-bot accepts the installed native `RunnerArguments` forms for Daily,
+Pipecat Cloud accepts only `linux/arm64` images. Voicey pins that platform in
+the printed build command so x86 and Arm development machines produce the same
+deployable artifact. The multi-stage image uses a glibc Python base and
+UID/GID 10001. The generated bot accepts the installed native `RunnerArguments` forms for Daily,
 SmallWebRTC, and Twilio/Telnyx/Vobiz/Plivo WebSockets. It does not introduce a
 conversation DSL.
 

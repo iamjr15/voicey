@@ -1167,7 +1167,9 @@ def test_pipecat_cloud_prepare_only_prints_exact_build_and_push(
     assert result.exit_code == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["prepared"] is True
-    assert "docker build -t registry.example.test/voicey/agent:sha-123" in payload["next_step"]
+    assert (
+        "docker build --platform linux/arm64 -t registry.example.test/voicey/agent:sha-123"
+    ) in payload["next_step"]
     assert "docker push registry.example.test/voicey/agent:sha-123" in payload["next_step"]
 
     text_result = runner.invoke(app, [*_pipecat_cloud_args(), "--prepare-only"])
