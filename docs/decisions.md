@@ -833,6 +833,11 @@ These choices apply the documented proposals authorized in the build mandate and
 - Keep locally injected LiveKit project credentials available to the room-smoke
   API client, but do not copy them into the worker secret file. LiveKit Cloud
   injects the worker's project credentials itself.
+- Emit a standard root `requirements.txt` containing the certified
+  `livekit-agents==1.6.7` pin beside the filtered dependency file in LiveKit
+  Cloud contexts. The installed CLI detects agent language and requires an
+  explicit LiveKit dependency before building; it rejects a Dockerfile-only
+  context or a transitive dependency hidden inside the Voicey wheel.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

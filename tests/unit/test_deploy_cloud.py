@@ -356,6 +356,9 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     )
     assert lk_artifacts.bot is None
     assert lk_artifacts.platform_config is None
+    lk_marker = (lk_artifacts.context / "requirements.txt").read_text(encoding="utf-8")
+    assert lk_marker.startswith("livekit-agents==1.6.7\n")
+    assert "httpx>=0.28,<1" in lk_marker
     assert '"voicey.deploy.cloud_runtime", "livekit"' in (
         lk_artifacts.dockerfile.read_text(encoding="utf-8")
     )

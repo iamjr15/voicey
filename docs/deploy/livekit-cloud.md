@@ -46,6 +46,10 @@ the exact authenticated project, and refuses unledgered LiveKit agent state.
 The installed `lk==2.16.2` returns capitalized project fields (`Name`,
 `ProjectId`, `URL`, `APIKey`, and `APISecret`); project identity parsing accepts
 that observed shape while retaining the older lowercase compatibility shape.
+The generated context also includes a standard root `requirements.txt` marker
+with the certified `livekit-agents==1.6.7` pin because this CLI resolves the
+agent language and requires an explicit LiveKit dependency before it invokes
+the supplied Dockerfile.
 It sends worker-only secrets through a temporary `0600` file that is removed
 as soon as the CLI returns.
 LiveKit project credentials injected into the local command remain available

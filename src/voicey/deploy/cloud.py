@@ -35,6 +35,7 @@ _IMAGE = re.compile(r"^[^\s:@]+(?:/[^\s:@]+)+:[^\s:@]+$")
 _LIVEKIT_ID = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 _SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _PIPECAT_CLOUD_BASE = "dailyco/pipecat-base:0.1.0-py3.13"
+_LIVEKIT_CLOUD_LANGUAGE_MARKER = "livekit-agents==1.6.7"
 _EXCLUDED_PARTS = {
     ".git",
     ".hg",
@@ -451,6 +452,11 @@ class CloudArtifactGenerator:
                 requirements,
                 encoding="utf-8",
             )
+            if platform == "livekit-cloud":
+                (temporary / "requirements.txt").write_text(
+                    f"{_LIVEKIT_CLOUD_LANGUAGE_MARKER}\n{requirements}",
+                    encoding="utf-8",
+                )
             bot: Path | None = None
             if platform == "pipecat-cloud":
                 bot = temporary / "bot.py"
