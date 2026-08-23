@@ -82,6 +82,36 @@ class LiveKitHostSettings:
             raise VoiceyError("VY-RUN-002", detail="LiveKit health port is invalid.")
 
 
+class LiveKitJobRuntime(Protocol):
+    """Pickle-safe state required inside one LiveKit job process."""
+
+    agent: Agent
+    repository_factory: LiveKitRepositoryFactory
+    settings: LiveKitHostSettings
+    builder_factory: (
+        Callable[[LiveKitRepository, LiveKitCallControl, JobContext], LiveKitSessionBuilder] | None
+    )
+    recording_reconciler_factory: Callable[[LiveKitRepository], LiveKitRecordingReconciler] | None
+
+
+@dataclass(slots=True)
+class LiveKitJobEntrypoint:
+    """Serializable job callable kept free of parent-process locks and servers."""
+
+    agent: Agent
+    repository_factory: LiveKitRepositoryFactory
+    settings: LiveKitHostSettings
+    builder_factory: (
+        Callable[[LiveKitRepository, LiveKitCallControl, JobContext], LiveKitSessionBuilder] | None
+    ) = None
+    recording_reconciler_factory: (
+        Callable[[LiveKitRepository], LiveKitRecordingReconciler] | None
+    ) = None
+
+    async def __call__(self, context: JobContext) -> None:
+        await _run_livekit_job(self, context)
+
+
 class LiveKitAdmissionGate:
     """Atomic parent-process dispatch capacity with token reservations."""
 
@@ -219,6 +249,13 @@ class LiveKitHost:
         )
         self._builder_factory = session_builder_factory
         self._recording_reconciler_factory = recording_reconciler_factory
+        self._job_entrypoint = LiveKitJobEntrypoint(
+            agent=agent,
+            repository_factory=repository_factory,
+            settings=self.settings,
+            builder_factory=session_builder_factory,
+            recording_reconciler_factory=recording_reconciler_factory,
+        )
         self.server = server or AgentServer(
             num_idle_processes=self.settings.num_idle_processes,
             drain_timeout=self.settings.drain_timeout_s,
@@ -227,7 +264,7 @@ class LiveKitHost:
             setup_fnc=_prewarm_process,
         )
         self.server.rtc_session(
-            self.entrypoint,
+            self._job_entrypoint,
             agent_name=agent.name,
             on_request=self.on_request,
             on_session_end=self.on_session_end,
@@ -268,151 +305,7 @@ class LiveKitHost:
 
     async def entrypoint(self, context: JobContext) -> None:
         """Run one native call and close its fenced lifecycle on every path."""
-        repository = await self._instrumented_repository()
-        call = _call_from_context(context)
-        admission = AdmissionController(1)
-        lifecycle: LiveKitCallLifecycle | None = None
-        session: LiveKitSession | None = None
-        try:
-            lease = await admission.acquire(call.call_id)
-            lifecycle_manager = LiveKitLifecycleManager(
-                repository,
-                admission,
-                owner_id=f"livekit_{context.job.id}_{uuid.uuid4().hex}",
-            )
-            if call.channel == "web":
-                lifecycle = await lifecycle_manager.claim_reserved(
-                    call,
-                    lease,
-                    expected_owner_id=_reservation_owner(call.call_id),
-                )
-            else:
-                lifecycle = await lifecycle_manager.begin(self.agent, call, lease)
-            if isinstance(repository, InstrumentedRepository):
-                repository.telemetry.begin_call(
-                    NewCall(
-                        call_id=call.call_id,
-                        agent_name=self.agent.name,
-                        runtime="livekit",
-                        channel=call.channel,
-                        direction=call.direction,
-                        provider=call.provider,
-                        provider_call_id=call.provider_call_id,
-                        from_number=call.from_number,
-                        to_number=call.to_number,
-                        config_hash=self.agent.config_hash,
-                    )
-                )
-            control = JobCallControl(
-                context,
-                participant_identity=_participant_identity(context),
-            )
-            builder = self._make_builder(repository, control, context)
-            session = await builder.build(
-                agent=self.agent,
-                call=call,
-                lifecycle=lifecycle,
-            )
-            self._attach_dtmf(context, session)
-            await session.start(context.room)
-            await session.wait(
-                report_factory=cast(SessionReportFactory, context.make_session_report)
-            )
-            await self._reconcile_recording(repository, context, session)
-        except asyncio.CancelledError:
-            if session is not None:
-                await session.end("worker_crash")
-                await session.wait(
-                    report_factory=cast(SessionReportFactory, context.make_session_report)
-                )
-            elif lifecycle is not None:
-                await lifecycle.finish("worker_crash", provider_state="failed")
-            raise
-        except Exception:
-            if lifecycle is not None and lifecycle.terminal_event is None:
-                if session is not None:
-                    session.set_reason("setup_error" if not session.started else "provider_error")
-                    with suppress(Exception):
-                        await session.end(session.ended_reason or "provider_error")
-                    with suppress(Exception):
-                        await session.wait(
-                            report_factory=cast(
-                                SessionReportFactory,
-                                context.make_session_report,
-                            )
-                        )
-                else:
-                    with suppress(Exception):
-                        await lifecycle.fail_setup()
-            raise
-        finally:
-            close = getattr(repository, "close", None)
-            if close is not None:
-                result = close()
-                if isinstance(result, Awaitable):
-                    await result
-
-    def _make_builder(
-        self,
-        repository: LiveKitRepository,
-        control: LiveKitCallControl,
-        context: JobContext,
-    ) -> LiveKitSessionBuilder:
-        if self._builder_factory is not None:
-            return self._builder_factory(repository, control, context)
-        prewarmed = context.proc.userdata.get("voicey_vad")
-        vad_model = prewarmed if isinstance(prewarmed, silero.VAD) else None
-        return LiveKitSessionBuilder(
-            repository,
-            provider_factory=DefaultLiveKitProviderFactory(vad_model=vad_model),
-            call_control=control,
-        )
-
-    def _attach_dtmf(self, context: JobContext, session: LiveKitSession) -> None:
-        if not session.policy.dtmf:
-            return
-
-        def received(event: rtc.SipDTMF) -> None:
-            session.observations.schedule_timeline(
-                "runtime.dtmf_received",
-                digit=event.digit,
-                code=event.code,
-            )
-
-        context.room.on("sip_dtmf_received", received)
-
-    async def _reconcile_recording(
-        self,
-        repository: LiveKitRepository,
-        context: JobContext,
-        session: LiveKitSession,
-    ) -> None:
-        if not session.policy.record or self._recording_reconciler_factory is None:
-            return
-        call_sid = _twilio_call_sid(context)
-        if call_sid is None:
-            await session.observations.timeline(
-                "runtime.recording_pending",
-                reason="twilio_call_sid_missing",
-            )
-            return
-        reconciler = self._recording_reconciler_factory(repository)
-        try:
-            ready = await reconciler.wait_until_ready(
-                call_id=session.call.call_id,
-                twilio_call_sid=call_sid,
-                timeout_s=min(120.0, self.settings.session_end_timeout_s),
-            )
-        except VoiceyError as exc:
-            await session.observations.timeline(
-                "runtime.recording_pending",
-                reason=exc.code,
-            )
-            return
-        await session.observations.timeline(
-            "runtime.recording_ready" if ready else "runtime.recording_pending",
-            twilio_call_sid=call_sid,
-        )
+        await _run_livekit_job(self._job_entrypoint, context)
 
     async def run(self, *, devmode: bool = False) -> None:
         """Run the installed AgentServer; ``start`` mode owns SIGTERM drain."""
@@ -433,6 +326,7 @@ class LiveKitHost:
                 detail="LiveKit reload cannot change the runtime or registered agent name.",
             )
         self.agent = agent
+        self._job_entrypoint.agent = agent
         return True
 
     async def drain(self) -> None:
@@ -500,17 +394,163 @@ class LiveKitHost:
             self.telemetry.release_call(call_id)
             await _close_repository(repository)
 
-    async def _instrumented_repository(self) -> LiveKitRepository:
-        repository = await self.repository_factory()
-        telemetry = Telemetry.from_agent(self.agent)
-        return cast(
-            "LiveKitRepository",
-            InstrumentedRepository(
-                repository,
-                telemetry,
-                shutdown_telemetry=True,
-            ),
+
+async def _run_livekit_job(runtime: LiveKitJobRuntime, context: JobContext) -> None:
+    repository = await _instrumented_repository(runtime)
+    call = _call_from_context(context)
+    admission = AdmissionController(1)
+    lifecycle: LiveKitCallLifecycle | None = None
+    session: LiveKitSession | None = None
+    try:
+        lease = await admission.acquire(call.call_id)
+        lifecycle_manager = LiveKitLifecycleManager(
+            repository,
+            admission,
+            owner_id=f"livekit_{context.job.id}_{uuid.uuid4().hex}",
         )
+        if call.channel == "web":
+            lifecycle = await lifecycle_manager.claim_reserved(
+                call,
+                lease,
+                expected_owner_id=_reservation_owner(call.call_id),
+            )
+        else:
+            lifecycle = await lifecycle_manager.begin(runtime.agent, call, lease)
+        if isinstance(repository, InstrumentedRepository):
+            repository.telemetry.begin_call(
+                NewCall(
+                    call_id=call.call_id,
+                    agent_name=runtime.agent.name,
+                    runtime="livekit",
+                    channel=call.channel,
+                    direction=call.direction,
+                    provider=call.provider,
+                    provider_call_id=call.provider_call_id,
+                    from_number=call.from_number,
+                    to_number=call.to_number,
+                    config_hash=runtime.agent.config_hash,
+                )
+            )
+        control = JobCallControl(
+            context,
+            participant_identity=_participant_identity(context),
+        )
+        builder = _make_builder(runtime, repository, control, context)
+        session = await builder.build(
+            agent=runtime.agent,
+            call=call,
+            lifecycle=lifecycle,
+        )
+        _attach_dtmf(context, session)
+        await session.start(context.room)
+        await session.wait(report_factory=cast(SessionReportFactory, context.make_session_report))
+        await _reconcile_recording(runtime, repository, context, session)
+    except asyncio.CancelledError:
+        if session is not None:
+            await session.end("worker_crash")
+            await session.wait(
+                report_factory=cast(SessionReportFactory, context.make_session_report)
+            )
+        elif lifecycle is not None:
+            await lifecycle.finish("worker_crash", provider_state="failed")
+        raise
+    except Exception:
+        if lifecycle is not None and lifecycle.terminal_event is None:
+            if session is not None:
+                session.set_reason("setup_error" if not session.started else "provider_error")
+                with suppress(Exception):
+                    await session.end(session.ended_reason or "provider_error")
+                with suppress(Exception):
+                    await session.wait(
+                        report_factory=cast(
+                            SessionReportFactory,
+                            context.make_session_report,
+                        )
+                    )
+            else:
+                with suppress(Exception):
+                    await lifecycle.fail_setup()
+        raise
+    finally:
+        await _close_repository(repository)
+
+
+def _make_builder(
+    runtime: LiveKitJobRuntime,
+    repository: LiveKitRepository,
+    control: LiveKitCallControl,
+    context: JobContext,
+) -> LiveKitSessionBuilder:
+    if runtime.builder_factory is not None:
+        return runtime.builder_factory(repository, control, context)
+    prewarmed = context.proc.userdata.get("voicey_vad")
+    vad_model = prewarmed if isinstance(prewarmed, silero.VAD) else None
+    return LiveKitSessionBuilder(
+        repository,
+        provider_factory=DefaultLiveKitProviderFactory(vad_model=vad_model),
+        call_control=control,
+    )
+
+
+def _attach_dtmf(context: JobContext, session: LiveKitSession) -> None:
+    if not session.policy.dtmf:
+        return
+
+    def received(event: rtc.SipDTMF) -> None:
+        session.observations.schedule_timeline(
+            "runtime.dtmf_received",
+            digit=event.digit,
+            code=event.code,
+        )
+
+    context.room.on("sip_dtmf_received", received)
+
+
+async def _reconcile_recording(
+    runtime: LiveKitJobRuntime,
+    repository: LiveKitRepository,
+    context: JobContext,
+    session: LiveKitSession,
+) -> None:
+    if not session.policy.record or runtime.recording_reconciler_factory is None:
+        return
+    call_sid = _twilio_call_sid(context)
+    if call_sid is None:
+        await session.observations.timeline(
+            "runtime.recording_pending",
+            reason="twilio_call_sid_missing",
+        )
+        return
+    reconciler = runtime.recording_reconciler_factory(repository)
+    try:
+        ready = await reconciler.wait_until_ready(
+            call_id=session.call.call_id,
+            twilio_call_sid=call_sid,
+            timeout_s=min(120.0, runtime.settings.session_end_timeout_s),
+        )
+    except VoiceyError as exc:
+        await session.observations.timeline(
+            "runtime.recording_pending",
+            reason=exc.code,
+        )
+        return
+    await session.observations.timeline(
+        "runtime.recording_ready" if ready else "runtime.recording_pending",
+        twilio_call_sid=call_sid,
+    )
+
+
+async def _instrumented_repository(runtime: LiveKitJobRuntime) -> LiveKitRepository:
+    repository = await runtime.repository_factory()
+    telemetry = Telemetry.from_agent(runtime.agent)
+    return cast(
+        "LiveKitRepository",
+        InstrumentedRepository(
+            repository,
+            telemetry,
+            shutdown_telemetry=True,
+        ),
+    )
 
 
 def _prewarm_process(process: JobProcess) -> None:

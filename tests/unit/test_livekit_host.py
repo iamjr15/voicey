@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import pickle
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -16,6 +18,7 @@ from voicey.runtimes.livekit.host import (
     LiveKitAdmissionGate,
     LiveKitHost,
     LiveKitHostSettings,
+    LiveKitJobEntrypoint,
     _call_from_context,  # pyright: ignore[reportPrivateUsage]
     _close_repository,  # pyright: ignore[reportPrivateUsage]
     _metadata,  # pyright: ignore[reportPrivateUsage]
@@ -23,6 +26,10 @@ from voicey.runtimes.livekit.host import (
     _twilio_call_sid,  # pyright: ignore[reportPrivateUsage]
 )
 from voicey.storage.sqlite import SQLiteRepository
+
+
+async def _unreachable_repository_factory() -> Any:
+    raise AssertionError("serialization must not open a repository")
 
 
 def _agent() -> Agent:
@@ -160,6 +167,18 @@ def test_livekit_host_and_gate_reject_wrong_runtime_or_capacity() -> None:
             repository_factory=repository_factory,
             server=cast(Any, FakeAgentServer()),
         )
+
+
+def test_registered_job_entrypoint_is_forkserver_serializable() -> None:
+    server = FakeAgentServer()
+    LiveKitHost(
+        agent=_agent(),
+        repository_factory=_unreachable_repository_factory,
+        server=cast(Any, server),
+    )
+    payload = bytes(ForkingPickler.dumps(server.registration["entrypoint"]))
+    restored = pickle.loads(payload)
+    assert isinstance(restored, LiveKitJobEntrypoint)
 
 
 @pytest.mark.asyncio

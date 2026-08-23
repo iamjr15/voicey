@@ -850,6 +850,12 @@ These choices apply the documented proposals authorized in the build mandate and
   while the status is still `Building`. A retry after post-deploy verification
   failure resumes the same ledgered artifact when its digest is unchanged and
   readiness has not passed, avoiding a duplicate deployment version.
+- Register a dedicated serializable LiveKit job entrypoint rather than the
+  bound parent `LiveKitHost.entrypoint` method. The current Cloud worker runs
+  Python 3.14 with a forkserver process pool; serializing the bound host also
+  serialized its metrics environment, locks, server, and admission state and
+  failed before any warmed job process could start. Only agent configuration,
+  nonsecret settings, and the repository factory cross the process boundary.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 
