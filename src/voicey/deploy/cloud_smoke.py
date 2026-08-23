@@ -54,6 +54,25 @@ class SmokeRelay(Protocol):
     async def terminalize(self, lease: Any, request: TerminalRequest) -> Any: ...
 
 
+class SmokeParticipant(Protocol):
+    """Connected synthetic caller used to activate LiveKit RoomIO."""
+
+    async def disconnect(self) -> None: ...
+
+
+class SmokeParticipantConnector(Protocol):
+    """Create one least-privilege participant connection for a web smoke."""
+
+    async def __call__(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        api_secret: str,
+        room_name: str,
+    ) -> SmokeParticipant: ...
+
+
 class LiveKitCloudSessionSmoke:
     """Dispatch a named cloud agent and verify relay claim plus terminal event."""
 
@@ -62,6 +81,7 @@ class LiveKitCloudSessionSmoke:
         *,
         api_factory: LiveKitApiFactory | None = None,
         relay_client_factory: (Callable[[str, RelayCredential], SmokeRelay] | None) = None,
+        participant_connector: SmokeParticipantConnector | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         claim_timeout_s: float = 90,
         terminal_timeout_s: float = 120,
@@ -71,6 +91,7 @@ class LiveKitCloudSessionSmoke:
             raise VoiceyError("VY-DEP-008", detail="cloud smoke timeouts are invalid.")
         self._api_factory = api_factory or _livekit_api
         self._relay_client_factory = relay_client_factory or RelayClient
+        self._participant_connector = participant_connector or _connect_smoke_participant
         self._sleep = sleep
         self._claim_timeout_s = claim_timeout_s
         self._terminal_timeout_s = terminal_timeout_s
@@ -102,6 +123,8 @@ class LiveKitCloudSessionSmoke:
         relay = self._relay_client_factory(relay_url, relay_credential)
         client = self._api_factory(url=url, api_key=api_key, api_secret=api_secret)
         lease: Any | None = None
+        participant: SmokeParticipant | None = None
+        sip_participant_identity: str | None = None
         room_created = False
         terminal = False
         try:
@@ -155,15 +178,23 @@ class LiveKitCloudSessionSmoke:
             )
             room_created = True
             if phone_smoke:
+                sip_participant_identity = f"voicey-smoke-{uuid.uuid4().hex}"
                 await client.sip.create_sip_participant(
                     api.CreateSIPParticipantRequest(
                         sip_trunk_id=trunk_id,
                         sip_call_to=destination,
                         room_name=room_name,
-                        participant_identity=f"voicey-smoke-{uuid.uuid4().hex}",
+                        participant_identity=sip_participant_identity,
                         participant_name="voicey cloud smoke",
                         wait_until_answered=True,
                     )
+                )
+            else:
+                participant = await self._participant_connector(
+                    url=url,
+                    api_key=api_key,
+                    api_secret=api_secret,
+                    room_name=room_name,
                 )
             await self._wait_for(
                 relay,
@@ -183,8 +214,21 @@ class LiveKitCloudSessionSmoke:
                 ),
                 failure="LiveKit Cloud did not start the named agent media session.",
             )
-            await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
-            room_created = False
+            if participant is not None:
+                await participant.disconnect()
+                participant = None
+            else:
+                if sip_participant_identity is None:
+                    raise VoiceyError(
+                        "VY-DEP-004",
+                        detail="LiveKit Cloud phone smoke lost its SIP participant identity.",
+                    )
+                await client.room.remove_participant(
+                    api.RoomParticipantIdentity(
+                        room=room_name,
+                        identity=sip_participant_identity,
+                    )
+                )
             terminal_record = await self._wait_for(
                 relay,
                 call_id,
@@ -193,6 +237,8 @@ class LiveKitCloudSessionSmoke:
                 failure="LiveKit Cloud room close produced no terminal relay event.",
             )
             terminal = True
+            await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
+            room_created = False
             if terminal_record.status != "completed":
                 raise VoiceyError(
                     "VY-DEP-004",
@@ -200,6 +246,9 @@ class LiveKitCloudSessionSmoke:
                 )
             return True
         finally:
+            if participant is not None:
+                with suppress(Exception):
+                    await participant.disconnect()
             if room_created:
                 with suppress(Exception):
                     await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
@@ -237,6 +286,36 @@ def _livekit_api(*, url: str, api_key: str, api_secret: str) -> Any:
     from livekit import api
 
     return api.LiveKitAPI(url=url, api_key=api_key, api_secret=api_secret)
+
+
+async def _connect_smoke_participant(
+    *,
+    url: str,
+    api_key: str,
+    api_secret: str,
+    room_name: str,
+) -> SmokeParticipant:
+    from livekit import api, rtc
+
+    identity = f"voicey-cloud-smoke-{uuid.uuid4().hex}"
+    token = (
+        api.AccessToken(api_key, api_secret)
+        .with_identity(identity)
+        .with_name("voicey cloud smoke")
+        .with_grants(
+            api.VideoGrants(
+                room_join=True,
+                room=room_name,
+                can_publish=False,
+                can_publish_data=False,
+                can_subscribe=True,
+            )
+        )
+        .to_jwt()
+    )
+    room = rtc.Room()
+    await room.connect(url, token, rtc.RoomOptions(auto_subscribe=True))
+    return room
 
 
 async def _terminalize_unclaimed(

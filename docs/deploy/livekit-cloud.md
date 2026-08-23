@@ -70,9 +70,11 @@ closed. Because the current CLI returns from `agent deploy` while that status
 can still be `Building`, Voicey polls it for up to ten minutes. If a run ends
 after deployment but before readiness, rerunning the exact same artifact
 resumes the ledgered readiness and smoke steps without deploying a duplicate
-version. The web smoke creates a real room with named agent
-dispatch, waits for durable `runtime.admitted` and `runtime.session_started`,
-deletes the room, and waits for the terminal relay event. That terminal record must be `completed`; durable
+version. The web smoke creates a real room with named agent dispatch and joins a
+short-lived synthetic caller token that cannot publish audio, video, or data.
+It waits for durable `runtime.admitted` and `runtime.session_started`, normally
+disconnects that caller, waits for the terminal relay event, and then deletes
+the room. That terminal record must be `completed`; durable
 `call.failed` persistence is valuable crash evidence but never satisfies
 deployment smoke. A successful room smoke does not replace a real browser
 conversation as media evidence.

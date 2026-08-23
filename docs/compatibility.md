@@ -41,6 +41,9 @@ This table records versions empirically installed and inspected during P0. Runti
 - LiveKit browser: construct `Room`, subscribe to `RoomEvent`, connect with the
   short-lived participant token, attach remote `AudioTrack` publications, call
   `setMicrophoneEnabled()`, and `disconnect()` during cleanup.
+- LiveKit cloud smoke: issue `AccessToken(...).with_grants(VideoGrants(...))`,
+  connect an `rtc.Room` with `RoomOptions(auto_subscribe=True)`, and disconnect
+  the non-publishing participant before deleting the room.
 - LiveKit turn detection: the installed 1.6.7 `livekit.plugins.turn_detector` path is deprecated; use `livekit.agents.inference.TurnDetector(version="v1-mini")` locally.
 - LiveKit's 1.6.7 OpenAI plugin requires `websockets<16`; the shared supported range is `>=13.1,<17`, with the lock selecting 15.x when all runtime extras are installed. Voicey uses APIs present throughout that range and tests both runtime extras together.
 - LiveKit SIP: current trunk/rule methods are `create_inbound_trunk` and `create_dispatch_rule`; their `create_sip_*` aliases are deprecated. `create_sip_participant` and `transfer_sip_participant` remain current.

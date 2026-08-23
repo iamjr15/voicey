@@ -871,6 +871,10 @@ These choices apply the documented proposals authorized in the build mandate and
 - Keep the LiveKit smoke room alive through durable `runtime.session_started`.
   Admission precedes media initialization, so deleting at `runtime.admitted`
   can cancel the very provider path the smoke must prove.
+- Join a least-privilege synthetic caller during LiveKit web smoke. An empty
+  dispatched room does not establish active RoomIO; deleting it later cancels
+  the job. The caller cannot publish media or data, can subscribe to the agent,
+  and disconnects normally so the crash contract must persist a completed call.
 - Replace the supported Google catalog entry with `google/gemini-3.6-flash`.
   The same authenticated free-tier account listed both versions but rejected
   2.5 generation for new users and completed a direct 3.6 generation call.

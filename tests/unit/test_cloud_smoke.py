@@ -19,6 +19,7 @@ class FakeRoomService:
         self.relay = relay
         self.created: object | None = None
         self.deleted: object | None = None
+        self.removed: object | None = None
 
     async def create_room(self, request: object) -> object:
         self.created = request
@@ -33,6 +34,10 @@ class FakeRoomService:
 
     async def delete_room(self, request: object) -> object:
         self.deleted = request
+        return object()
+
+    async def remove_participant(self, request: object) -> object:
+        self.removed = request
         if self.relay.claimed:
             self.relay.ended = True
         return object()
@@ -128,6 +133,38 @@ class FakeSmokeRelay:
         return object()
 
 
+class FakeParticipant:
+    def __init__(self, relay: FakeSmokeRelay) -> None:
+        self.relay = relay
+        self.disconnected = False
+
+    async def disconnect(self) -> None:
+        self.disconnected = True
+        if self.relay.claimed:
+            self.relay.ended = True
+
+
+class FakeParticipantConnector:
+    def __init__(self, relay: FakeSmokeRelay) -> None:
+        self.relay = relay
+        self.participant = FakeParticipant(relay)
+        self.room_name: str | None = None
+
+    async def __call__(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        api_secret: str,
+        room_name: str,
+    ) -> FakeParticipant:
+        assert url == "wss://voicey.livekit.cloud"
+        assert api_key == "api-key"
+        assert api_secret == "api-secret"
+        self.room_name = room_name
+        return self.participant
+
+
 class FakeSipService:
     def __init__(self) -> None:
         self.created: object | None = None
@@ -161,6 +198,7 @@ def _agent() -> Agent:
 async def test_livekit_cloud_smoke_proves_dispatch_and_terminal_event() -> None:
     relay = FakeSmokeRelay()
     api_client = FakeApi(relay)
+    connector = FakeParticipantConnector(relay)
     factory_arguments: dict[str, str] = {}
 
     def api_factory(*, url: str, api_key: str, api_secret: str) -> FakeApi:
@@ -173,6 +211,7 @@ async def test_livekit_cloud_smoke_proves_dispatch_and_terminal_event() -> None:
     smoke = LiveKitCloudSessionSmoke(
         api_factory=api_factory,
         relay_client_factory=relay_factory,
+        participant_connector=connector,
         poll_interval_s=0,
     )
     result = await smoke.run(
@@ -195,6 +234,8 @@ async def test_livekit_cloud_smoke_proves_dispatch_and_terminal_event() -> None:
     assert api_client.closed
     assert api_client.room.created is not None
     assert api_client.room.deleted is not None
+    assert connector.participant.disconnected
+    assert connector.room_name is not None
     assert factory_arguments == {
         "url": "wss://voicey.livekit.cloud",
         "api_key": "api-key",
@@ -231,6 +272,7 @@ async def test_livekit_cloud_smoke_requires_credentials_before_mutation() -> Non
 async def test_livekit_cloud_smoke_rejects_failed_terminal_call() -> None:
     relay = FakeSmokeRelay(failed=True)
     api_client = FakeApi(relay)
+    connector = FakeParticipantConnector(relay)
 
     def api_factory(*, url: str, api_key: str, api_secret: str) -> FakeApi:
         del url, api_key, api_secret
@@ -242,6 +284,7 @@ async def test_livekit_cloud_smoke_rejects_failed_terminal_call() -> None:
     smoke = LiveKitCloudSessionSmoke(
         api_factory=api_factory,
         relay_client_factory=relay_factory,
+        participant_connector=connector,
         poll_interval_s=0,
     )
     with pytest.raises(VoiceyError, match="without a completed call"):
@@ -262,6 +305,7 @@ async def test_livekit_cloud_smoke_rejects_failed_terminal_call() -> None:
 async def test_livekit_cloud_smoke_requires_started_media_before_room_close() -> None:
     relay = FakeSmokeRelay(session_started=False)
     api_client = FakeApi(relay)
+    connector = FakeParticipantConnector(relay)
 
     def api_factory(*, url: str, api_key: str, api_secret: str) -> FakeApi:
         del url, api_key, api_secret
@@ -273,6 +317,7 @@ async def test_livekit_cloud_smoke_requires_started_media_before_room_close() ->
     smoke = LiveKitCloudSessionSmoke(
         api_factory=api_factory,
         relay_client_factory=relay_factory,
+        participant_connector=connector,
         claim_timeout_s=0.000001,
         poll_interval_s=0,
     )
@@ -328,12 +373,14 @@ async def test_livekit_cloud_phone_smoke_dials_pinned_outbound_trunk() -> None:
     assert request.sip_call_to == "+14155550199"
     assert request.wait_until_answered
     assert relay.call is None
+    assert api_client.room.removed is not None
 
 
 @pytest.mark.asyncio
 async def test_livekit_cloud_smoke_timeout_deletes_room_and_terminalizes_reservation() -> None:
     relay = FakeSmokeRelay()
     api_client = FakeApi(relay)
+    connector = FakeParticipantConnector(relay)
 
     async def create_without_claim(request: object) -> object:
         api_client.room.created = request
@@ -350,6 +397,7 @@ async def test_livekit_cloud_smoke_timeout_deletes_room_and_terminalizes_reserva
     smoke = LiveKitCloudSessionSmoke(
         api_factory=api_factory,
         relay_client_factory=relay_factory,
+        participant_connector=connector,
         claim_timeout_s=0.000001,
         terminal_timeout_s=1,
         poll_interval_s=0,
