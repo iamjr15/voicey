@@ -43,6 +43,9 @@ voicey deploy livekit-cloud \
 Published releases omit `--engine-wheel`. Voicey generates a secret-free,
 multi-stage glibc/non-root context, validates signed relay readiness, verifies
 the exact authenticated project, and refuses unledgered LiveKit agent state.
+The installed `lk==2.16.2` returns capitalized project fields (`Name`,
+`ProjectId`, `URL`, `APIKey`, and `APISecret`); project identity parsing accepts
+that observed shape while retaining the older lowercase compatibility shape.
 It sends worker-only secrets through a temporary `0600` file that is removed
 as soon as the CLI returns.
 LiveKit project credentials injected into the local command remain available

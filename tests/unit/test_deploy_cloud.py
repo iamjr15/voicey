@@ -152,7 +152,11 @@ class FakeLiveKitCloudRunner:
         command = tuple(arguments)
         self.commands.append(command)
         if command[:2] == ("project", "list"):
-            return _result('[{"name":"voicey-test"}]')
+            return _result(
+                '[{"Name":"voicey-test","ProjectId":"project_123",'
+                '"URL":"wss://voicey-test.livekit.cloud",'
+                '"APIKey":"redacted","APISecret":"redacted"}]'
+            )
         if command[:2] == ("agent", "config"):
             (cwd / "livekit.toml").write_text(
                 f'agent_id = "{self.agent_id}"\n',
@@ -821,6 +825,11 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
 
     _require_livekit_project('["voicey-test"]', "voicey-test")
     _require_livekit_project('{"projects":[{"name":"voicey-test"}]}', "voicey-test")
+    _require_livekit_project(
+        '[{"Name":"voicey-test","ProjectId":"project_123"}]',
+        "voicey-test",
+    )
+    _require_livekit_project('{"Projects":[{"Name":"voicey-test"}]}', "voicey-test")
     with pytest.raises(VoiceyError, match="did not return JSON"):
         _require_livekit_project("not json", "voicey-test")
     with pytest.raises(VoiceyError, match="does not contain project"):

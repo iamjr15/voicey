@@ -824,6 +824,16 @@ These choices apply the documented proposals authorized in the build mandate and
   Live certification creates an explicitly named disposable public key and
   revokes it during teardown.
 
+## 2026-08-23 — LiveKit Cloud CLI project shape
+
+- Parse the empirically installed `lk==2.16.2` project-list fields exactly as
+  emitted (`Name`, `ProjectId`, `URL`, `APIKey`, and `APISecret`) while retaining
+  lowercase compatibility for older fixtures. Identity checks continue to
+  compare only the exact project name and never log the credential fields.
+- Keep locally injected LiveKit project credentials available to the room-smoke
+  API client, but do not copy them into the worker secret file. LiveKit Cloud
+  injects the worker's project credentials itself.
+
 ## 2026-07-28 — Release compatibility and promotion evidence
 
 - Keep empirically supported runtime windows narrow: Pipecat

@@ -1469,7 +1469,8 @@ def _require_livekit_project(output: str, expected_name: str) -> None:
     if isinstance(payload, list):
         projects = cast("list[object]", payload)
     elif isinstance(payload, dict):
-        value = cast("dict[str, object]", payload).get("projects")
+        mapping = cast("dict[str, object]", payload)
+        value = mapping.get("projects", mapping.get("Projects"))
         projects = cast("list[object]", value) if isinstance(value, list) else []
     else:
         projects = []
@@ -1477,7 +1478,8 @@ def _require_livekit_project(output: str, expected_name: str) -> None:
         name
         for item in projects
         if isinstance(item, dict)
-        for name in [cast("dict[str, object]", item).get("name")]
+        for mapping in [cast("dict[str, object]", item)]
+        for name in [mapping.get("name", mapping.get("Name"))]
         if isinstance(name, str)
     }
     if expected_name not in names:
