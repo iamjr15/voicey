@@ -6,7 +6,7 @@ import stat
 import subprocess
 import sys
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -593,6 +593,14 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
         engine_wheel=_wheel(tmp_path),
         smoke_to="+14155550199",
     )
+    dotenv = project / ".env"
+    dotenv.write_text(
+        dotenv.read_text(encoding="utf-8").replace(
+            "CUSTOM_TOOL_TOKEN=tool-test",
+            "CUSTOM_TOOL_TOKEN=tool-rotated",
+        ),
+        encoding="utf-8",
+    )
     sys.modules.pop("agent", None)
     second = await manager.deploy(
         _lk_plan(),
@@ -628,6 +636,57 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
     assert state.rolled_back
     assert runner.rolled_back
     assert not runner.deleted
+
+
+@pytest.mark.asyncio
+async def test_livekit_cloud_smoke_retry_reuses_exact_deployed_artifact(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    _project(project, "livekit")
+    runner = FakeLiveKitCloudRunner()
+
+    class FailOnceSmoke(FakeLiveKitSessionSmoke):
+        async def run(self, **values: object) -> bool:
+            await super().run(**values)
+            if len(self.to_numbers) == 1:
+                raise VoiceyError("VY-DEP-004", detail="injected smoke failure")
+            return True
+
+    smoke = FailOnceSmoke()
+    manager = LiveKitCloudDeploymentManager(
+        project,
+        runner=runner,
+        relay_client_factory=cast("object", FakeRelayClient),  # type: ignore[arg-type]
+        session_smoke_runner=cast("object", smoke),  # type: ignore[arg-type]
+    )
+    environment = {
+        "LIVEKIT_URL": "wss://voicey-test.livekit.cloud",
+        "LIVEKIT_API_KEY": "livekit-key",
+        "LIVEKIT_API_SECRET": "livekit-secret",
+    }
+
+    sys.modules.pop("agent", None)
+    with pytest.raises(VoiceyError, match="injected smoke failure"):
+        await manager.deploy(
+            _lk_plan(),
+            environment=environment,
+            engine_wheel=_wheel(tmp_path),
+        )
+    failed = manager.store.load()
+    assert failed is not None
+    assert failed.platform_ready
+    assert runner.deployed_versions == 1
+
+    sys.modules.pop("agent", None)
+    resumed = await manager.deploy(
+        _lk_plan(),
+        environment=environment,
+        engine_wheel=_wheel(tmp_path),
+    )
+    assert resumed.smoke.session_smoke
+    assert runner.deployed_versions == 1
+    assert len(smoke.to_numbers) == 2
 
 
 @pytest.mark.asyncio
@@ -684,10 +743,17 @@ def test_cloud_resource_store_rejects_permissions_symlink_and_drift(
         relay=credential,
         relay_fingerprint="a" * 64,
         artifact_digest="b" * 64,
+        worker_secrets_fingerprint="c" * 64,
     )
     store = CloudResourceStore(tmp_path, "pipecat-cloud")
     store.save(state)
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+    legacy_payload = asdict(state)
+    legacy_payload["schema_version"] = 1
+    legacy_payload.pop("worker_secrets_fingerprint")
+    migrated = CloudResourceState.from_payload(legacy_payload)
+    assert migrated.schema_version == 2
+    assert migrated.worker_secrets_fingerprint is None
     store.path.chmod(0o644)
     with pytest.raises(VoiceyError, match="VY-SEC-001"):
         store.load()
@@ -746,6 +812,7 @@ def test_cloud_validation_and_parsing_fail_closed(tmp_path: Path) -> None:
         relay=credential,
         relay_fingerprint="a" * 64,
         artifact_digest="b" * 64,
+        worker_secrets_fingerprint="c" * 64,
     ).checkpoint(rolled_back=True)
     with pytest.raises(VoiceyError, match="already rolled back"):
         rolled.validate(

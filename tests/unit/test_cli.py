@@ -1047,6 +1047,7 @@ def _cloud_state(
         relay=RelayCredential.issue("cli-cloud-key"),
         relay_fingerprint="a" * 64,
         artifact_digest="b" * 64,
+        worker_secrets_fingerprint="c" * 64,
     ).checkpoint(
         agent_created=True,
         agent_id="agent_123456" if platform == "livekit-cloud" else None,

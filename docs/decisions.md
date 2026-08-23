@@ -883,6 +883,10 @@ These choices apply the documented proposals authorized in the build mandate and
   acknowledgement is in flight; a new idempotency key at the same sequence is a
   conflict, while exact replay is safe. Keep the native close reason when it was
   already observed before that cancellation.
+- Resume LiveKit readiness or smoke against an already deployed exact artifact
+  only when a relay-keyed HMAC of the worker-secret map also matches. This avoids
+  duplicate rollout overlap after smoke failure without silently skipping a key
+  rotation, and the ledger never stores secret values or an unkeyed oracle.
 - Replace the supported Google catalog entry with `google/gemini-3.6-flash`.
   The same authenticated free-tier account listed both versions but rejected
   2.5 generation for new users and completed a direct 3.6 generation call.

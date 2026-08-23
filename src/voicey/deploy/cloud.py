@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -222,6 +223,7 @@ class CloudResourceState:
     relay_key_id: str
     relay_fingerprint: str
     artifact_digest: str
+    worker_secrets_fingerprint: str | None = None
     agent_created: bool = False
     agent_adopted: bool = False
     agent_id: str | None = None
@@ -247,9 +249,10 @@ class CloudResourceState:
         relay: RelayCredential,
         relay_fingerprint: str,
         artifact_digest: str,
+        worker_secrets_fingerprint: str,
     ) -> CloudResourceState:
         return cls(
-            schema_version=1,
+            schema_version=2,
             platform=platform,
             agent_name=agent_name,
             account_scope=account_scope,
@@ -258,6 +261,7 @@ class CloudResourceState:
             relay_key_id=relay.key_id,
             relay_fingerprint=relay_fingerprint,
             artifact_digest=artifact_digest,
+            worker_secrets_fingerprint=worker_secrets_fingerprint,
         )
 
     @classmethod
@@ -283,7 +287,7 @@ class CloudResourceState:
             "relay_ready",
             "rolled_back",
         )
-        expected_fields = {
+        base_fields = {
             "schema_version",
             "platform",
             *required_strings,
@@ -294,10 +298,14 @@ class CloudResourceState:
             "cutover_token",
             "smoke_call_id",
         }
+        schema_version = payload.get("schema_version")
+        expected_fields: set[str] = set(base_fields)
+        if schema_version == 2:
+            expected_fields.add("worker_secrets_fingerprint")
         platform = payload.get("platform")
         if (
             set(payload) != expected_fields
-            or payload.get("schema_version") != 1
+            or schema_version not in {1, 2}
             or platform not in {"pipecat-cloud", "livekit-cloud"}
             or any(not isinstance(payload.get(name), str) for name in required_strings)
             or any(not isinstance(payload.get(name), bool) for name in boolean_fields)
@@ -311,13 +319,17 @@ class CloudResourceState:
                     "smoke_call_id",
                 )
             )
+            or (
+                schema_version == 2
+                and not isinstance(payload.get("worker_secrets_fingerprint"), str)
+            )
         ):
             raise VoiceyError(
                 "VY-DEP-010",
                 detail="cloud resource ledger fields are invalid.",
             )
         return cls(
-            schema_version=1,
+            schema_version=2,
             platform=cast(CloudPlatform, platform),
             agent_name=cast(str, payload["agent_name"]),
             account_scope=cast(str, payload["account_scope"]),
@@ -326,6 +338,9 @@ class CloudResourceState:
             relay_key_id=cast(str, payload["relay_key_id"]),
             relay_fingerprint=cast(str, payload["relay_fingerprint"]),
             artifact_digest=cast(str, payload["artifact_digest"]),
+            worker_secrets_fingerprint=(
+                cast(str, payload["worker_secrets_fingerprint"]) if schema_version == 2 else None
+            ),
             agent_created=cast(bool, payload["agent_created"]),
             agent_adopted=cast(bool, payload["agent_adopted"]),
             agent_id=cast("str | None", payload["agent_id"]),
@@ -620,6 +635,7 @@ class PipecatCloudDeploymentManager:
             environment,
         )
         relay_fingerprint = _fingerprint(relay.reveal())
+        worker_secrets_fingerprint = _worker_secret_fingerprint(worker_secrets, relay)
         await _validate_relay(
             plan.relay_url,
             relay,
@@ -636,6 +652,7 @@ class PipecatCloudDeploymentManager:
                 relay=relay,
                 relay_fingerprint=relay_fingerprint,
                 artifact_digest=artifacts.digest,
+                worker_secrets_fingerprint=worker_secrets_fingerprint,
             )
             self.store.save(state)
         else:
@@ -718,7 +735,10 @@ class PipecatCloudDeploymentManager:
             timeout_s=60,
         )
         _require_secret_names(listed.stdout, set(worker_secrets))
-        state = state.checkpoint(secrets_synced=True)
+        state = state.checkpoint(
+            secrets_synced=True,
+            worker_secrets_fingerprint=worker_secrets_fingerprint,
+        )
         self.store.save(state)
 
         current_image = _pipecat_image(status.stdout)
@@ -959,6 +979,7 @@ class LiveKitCloudDeploymentManager:
             environment,
         )
         relay_fingerprint = _fingerprint(relay.reveal())
+        worker_secrets_fingerprint = _worker_secret_fingerprint(worker_secrets, relay)
         await _validate_relay(
             plan.relay_url,
             relay,
@@ -976,6 +997,7 @@ class LiveKitCloudDeploymentManager:
                 relay=relay,
                 relay_fingerprint=relay_fingerprint,
                 artifact_digest=artifacts.digest,
+                worker_secrets_fingerprint=worker_secrets_fingerprint,
             )
             self.store.save(state)
         else:
@@ -989,8 +1011,8 @@ class LiveKitCloudDeploymentManager:
             )
             resume_deployed_artifact = (
                 state.deployed
-                and not state.platform_ready
                 and state.artifact_digest == artifacts.digest
+                and state.worker_secrets_fingerprint == worker_secrets_fingerprint
             )
             state = state.checkpoint(artifact_digest=artifacts.digest)
             self.store.save(state)
@@ -1085,6 +1107,9 @@ class LiveKitCloudDeploymentManager:
                         agent_id=agent_id,
                         secrets_synced=True,
                         deployed=True,
+                        platform_ready=False,
+                        relay_ready=False,
+                        worker_secrets_fingerprint=worker_secrets_fingerprint,
                     )
                 else:
                     self.runner.run(
@@ -1108,6 +1133,9 @@ class LiveKitCloudDeploymentManager:
                         previous_version=versions_before or state.previous_version,
                         secrets_synced=True,
                         deployed=True,
+                        platform_ready=False,
+                        relay_ready=False,
+                        worker_secrets_fingerprint=worker_secrets_fingerprint,
                     )
         self.store.save(state)
         await _wait_livekit_ready(
@@ -1118,6 +1146,8 @@ class LiveKitCloudDeploymentManager:
             timeout_s=self._ready_timeout_s,
             poll_interval_s=self._ready_poll_interval_s,
         )
+        state = state.checkpoint(platform_ready=True, relay_ready=True)
+        self.store.save(state)
         session_green = False
         if not skip_session_smoke:
             session_green = await self._session_smoke_runner.run(
@@ -1127,8 +1157,6 @@ class LiveKitCloudDeploymentManager:
                 environment=dict(environment) | worker_secrets,
                 to_number=smoke_to,
             )
-        state = state.checkpoint(platform_ready=True, relay_ready=True)
-        self.store.save(state)
         return CloudDeploymentReport(
             state=state,
             artifacts=artifacts,
@@ -1732,6 +1760,19 @@ def _origin(value: str) -> str:
 
 def _fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _worker_secret_fingerprint(
+    worker_secrets: Mapping[str, str],
+    relay: RelayCredential,
+) -> str:
+    """Return a keyed, non-reversible digest for safe deployment resumption."""
+    payload = json.dumps(
+        dict(worker_secrets),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hmac.new(relay.secret, payload, hashlib.sha256).hexdigest()
 
 
 def _require_private_regular(path: Path) -> None:
