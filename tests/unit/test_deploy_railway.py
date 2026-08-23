@@ -461,7 +461,13 @@ def test_railway_retries_eventually_consistent_resource_references(tmp_path: Pat
         service_id=runner.service_id,
     )
 
-    manager._sync_reference_variables(state, ["DATABASE_URL=${{Postgres.DATABASE_URL}}"])
+    manager._sync_reference_variables(
+        state,
+        [
+            "DATABASE_URL=${{Postgres.DATABASE_URL}}",
+            "AWS_REGION=${{bucket.REGION}}",
+        ],
+    )
 
     reference_commands = [
         command
@@ -469,14 +475,21 @@ def test_railway_retries_eventually_consistent_resource_references(tmp_path: Pat
         if command[:3] == ("variable", "set", "DATABASE_URL=${{Postgres.DATABASE_URL}}")
     ]
     assert len(reference_commands) == 3
-
-    runner.reference_failures_remaining = 5
-    with pytest.raises(VoiceyError, match="did not resolve newly created"):
-        manager._sync_reference_variables(state, ["AWS_REGION=${{bucket.REGION}}"])
-    failed_commands = [
+    region_commands = [
         command
         for command in runner.commands
         if command[:3] == ("variable", "set", "AWS_REGION=${{bucket.REGION}}")
+    ]
+    assert len(region_commands) == 1
+    assert all(command[3] == "--project" for command in reference_commands + region_commands)
+
+    runner.reference_failures_remaining = 5
+    with pytest.raises(VoiceyError, match="did not resolve a newly created"):
+        manager._sync_reference_variables(state, ["AWS_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}"])
+    failed_commands = [
+        command
+        for command in runner.commands
+        if command[:3] == ("variable", "set", "AWS_ACCESS_KEY_ID=${{bucket.ACCESS_KEY_ID}}")
     ]
     assert len(failed_commands) == 5
 

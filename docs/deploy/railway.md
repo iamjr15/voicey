@@ -44,10 +44,10 @@ volume-backed Postgres service there. The only accepted co-located pairs are
    Postgres service, private Railway bucket, and service domain, then verifies
    Postgres has exactly one replica in the selected service region before any
    release upload;
-3. connects Postgres and bucket variables with Railway references and sends
+3. connects Postgres and bucket variables one reference per command and sends
    relay/results/carrier secrets one at a time over stdin; freshly created
-   database and bucket references use bounded exponential retries because the
-   Railway control plane can become consistent after resource creation returns;
+   database and bucket references use per-key bounded exponential retries because
+   the Railway control plane can become consistent after resource creation returns;
 4. generates a secret-free, non-root companion image and current
    `railway.json`;
 5. runs the managed persistence preflight before the release starts, deploys

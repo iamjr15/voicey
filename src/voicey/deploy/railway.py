@@ -1109,27 +1109,29 @@ class RailwayDeploymentManager:
         assignments: Sequence[str],
     ) -> None:
         """Wait for newly created Railway resources to resolve in references."""
-        arguments = [
-            "variable",
-            "set",
-            *assignments,
-            *self._context_args(state),
-            "--skip-deploys",
-            "--json",
-        ]
-        for attempt in range(_REFERENCE_SYNC_ATTEMPTS):
-            result = self.runner.run(arguments, check=False, timeout_s=120)
-            if result.returncode == 0:
-                return
-            if attempt + 1 < _REFERENCE_SYNC_ATTEMPTS:
-                time.sleep(min(self.poll_interval_s * (2**attempt), 8.0))
-        raise VoiceyError(
-            "VY-DEP-006",
-            detail=(
-                "Railway did not resolve newly created database or bucket variable "
-                "references after bounded retries. Rerun this exact deploy."
-            ),
-        )
+        for assignment in assignments:
+            arguments = [
+                "variable",
+                "set",
+                assignment,
+                *self._context_args(state),
+                "--skip-deploys",
+                "--json",
+            ]
+            for attempt in range(_REFERENCE_SYNC_ATTEMPTS):
+                result = self.runner.run(arguments, check=False, timeout_s=120)
+                if result.returncode == 0:
+                    break
+                if attempt + 1 < _REFERENCE_SYNC_ATTEMPTS:
+                    time.sleep(min(self.poll_interval_s * (2**attempt), 8.0))
+            else:
+                raise VoiceyError(
+                    "VY-DEP-006",
+                    detail=(
+                        "Railway did not resolve a newly created database or bucket "
+                        "variable reference after bounded retries. Rerun this exact deploy."
+                    ),
+                )
 
     def _deploy_release(
         self,
