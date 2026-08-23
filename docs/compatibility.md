@@ -11,6 +11,7 @@ This table records versions empirically installed and inspected during P0. Runti
 | Rich | `>=13.9.4,<16` (`13.9.4` selected) | Pipecat 1.6.0's CLI extra requires Rich below 14; the full voicey CLI suite is green on the resolver-selected version |
 | LiveKit Agents | certified `>=1.6.7,<1.6.8`; project extra pins `livekit-agents==1.6.7` and `anthropic==0.120.0` | Installed from PyPI; the only current edge, 1.6.7, runs on Python 3.11 and 3.14 in scheduled CI; the Anthropic pin was live-verified after 1.0's `httpx2` client contract broke the plugin's `httpx.AsyncClient` construction; `AgentSession.start(room=…, room_options=…)`, native conversation events, and caller policy re-inspected on 2026-08-23 |
 | LiveKit API | `livekit-api==1.2.0` | Resolved by the LiveKit Agents pin |
+| Google Gemini | `google/gemini-3.6-flash` | A live free-tier `generateContent` call succeeded on 2026-08-23; Google returned 404 for 2.5 Flash generation on the same new-user account and directed clients to 3.6 Flash |
 | Twilio Python | `twilio==9.10.9` | Installed and its request, call, number, AMD, recording, and update signatures inspected on 2026-07-26 |
 | Plivo Python | `plivo==4.61.0` | Installed on 2026-07-27; Voice/number/recording calls and the six-argument V3 signature helper were introspected and exercised |
 | ngrok Python | `ngrok==1.4.0` | Installed on 2026-07-27; `forward(addr, authtoken=…)`, `Listener.url()`, and awaitable `Listener.close()` inspected |

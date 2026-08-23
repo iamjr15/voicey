@@ -868,6 +868,12 @@ These choices apply the documented proposals authorized in the build mandate and
   failed job correctly persisted `runtime.admitted` plus `call.failed`, which
   proved the crash contract but exposed that terminal existence alone could
   create a false deployment green.
+- Keep the LiveKit smoke room alive through durable `runtime.session_started`.
+  Admission precedes media initialization, so deleting at `runtime.admitted`
+  can cancel the very provider path the smoke must prove.
+- Replace the supported Google catalog entry with `google/gemini-3.6-flash`.
+  The same authenticated free-tier account listed both versions but rejected
+  2.5 generation for new users and completed a direct 3.6 generation call.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

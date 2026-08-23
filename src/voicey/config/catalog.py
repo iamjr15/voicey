@@ -199,7 +199,7 @@ DEFAULT_PROVIDER_CATALOG = ProviderCatalog(
             description="General-purpose OpenAI model; usage-priced.",
         ),
         _entry(
-            id="google/gemini-2.5-flash",
+            id="google/gemini-3.6-flash",
             kind="llm",
             languages=frozenset({"*"}),
             price="low",

@@ -49,7 +49,7 @@ class FakeApi:
 
 
 class FakeSmokeRelay:
-    def __init__(self, *, failed: bool = False) -> None:
+    def __init__(self, *, failed: bool = False, session_started: bool = True) -> None:
         self.opened = False
         self.closed = False
         self.claimed = False
@@ -59,6 +59,7 @@ class FakeSmokeRelay:
         self.dispatched_call_id: str | None = None
         self.timeline: list[TimelineEvent] = []
         self.failed = failed
+        self.session_started = session_started
 
     async def open(self) -> FakeSmokeRelay:
         self.opened = True
@@ -88,6 +89,8 @@ class FakeSmokeRelay:
         timeline = [*self.timeline]
         if self.claimed:
             timeline.append(TimelineEvent(event_type="runtime.admitted"))
+            if self.session_started:
+                timeline.append(TimelineEvent(event_type="runtime.session_started"))
         now = datetime.now(UTC)
         stored = self.call
         stored_call_id = (
@@ -253,6 +256,40 @@ async def test_livekit_cloud_smoke_rejects_failed_terminal_call() -> None:
             },
         )
     assert relay.terminalized == 0
+
+
+@pytest.mark.asyncio
+async def test_livekit_cloud_smoke_requires_started_media_before_room_close() -> None:
+    relay = FakeSmokeRelay(session_started=False)
+    api_client = FakeApi(relay)
+
+    def api_factory(*, url: str, api_key: str, api_secret: str) -> FakeApi:
+        del url, api_key, api_secret
+        return api_client
+
+    def relay_factory(_url: str, _credential: RelayCredential) -> FakeSmokeRelay:
+        return relay
+
+    smoke = LiveKitCloudSessionSmoke(
+        api_factory=api_factory,
+        relay_client_factory=relay_factory,
+        claim_timeout_s=0.000001,
+        poll_interval_s=0,
+    )
+    with pytest.raises(VoiceyError, match="did not start"):
+        await smoke.run(
+            agent=_agent(),
+            relay_url="https://relay.example.test",
+            relay_credential=RelayCredential.issue("smoke-key"),
+            environment={
+                "LIVEKIT_URL": "wss://voicey.livekit.cloud",
+                "LIVEKIT_API_KEY": "api-key",
+                "LIVEKIT_API_SECRET": "api-secret",
+            },
+        )
+    assert api_client.room.deleted is not None
+    assert relay.terminalized == 0
+    assert relay.ended
 
 
 @pytest.mark.asyncio

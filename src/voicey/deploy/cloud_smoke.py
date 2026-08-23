@@ -174,6 +174,15 @@ class LiveKitCloudSessionSmoke:
                 ),
                 failure="LiveKit Cloud did not dispatch the named agent.",
             )
+            await self._wait_for(
+                relay,
+                call_id,
+                timeout_s=self._claim_timeout_s,
+                predicate=lambda record: any(
+                    event.event_type == "runtime.session_started" for event in record.timeline
+                ),
+                failure="LiveKit Cloud did not start the named agent media session.",
+            )
             await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
             room_created = False
             terminal_record = await self._wait_for(
