@@ -476,7 +476,8 @@ async def _run_livekit_job(runtime: LiveKitJobRuntime, context: JobContext) -> N
         await _reconcile_recording(runtime, repository, context, session)
     except asyncio.CancelledError:
         if session is not None:
-            await session.end("worker_crash")
+            if not session.closed:
+                await session.end("worker_crash")
             await session.wait(
                 report_factory=cast(SessionReportFactory, context.make_session_report)
             )

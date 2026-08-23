@@ -371,8 +371,10 @@ async def test_livekit_session_start_wait_end_and_failure_paths() -> None:
 
     await session.start(cast(rtc.Room, object()))
     await session.start(cast(rtc.Room, object()))
+    assert not session.closed
     session.mark_closed(CloseEvent(reason=CloseReason.USER_INITIATED))
     session.mark_closed(CloseEvent(reason=CloseReason.ERROR))
+    assert session.closed
 
     def report_factory(session: object) -> object:
         del session

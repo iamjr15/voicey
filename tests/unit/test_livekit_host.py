@@ -502,6 +502,94 @@ async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("native_closed", [False, True])
+async def test_livekit_entrypoint_cancellation_preserves_native_close_reason(
+    tmp_path: Path,
+    *,
+    native_closed: bool,
+) -> None:
+    database = tmp_path / "calls.sqlite3"
+    sessions: list[Any] = []
+
+    async def repository_factory() -> SQLiteRepository:
+        return await SQLiteRepository(database).open()
+
+    class CancelledSession:
+        def __init__(self, lifecycle: Any, call: Any) -> None:
+            self.lifecycle = lifecycle
+            self.call = call
+            self.policy = SimpleNamespace(dtmf=False, record=False)
+            self.observations = SimpleNamespace()
+            self.started = False
+            self.closed = native_closed
+            self.ended_reason = "caller_hangup" if native_closed else None
+            self.waits = 0
+            self.ends: list[str] = []
+            sessions.append(self)
+
+        async def start(self, _room: object) -> None:
+            self.started = True
+
+        async def wait(self, *, report_factory: object) -> object:
+            assert callable(report_factory)
+            self.waits += 1
+            if self.waits == 1:
+                raise asyncio.CancelledError
+            reason = self.ended_reason or "worker_crash"
+            return await self.lifecycle.finish(reason)
+
+        def set_reason(self, reason: str) -> None:
+            self.ended_reason = reason
+
+        async def end(self, reason: str) -> None:
+            self.ends.append(reason)
+            self.ended_reason = reason
+            self.closed = True
+
+    class CancelledBuilder:
+        async def build(self, *, agent: object, call: object, lifecycle: object) -> Any:
+            del agent
+            return CancelledSession(lifecycle, call)
+
+    context = FakeJobContext(
+        metadata=json.dumps(
+            {
+                "call_id": f"call-cancelled-{native_closed}",
+                "channel": "phone",
+                "direction": "inbound",
+                "provider": "twilio",
+            }
+        )
+    )
+
+    def builder_factory(
+        repository: object,
+        control: object,
+        job_context: object,
+    ) -> CancelledBuilder:
+        del repository, control
+        assert job_context is context
+        return CancelledBuilder()
+
+    host = LiveKitHost(
+        agent=_agent(),
+        repository_factory=repository_factory,
+        server=cast(Any, FakeAgentServer()),
+        session_builder_factory=cast(Any, builder_factory),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await host.entrypoint(cast(Any, context))
+
+    session = sessions[0]
+    assert session.waits == 2
+    assert session.ends == ([] if native_closed else ["worker_crash"])
+    async with SQLiteRepository(database) as repository:
+        event = await repository.get_terminal_event_for_call(f"call-cancelled-{native_closed}")
+    assert event.event_type == ("call.completed" if native_closed else "call.failed")
+
+
+@pytest.mark.asyncio
 async def test_livekit_reservation_expires() -> None:
     gate = LiveKitAdmissionGate(1, reservation_ttl_s=0.01)
     await gate.reserve("expires")

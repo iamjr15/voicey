@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -42,6 +43,24 @@ class _DropFirstUpdateResponse(httpx.AsyncBaseTransport):
             await response.aread()
             await response.aclose()
             raise httpx.ReadError("simulated acknowledgement loss", request=request)
+        return response
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+class _CancelFirstUpdateResponse(httpx.AsyncBaseTransport):
+    def __init__(self, app: object) -> None:
+        self._inner = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+        self.cancelled = False
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await self._inner.handle_async_request(request)
+        if request.url.path.endswith("/updates") and not self.cancelled:
+            self.cancelled = True
+            await response.aread()
+            await response.aclose()
+            raise asyncio.CancelledError
         return response
 
     async def aclose(self) -> None:
@@ -157,6 +176,56 @@ async def test_relay_full_runtime_stream_survives_lost_ack_exactly_once(
         assert [item.event_type for item in call.timeline] == ["runtime.admitted"]
         assert len(call.transcript) == len(call.tool_calls) == len(call.latency) == 1
         assert await journal.next_sequence(lease.call_id) == 9
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("repeat_same_operation", [False, True])
+async def test_relay_stream_survives_cancelled_ack_exactly_once(
+    tmp_path: Path,
+    *,
+    repeat_same_operation: bool,
+) -> None:
+    credential = RelayCredential.issue("current-key")
+    keyring = RelayKeyring(current=credential)
+    async with (
+        SQLiteRepository(tmp_path / "calls.sqlite3") as repository,
+        SQLiteRelayJournal(tmp_path / "relay.sqlite3") as journal,
+    ):
+        app = create_relay_app(
+            RepositoryRelayBackend(repository, journal, fences=FenceSigner(keyring)),
+            keyring=keyring,
+        )
+        transport = _CancelFirstUpdateResponse(app)
+        http = httpx.AsyncClient(transport=transport, base_url="https://relay.test")
+        async with RelayClient(
+            "https://relay.test",
+            credential,
+            client=http,
+        ) as client:
+            lease = await client.begin_call(
+                _call("call_cancelled_ack"),
+                owner_id="worker-a",
+                delivery=_delivery(),
+                lease_ttl=timedelta(seconds=30),
+            )
+            admitted = TimelineEvent(event_type="runtime.admitted")
+            with pytest.raises(asyncio.CancelledError):
+                await client.append_timeline(lease.call_id, admitted)
+            if repeat_same_operation:
+                await client.append_timeline(lease.call_id, admitted)
+            event = await client.terminalize(
+                lease,
+                TerminalRequest(
+                    event_type="call.completed",
+                    ended_reason="caller_hangup",
+                ),
+            )
+            call = await client.get_call(lease.call_id)
+
+        assert transport.cancelled
+        assert event.event_type == "call.completed"
+        assert [item.event_type for item in call.timeline] == ["runtime.admitted"]
+        assert await journal.next_sequence(lease.call_id) == 3
 
 
 @pytest.mark.asyncio

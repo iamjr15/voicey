@@ -878,6 +878,11 @@ These choices apply the documented proposals authorized in the build mandate and
 - Accept LiveKit's `not_found` response when deleting a smoke room after its
   participants disconnect. The platform may have already removed the empty
   room; other deletion errors remain fatal.
+- Preserve the exact pending relay update across task cancellation and replay it
+  before any later operation. LiveKit can cancel a closing job while the remote
+  acknowledgement is in flight; a new idempotency key at the same sequence is a
+  conflict, while exact replay is safe. Keep the native close reason when it was
+  already observed before that cancellation.
 - Replace the supported Google catalog entry with `google/gemini-3.6-flash`.
   The same authenticated free-tier account listed both versions but rejected
   2.5 generation for new users and completed a direct 3.6 generation call.

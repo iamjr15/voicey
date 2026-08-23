@@ -88,6 +88,11 @@ class LiveKitSession:
     def started(self) -> bool:
         return self._started
 
+    @property
+    def closed(self) -> bool:
+        """Whether the native session already supplied its authoritative close reason."""
+        return self._closed.done()
+
     def set_reason(self, reason: EndedReason) -> None:
         if self._ended_reason is None or reason in _FAILURE_REASONS:
             self._ended_reason = reason

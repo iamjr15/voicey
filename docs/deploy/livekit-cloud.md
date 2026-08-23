@@ -79,6 +79,12 @@ the room. That terminal record must be `completed`; durable
 deployment smoke. A successful room smoke does not replace a real browser
 conversation as media evidence.
 
+LiveKit may cancel the job entrypoint as soon as the native room session closes.
+If that cancellation races a relay acknowledgement, the worker preserves and
+replays the exact ordered operation bytes before terminalizing; an authoritative
+native caller-disconnect reason remains a normal completion rather than being
+rewritten as a worker crash.
+
 A project whose manifest includes `phone` must provide a paid destination
 unless the operator explicitly uses `--skip-smoke`:
 

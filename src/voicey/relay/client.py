@@ -48,6 +48,7 @@ class _CallState:
     lease: CallLease
     fence_token: str
     next_sequence: int
+    pending: RelayUpdateRequest | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -303,6 +304,12 @@ class RelayClient:
                 detail=f"call {call_id!r} has no server-issued fence in this worker.",
             ) from exc
         async with state.lock:
+            if state.pending is not None:
+                pending = state.pending
+                same_operation = pending.operation == operation and pending.payload == payload
+                response = await self._send_update(call_id, state, pending)
+                if same_operation:
+                    return response
             request = RelayUpdateRequest.model_validate(
                 {
                     "sequence": state.next_sequence,
@@ -313,24 +320,35 @@ class RelayClient:
                     "requested_at": requested_at or datetime.now(UTC),
                 }
             )
-            response_payload = await self._request(
-                "POST",
-                f"/v1/calls/{quote(call_id, safe='')}/updates",
-                body=request.model_dump_json().encode(),
-            )
-            try:
-                response = RelayUpdateResponse.model_validate(response_payload)
-            except ValidationError as exc:
-                raise VoiceyError(
-                    "VY-REL-006",
-                    detail="relay update acknowledgement is invalid.",
-                ) from exc
-            if response.sequence != state.next_sequence:
-                raise VoiceyError("VY-REL-005", detail="relay acknowledged a different sequence.")
-            state.next_sequence = response.next_sequence
-            if response.fence_token is not None:
-                state.fence_token = response.fence_token
-            return response
+            state.pending = request
+            return await self._send_update(call_id, state, request)
+
+    async def _send_update(
+        self,
+        call_id: str,
+        state: _CallState,
+        request: RelayUpdateRequest,
+    ) -> RelayUpdateResponse:
+        """Send or replay one exact stream operation until its acknowledgement is known."""
+        response_payload = await self._request(
+            "POST",
+            f"/v1/calls/{quote(call_id, safe='')}/updates",
+            body=request.model_dump_json().encode(),
+        )
+        try:
+            response = RelayUpdateResponse.model_validate(response_payload)
+        except ValidationError as exc:
+            raise VoiceyError(
+                "VY-REL-006",
+                detail="relay update acknowledgement is invalid.",
+            ) from exc
+        if response.sequence != state.next_sequence:
+            raise VoiceyError("VY-REL-005", detail="relay acknowledged a different sequence.")
+        state.next_sequence = response.next_sequence
+        if response.fence_token is not None:
+            state.fence_token = response.fence_token
+        state.pending = None
+        return response
 
     async def _request(
         self,
