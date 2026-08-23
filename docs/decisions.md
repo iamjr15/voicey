@@ -875,6 +875,9 @@ These choices apply the documented proposals authorized in the build mandate and
   dispatched room does not establish active RoomIO; deleting it later cancels
   the job. The caller cannot publish media or data, can subscribe to the agent,
   and disconnects normally so the crash contract must persist a completed call.
+- Accept LiveKit's `not_found` response when deleting a smoke room after its
+  participants disconnect. The platform may have already removed the empty
+  room; other deletion errors remain fatal.
 - Replace the supported Google catalog entry with `google/gemini-3.6-flash`.
   The same authenticated free-tier account listed both versions but rejected
   2.5 generation for new users and completed a direct 3.6 generation call.

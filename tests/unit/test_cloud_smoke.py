@@ -20,6 +20,7 @@ class FakeRoomService:
         self.created: object | None = None
         self.deleted: object | None = None
         self.removed: object | None = None
+        self.room_already_gone = False
 
     async def create_room(self, request: object) -> object:
         self.created = request
@@ -34,6 +35,10 @@ class FakeRoomService:
 
     async def delete_room(self, request: object) -> object:
         self.deleted = request
+        if self.room_already_gone:
+            from livekit.api.twirp_client import ServerError
+
+            raise ServerError("not_found", "requested room does not exist", status=404)
         return object()
 
     async def remove_participant(self, request: object) -> object:
@@ -241,6 +246,41 @@ async def test_livekit_cloud_smoke_proves_dispatch_and_terminal_event() -> None:
         "api_key": "api-key",
         "api_secret": "api-secret",
     }
+
+
+@pytest.mark.asyncio
+async def test_livekit_cloud_smoke_accepts_room_auto_deleted_after_disconnect() -> None:
+    relay = FakeSmokeRelay()
+    api_client = FakeApi(relay)
+    api_client.room.room_already_gone = True
+    connector = FakeParticipantConnector(relay)
+
+    def api_factory(*, url: str, api_key: str, api_secret: str) -> FakeApi:
+        del url, api_key, api_secret
+        return api_client
+
+    def relay_factory(_url: str, _credential: RelayCredential) -> FakeSmokeRelay:
+        return relay
+
+    smoke = LiveKitCloudSessionSmoke(
+        api_factory=api_factory,
+        relay_client_factory=relay_factory,
+        participant_connector=connector,
+        poll_interval_s=0,
+    )
+
+    assert await smoke.run(
+        agent=_agent(),
+        relay_url="https://relay.example.com",
+        relay_credential=RelayCredential.issue("smoke-key"),
+        environment={
+            "LIVEKIT_URL": "wss://voicey.livekit.cloud",
+            "LIVEKIT_API_KEY": "api-key",
+            "LIVEKIT_API_SECRET": "api-secret",
+        },
+    )
+    assert connector.participant.disconnected
+    assert api_client.room.deleted is not None
 
 
 @pytest.mark.asyncio

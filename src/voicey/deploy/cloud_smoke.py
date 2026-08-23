@@ -237,7 +237,7 @@ class LiveKitCloudSessionSmoke:
                 failure="LiveKit Cloud room close produced no terminal relay event.",
             )
             terminal = True
-            await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
+            await _delete_room_if_present(client, room_name)
             room_created = False
             if terminal_record.status != "completed":
                 raise VoiceyError(
@@ -286,6 +286,18 @@ def _livekit_api(*, url: str, api_key: str, api_secret: str) -> Any:
     from livekit import api
 
     return api.LiveKitAPI(url=url, api_key=api_key, api_secret=api_secret)
+
+
+async def _delete_room_if_present(client: Any, room_name: str) -> None:
+    """Delete a smoke room unless LiveKit already removed it when it emptied."""
+    from livekit import api
+    from livekit.api.twirp_client import ServerError
+
+    try:
+        await client.room.delete_room(api.DeleteRoomRequest(room=room_name))
+    except ServerError as exc:
+        if exc.code != "not_found":
+            raise
 
 
 async def _connect_smoke_participant(
