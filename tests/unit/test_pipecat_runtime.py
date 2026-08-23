@@ -1,5 +1,7 @@
 import asyncio
 import json
+import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +51,26 @@ from voicey.runtimes.pipecat.session import (
 )
 from voicey.storage.models import EndedReason
 from voicey.storage.sqlite import SQLiteRepository
+
+
+def test_shared_admission_import_does_not_require_pipecat() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "sys.modules['pipecat'] = None; "
+                "import voicey.runtimes.pipecat.admission; "
+                "assert 'voicey.runtimes.pipecat.evals' not in sys.modules; "
+                "assert 'voicey.runtimes.pipecat.host' not in sys.modules"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @tool

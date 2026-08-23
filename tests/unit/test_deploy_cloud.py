@@ -810,10 +810,23 @@ def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Pa
 
     _require_ready("Status: RUNNING", platform="test")
     _require_ready("Agent: demo\nReady: True\nDeployment Phase: Active", platform="test")
+    _require_ready(
+        "┌────┬─────────┐\n│ ID │ Status  │\n├────┼─────────┤\n│ a1 │ Running │\n└────┴─────────┘",
+        platform="test",
+    )
     with pytest.raises(VoiceyError, match="did not report ready"):
         _require_ready("Agent: demo\nReady: False\nDeployment Phase: Validating", platform="test")
     with pytest.raises(VoiceyError, match="did not report ready"):
         _require_ready("Status: stopped", platform="test")
+    with pytest.raises(VoiceyError, match="did not report ready"):
+        _require_ready(
+            "┌────┬───────────┐\n"
+            "│ ID │ Status    │\n"
+            "├────┼───────────┤\n"
+            "│ a1 │ CrashLoop │\n"
+            "└────┴───────────┘",
+            platform="test",
+        )
     assert (
         _pipecat_image("Image: registry.example.test/voicey/agent:sha-123")
         == "registry.example.test/voicey/agent:sha-123"

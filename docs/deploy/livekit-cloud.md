@@ -58,7 +58,10 @@ Cloud agent runtime receives its project credentials from LiveKit itself.
 
 On first deploy it calls `lk agent create`; subsequent deployments use
 `lk agent deploy` and checkpoint the previous current version. Ready status is
-required before smoke. The web smoke creates a real room with named agent
+required before smoke. For `lk==2.16.2`, Voicey parses the exact `Status`
+column in the Unicode agent-status table; only a ready terminal value such as
+`Running` passes, while `CrashLoop`, `Deploying`, and unknown values fail
+closed. The web smoke creates a real room with named agent
 dispatch, waits for durable `runtime.admitted`, deletes the room, and waits for
 the terminal relay event. A successful room smoke does not replace a real
 browser conversation as media evidence.

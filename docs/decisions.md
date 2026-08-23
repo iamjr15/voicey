@@ -838,6 +838,14 @@ These choices apply the documented proposals authorized in the build mandate and
   Cloud contexts. The installed CLI detects agent language and requires an
   explicit LiveKit dependency before building; it rejects a Dockerfile-only
   context or a transitive dependency hidden inside the Voicey wheel.
+- Keep the Pipecat package initializer dependency-free and resolve its public
+  runtime exports lazily. LiveKit lifecycle code shares the admission
+  controller, so eagerly importing Pipecat eval and host modules makes a valid
+  LiveKit-only wheel crash before worker registration.
+- Parse the current CLI's Unicode status table by its exact `Status` header.
+  Accept only ready terminal cells and reject `CrashLoop`, transitional, and
+  unknown cells; the legacy line-oriented shapes remain supported for earlier
+  certified fixtures.
 
 ## 2026-07-28 — Release compatibility and promotion evidence
 

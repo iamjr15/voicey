@@ -1557,23 +1557,52 @@ def _pipecat_image(output: str) -> str | None:
 
 
 def _require_ready(output: str, *, platform: str) -> None:
-    normalized = re.sub(r"\x1b\[[0-9;]*m", "", output).casefold()
-    positive = any(
-        re.search(pattern, normalized) is not None
-        for pattern in (
-            r"(?m)^\s*ready:\s*true\s*$",
-            r"(?m)^\s*deployment phase:\s*active\s*$",
-            r"(?m)^\s*status:\s*(?:running|active|deployed|ready)\s*$",
-            r"(?m)^\s*health:\s*ready\s*$",
-        )
+    unstyled = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    normalized = unstyled.casefold()
+    table_rows = [
+        [cell.strip().casefold() for cell in line.split("│")[1:-1]]
+        for line in unstyled.splitlines()
+        if line.strip().startswith("│") and line.strip().endswith("│")
+    ]
+    status_index = next(
+        (row.index("status") for row in table_rows if "status" in row),
+        None,
     )
-    negative = any(
-        re.search(pattern, normalized) is not None
-        for pattern in (
-            r"(?m)^\s*ready:\s*false\s*$",
-            r"(?m)^\s*(?:deployment phase|status|health):\s*"
-            r"(?:failed|unhealthy|stopped|error)\s*$",
+    table_statuses = (
+        [
+            row[status_index]
+            for row in table_rows
+            if len(row) > status_index and row[status_index] != "status"
+        ]
+        if status_index is not None
+        else []
+    )
+    table_positive = bool(table_statuses) and all(
+        status in {"running", "active", "deployed", "ready"} for status in table_statuses
+    )
+    table_negative = bool(table_statuses) and not table_positive
+    positive = (
+        any(
+            re.search(pattern, normalized) is not None
+            for pattern in (
+                r"(?m)^\s*ready:\s*true\s*$",
+                r"(?m)^\s*deployment phase:\s*active\s*$",
+                r"(?m)^\s*status:\s*(?:running|active|deployed|ready)\s*$",
+                r"(?m)^\s*health:\s*ready\s*$",
+            )
         )
+        or table_positive
+    )
+    negative = (
+        any(
+            re.search(pattern, normalized) is not None
+            for pattern in (
+                r"(?m)^\s*ready:\s*false\s*$",
+                r"(?m)^\s*(?:deployment phase|status|health):\s*"
+                r"(?:failed|unhealthy|stopped|error|crashloop)\s*$",
+            )
+        )
+        or table_negative
     )
     if not positive or negative:
         raise VoiceyError("VY-DEP-004", detail=f"{platform} did not report ready.")
