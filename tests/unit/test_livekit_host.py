@@ -99,6 +99,7 @@ class FakeRoom:
     def __init__(self) -> None:
         self.local_participant = FakeLocalParticipant()
         self.listeners: dict[str, object] = {}
+        self.remote_participants: dict[str, object] = {}
 
     def on(self, event: str, callback: object) -> None:
         self.listeners[event] = callback
@@ -502,11 +503,20 @@ async def test_livekit_host_entrypoint_persists_and_terminalizes_job(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("native_closed", [False, True])
+@pytest.mark.parametrize(
+    ("native_closed", "caller_present", "expected_reason"),
+    [
+        (True, False, None),
+        (False, False, "caller_hangup"),
+        (False, True, "worker_crash"),
+    ],
+)
 async def test_livekit_entrypoint_cancellation_preserves_native_close_reason(
     tmp_path: Path,
     *,
     native_closed: bool,
+    caller_present: bool,
+    expected_reason: str | None,
 ) -> None:
     database = tmp_path / "calls.sqlite3"
     sessions: list[Any] = []
@@ -554,13 +564,15 @@ async def test_livekit_entrypoint_cancellation_preserves_native_close_reason(
     context = FakeJobContext(
         metadata=json.dumps(
             {
-                "call_id": f"call-cancelled-{native_closed}",
+                "call_id": f"call-cancelled-{native_closed}-{caller_present}",
                 "channel": "phone",
                 "direction": "inbound",
                 "provider": "twilio",
             }
         )
     )
+    if caller_present:
+        context.room.remote_participants["sip-caller"] = object()
 
     def builder_factory(
         repository: object,
@@ -583,10 +595,14 @@ async def test_livekit_entrypoint_cancellation_preserves_native_close_reason(
 
     session = sessions[0]
     assert session.waits == 2
-    assert session.ends == ([] if native_closed else ["worker_crash"])
+    assert session.ends == ([] if expected_reason is None else [expected_reason])
     async with SQLiteRepository(database) as repository:
-        event = await repository.get_terminal_event_for_call(f"call-cancelled-{native_closed}")
-    assert event.event_type == ("call.completed" if native_closed else "call.failed")
+        event = await repository.get_terminal_event_for_call(
+            f"call-cancelled-{native_closed}-{caller_present}"
+        )
+    assert event.event_type == (
+        "call.failed" if expected_reason == "worker_crash" else "call.completed"
+    )
 
 
 @pytest.mark.asyncio

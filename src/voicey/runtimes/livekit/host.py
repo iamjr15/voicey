@@ -477,7 +477,8 @@ async def _run_livekit_job(runtime: LiveKitJobRuntime, context: JobContext) -> N
     except asyncio.CancelledError:
         if session is not None:
             if not session.closed:
-                await session.end("worker_crash")
+                reason = "caller_hangup" if not context.room.remote_participants else "worker_crash"
+                await session.end(reason)
             await session.wait(
                 report_factory=cast(SessionReportFactory, context.make_session_report)
             )
