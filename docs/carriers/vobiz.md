@@ -17,6 +17,10 @@ run successfully.
 uv sync --extra vobiz
 ```
 
+The wizard verifies this extra through its installed `multipart` transport
+dependency. It does not require or probe for a third-party top-level `vobiz`
+Python package.
+
 Both paths require:
 
 - `VOBIZ_AUTH_ID`;

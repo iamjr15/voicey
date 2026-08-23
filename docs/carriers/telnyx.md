@@ -11,6 +11,10 @@ silently substitute one path for the other.
 uv sync --extra telnyx
 ```
 
+The wizard verifies this extra through its installed `cryptography`
+dependency. Voicey's HTTP integration does not require a top-level Telnyx SDK
+module.
+
 The Pipecat path requires:
 
 - `TELNYX_API_KEY`;

@@ -668,6 +668,40 @@ async def test_wizard_rejects_invalid_phone_model_axis_and_missing_extra(
     assert "voicey[pipecat]" in str(extra.value)
 
 
+@pytest.mark.parametrize(
+    ("runtime", "carrier", "expected_modules"),
+    [
+        ("pipecat", "vobiz", ["pipecat", "multipart"]),
+        ("pipecat", "telnyx", ["pipecat", "cryptography"]),
+        ("pipecat", "twilio", ["pipecat", "twilio"]),
+        ("pipecat", "plivo", ["pipecat", "plivo"]),
+        ("livekit", "sip", ["livekit", "livekit"]),
+    ],
+)
+def test_wizard_probes_the_modules_installed_by_each_extra(
+    monkeypatch: pytest.MonkeyPatch,
+    runtime: str,
+    carrier: str,
+    expected_modules: list[str],
+) -> None:
+    observed: list[str] = []
+
+    def available(module: str) -> object:
+        observed.append(module)
+        return object()
+
+    monkeypatch.setattr("voicey.cli.wizard.importlib.util.find_spec", available)
+    wizard = InitWizard(
+        prompt=ScriptedPrompt(interactive=False),
+        key_validator=AcceptingKeyValidator(),
+        environment=REFERENCE_ENV,
+    )
+
+    wizard._require_installed_extras(runtime, carrier)  # pyright: ignore[reportPrivateUsage]
+
+    assert observed == expected_modules
+
+
 @pytest.mark.asyncio
 async def test_resume_requires_flag_and_matching_name(tmp_path: Path) -> None:
     project_dir = tmp_path / "checkpoint-agent"

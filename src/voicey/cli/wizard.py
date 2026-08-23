@@ -45,6 +45,14 @@ from voicey.errors import VoiceyError
 from voicey.recipes.registry import DEFAULT_RECIPE_REGISTRY, RecipeRegistry
 from voicey.results.signing import encode_secret
 
+_EXTRA_IMPORT_MODULES = {
+    "pipecat": "pipecat",
+    "livekit": "livekit",
+    "twilio": "twilio",
+    "telnyx": "cryptography",
+    "vobiz": "multipart",
+    "plivo": "plivo",
+}
 _PROJECT_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$")
 
 
@@ -628,7 +636,9 @@ class InitWizard:
         if carrier is not None:
             requirements.append(("livekit", "livekit") if carrier == "sip" else (carrier, carrier))
         missing = [
-            extra for module, extra in requirements if importlib.util.find_spec(module) is None
+            extra
+            for capability, extra in requirements
+            if importlib.util.find_spec(_EXTRA_IMPORT_MODULES[capability]) is None
         ]
         if missing:
             extras = ",".join(dict.fromkeys(missing))
