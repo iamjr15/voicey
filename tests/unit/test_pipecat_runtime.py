@@ -4,6 +4,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -799,6 +800,91 @@ async def test_lifecycle_terminalizes_once_and_releases_capacity(tmp_path: Path)
     assert record.terminal_reason == "agent_hangup"
     assert admission.active_count == 0
     assert len(await repository.list_deliveries()) == 1
+    await repository.close()
+
+
+async def test_lifecycle_keeps_lease_alive_through_terminal_persistence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = SQLiteRepository(tmp_path / "runtime-finalization.sqlite3")
+    await repository.open()
+    admission = AdmissionController(1)
+    manager = PipecatLifecycleManager(
+        repository,
+        admission,
+        lease_ttl=timedelta(seconds=3),
+    )
+    call = PipecatCall(call_id="call_finalization", channel="web", direction="inbound")
+    lifecycle = await manager.begin(
+        _agent(),
+        call,
+        await admission.acquire(call.call_id),
+    )
+    renewed = asyncio.Event()
+    original_renew = repository.renew_lease
+    original_flush = repository.flush_results
+
+    async def observed_renew(*args: object, **kwargs: object):
+        lease = await original_renew(*args, **kwargs)  # type: ignore[arg-type]
+        renewed.set()
+        return lease
+
+    async def flush_after_renew(*args: object, **kwargs: object) -> None:
+        await asyncio.wait_for(renewed.wait(), timeout=2)
+        await original_flush(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(repository, "renew_lease", observed_renew)
+    monkeypatch.setattr(repository, "flush_results", flush_after_renew)
+
+    event = await lifecycle.finish("agent_hangup")
+    record = await repository.get_call(call.call_id)
+
+    assert event.event_type == "call.completed"
+    assert record.status == "completed"
+    assert admission.active_count == 0
+    lifecycle.start_heartbeat()
+    heartbeat = lifecycle._heartbeat_task  # pyright: ignore[reportPrivateUsage]
+    lifecycle.start_heartbeat()
+    assert lifecycle._heartbeat_task is heartbeat  # pyright: ignore[reportPrivateUsage]
+    await lifecycle._stop_heartbeat()  # pyright: ignore[reportPrivateUsage]
+    await lifecycle._stop_heartbeat()  # pyright: ignore[reportPrivateUsage]
+    await repository.close()
+
+
+async def test_lifecycle_wraps_heartbeat_renewal_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = SQLiteRepository(tmp_path / "runtime-heartbeat-failure.sqlite3")
+    await repository.open()
+    admission = AdmissionController(1)
+    manager = PipecatLifecycleManager(
+        repository,
+        admission,
+        lease_ttl=timedelta(seconds=3),
+    )
+
+    async def fail_renew(*_args: object, **_kwargs: object):
+        raise OSError("private storage detail")
+
+    monkeypatch.setattr(repository, "renew_lease", fail_renew)
+    call = PipecatCall(call_id="call_heartbeat_failure", channel="web", direction="inbound")
+    lifecycle = await manager.begin(
+        _agent(),
+        call,
+        await admission.acquire(call.call_id),
+    )
+    heartbeat = lifecycle._heartbeat_task  # pyright: ignore[reportPrivateUsage]
+    assert heartbeat is not None
+
+    with pytest.raises(VoiceyError) as caught:
+        await asyncio.wait_for(heartbeat, timeout=2)
+
+    assert caught.value.code == "VY-RUN-006"
+    assert "private storage detail" not in str(caught.value)
+    lifecycle._heartbeat_task = None  # pyright: ignore[reportPrivateUsage]
+    await admission.release(lifecycle.admission_lease)
     await repository.close()
 
 

@@ -172,9 +172,8 @@ class PipecatCallLifecycle:
         async with self._finish_lock:
             if self._terminal_event is not None:
                 return self._terminal_event
-            await self._stop_heartbeat()
-            snapshot = _result_snapshot(self.buffer, interruptions)
             try:
+                snapshot = _result_snapshot(self.buffer, interruptions)
                 await self.repository.flush_results(self.lease, snapshot)
                 event_type: TerminalEventType = (
                     "call.completed" if reason in _COMPLETED_REASONS else "call.failed"
@@ -194,6 +193,14 @@ class PipecatCallLifecycle:
                     "VY-RUN-006",
                     detail=f"terminal persistence failed for {self.call_id}.",
                 ) from exc
+            finally:
+                # Keep the fence alive through both final writes. A cloud relay may take
+                # several seconds per acknowledgement; stopping renewal before the flush
+                # allowed stale-call recovery to take ownership between flush_results and
+                # terminalize. After terminal persistence, renewal errors are irrelevant
+                # to the immutable terminal event.
+                with suppress(Exception):
+                    await self._stop_heartbeat()
             self._terminal_event = event
             await self.admission.release(self.admission_lease)
             return event
