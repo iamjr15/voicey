@@ -135,6 +135,7 @@ class FakeLiveKitCloudRunner:
         self.agent_id = "agent_123456"
         self.commands: list[tuple[str, ...]] = []
         self.secret_file_paths: list[Path] = []
+        self.secret_payloads: list[str] = []
         self.deleted = False
         self.rolled_back = False
         self.deployed_versions = 0
@@ -164,6 +165,7 @@ class FakeLiveKitCloudRunner:
             path = Path(command[command.index("--secrets-file") + 1])
             assert stat.S_IMODE(path.stat().st_mode) == 0o600
             self.secret_file_paths.append(path)
+            self.secret_payloads.append(path.read_text(encoding="utf-8"))
             (cwd / "livekit.toml").write_text(
                 f'agent_id = "{self.agent_id}"\n',
                 encoding="utf-8",
@@ -184,9 +186,11 @@ class FakeLiveKitCloudRunner:
 class FakeLiveKitSessionSmoke:
     def __init__(self) -> None:
         self.to_numbers: list[str | None] = []
+        self.environments: list[dict[str, str]] = []
 
     async def run(self, **values: object) -> bool:
         self.to_numbers.append(cast("str | None", values["to_number"]))
+        self.environments.append(cast("dict[str, str]", values["environment"]))
         return True
 
 
@@ -570,7 +574,11 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
     sys.modules.pop("agent", None)
     first = await manager.deploy(
         _lk_plan(),
-        environment={},
+        environment={
+            "LIVEKIT_URL": "wss://voicey-test.livekit.cloud",
+            "LIVEKIT_API_KEY": "livekit-key",
+            "LIVEKIT_API_SECRET": "livekit-secret",
+        },
         engine_wheel=_wheel(tmp_path),
         smoke_to="+14155550199",
     )
@@ -587,6 +595,11 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
     assert second.state.platform_ready
     assert first.smoke.session_smoke
     assert session_smoke.to_numbers == ["+14155550199"]
+    assert session_smoke.environments[0]["LIVEKIT_URL"] == ("wss://voicey-test.livekit.cloud")
+    assert session_smoke.environments[0]["LIVEKIT_API_KEY"] == "livekit-key"
+    secret_payload = runner.secret_payloads[0]
+    assert "LIVEKIT_API_KEY" not in secret_payload
+    assert "LIVEKIT_API_SECRET" not in secret_payload
     assert all(not path.exists() for path in runner.secret_file_paths)
     state = manager.rollback(_lk_plan())
     assert state.rolled_back

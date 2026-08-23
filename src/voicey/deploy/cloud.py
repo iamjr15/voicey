@@ -1110,7 +1110,7 @@ class LiveKitCloudDeploymentManager:
                 agent=agent,
                 relay_url=plan.relay_url,
                 relay_credential=relay,
-                environment=worker_secrets,
+                environment=dict(environment) | worker_secrets,
                 to_number=smoke_to,
             )
         state = state.checkpoint(platform_ready=True, relay_ready=True)

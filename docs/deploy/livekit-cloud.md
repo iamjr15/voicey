@@ -45,6 +45,9 @@ multi-stage glibc/non-root context, validates signed relay readiness, verifies
 the exact authenticated project, and refuses unledgered LiveKit agent state.
 It sends worker-only secrets through a temporary `0600` file that is removed
 as soon as the CLI returns.
+LiveKit project credentials injected into the local command remain available
+to the room-smoke client but are not copied into that worker secret file; the
+Cloud agent runtime receives its project credentials from LiveKit itself.
 
 On first deploy it calls `lk agent create`; subsequent deployments use
 `lk agent deploy` and checkpoint the previous current version. Ready status is
