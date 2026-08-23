@@ -448,11 +448,12 @@ invalid.
 
 ## VY-DEP-004
 
-**Cause:** Post-deploy smoke verification failed or lacks a required live-call
-input.
+**Cause:** Post-deploy smoke verification failed, a synthetic cloud participant
+could not join/leave normally, or a required live-call input is missing.
 
-**Fix:** Correct the printed URL, number, credential, or failed terminal state,
-then rerun the smoke command.
+**Fix:** Correct the printed URL, number, credential, Daily/LiveKit media
+access, native flow startup, or failed terminal state, then rerun the smoke
+command.
 
 ## VY-DEP-005
 

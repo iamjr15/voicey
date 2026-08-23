@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import stat
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from voicey.deploy.cloud import (
     _current_version,
     _livekit_agent_id,
     _pipecat_agent_exists,
+    _pipecat_daily_session,
     _pipecat_image,
     _project_requirements,
     _require_livekit_project,
@@ -36,11 +38,10 @@ from voicey.deploy.cloud import (
     _require_secret_names,
     _runtime_extras,
     _secret_file,
-    _session_id,
     _stage_wheel,
     _wait_livekit_ready,
-    _wait_relay_call,
 )
+from voicey.deploy.cloud_smoke import PipecatDailySession
 from voicey.errors import VoiceyError
 from voicey.relay.auth import RelayCredential
 
@@ -73,6 +74,23 @@ class FakeRelayClient:
             ended_at=datetime.now(UTC) if terminal else None,
             status="completed" if terminal else "active",
         )
+
+
+class FakePipecatSessionSmoke:
+    def __init__(self) -> None:
+        self.sessions: list[PipecatDailySession] = []
+
+    async def run(
+        self,
+        *,
+        session: PipecatDailySession,
+        relay_url: str,
+        relay_credential: RelayCredential,
+    ) -> bool:
+        del relay_credential
+        assert relay_url == "https://voicey-results.fly.dev"
+        self.sessions.append(session)
+        return True
 
 
 class FakePipecatCloudRunner:
@@ -126,8 +144,16 @@ class FakePipecatCloudRunner:
             self.ready = True
             self.image = command[3]
             return _result("Agent deployment 'voicey-agent' is ready")
-        if command[:3] == ("cloud", "agent", "start"):
-            return _result("Agent started\nSession ID: session_123")
+        if command[:5] == ("cloud", "--output", "json", "agent", "start"):
+            return _result(
+                json.dumps(
+                    {
+                        "sessionId": "session_123",
+                        "dailyRoom": "https://daily.example.test/smoke-room",
+                        "dailyToken": "daily-secret-token",
+                    }
+                )
+            )
         if command[:3] == ("cloud", "agent", "stop"):
             return _result("Session stopped")
         if command[:3] == ("cloud", "agent", "delete"):
@@ -463,11 +489,13 @@ async def test_pipecat_cloud_deploy_syncs_without_argv_secrets_smokes_and_resume
     project = tmp_path / "project"
     _project(project, "pipecat")
     runner = FakePipecatCloudRunner()
+    session_smoke = FakePipecatSessionSmoke()
     FakeRelayClient.opens = 0
     manager = PipecatCloudDeploymentManager(
         project,
         runner=runner,
         relay_client_factory=cast("object", FakeRelayClient),  # type: ignore[arg-type]
+        session_smoke_runner=cast("object", session_smoke),  # type: ignore[arg-type]
     )
     sys.modules.pop("agent", None)
     first = await manager.deploy(
@@ -489,7 +517,9 @@ async def test_pipecat_cloud_deploy_syncs_without_argv_secrets_smokes_and_resume
     assert first.state.relay_ready
     assert first.smoke.session_smoke
     assert not second.smoke.session_smoke
-    assert FakeRelayClient.opens == 3
+    assert FakeRelayClient.opens == 2
+    assert [item.session_id for item in session_smoke.sessions] == ["session_123"]
+    assert all("daily-secret-token" not in repr(item) for item in session_smoke.sessions)
     assert all(not path.exists() for path in runner.secret_file_paths)
     assert all("vkr_" not in " ".join(command) for command in runner.commands)
     assert "VOICEY_RELAY_CREDENTIAL" in runner.secret_names
@@ -937,8 +967,20 @@ def test_cloud_artifact_error_and_replacement_paths(tmp_path: Path) -> None:
 
 
 def test_cloud_helper_contracts_cover_all_supported_platform_shapes(tmp_path: Path) -> None:
-    assert _session_id("Session ID: session_abc-123") == "session_abc-123"
-    assert _session_id("started without an identifier") is None
+    session = _pipecat_daily_session(
+        json.dumps(
+            {
+                "sessionId": "session_abc-123",
+                "dailyRoom": "https://daily.example.test/room",
+                "dailyToken": "secret-token",
+            }
+        )
+    )
+    assert session.session_id == "session_abc-123"
+    assert "secret-token" not in repr(session)
+    for invalid in ("not-json", "[]", '{"sessionId":"missing-room"}'):
+        with pytest.raises(VoiceyError, match="Pipecat Cloud session start"):
+            _pipecat_daily_session(invalid)
     assert _current_version("> v7 deployed current") == "v7"
     assert _current_version("current version: release_8") == "release_8"
     assert _current_version("no versions") is None
@@ -1046,68 +1088,6 @@ def test_cloud_wheel_requirements_and_secret_file_validation(tmp_path: Path) -> 
         pass
     assert holder.path is not None
     assert not holder.path.exists()
-
-
-@pytest.mark.asyncio
-async def test_wait_relay_call_retries_absence_and_propagates_other_errors() -> None:
-    class Client:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        async def get_call(self, _call_id: str) -> object:
-            self.calls += 1
-            if self.calls == 1:
-                raise VoiceyError("VY-OBS-003")
-            return SimpleNamespace(ended_at=datetime.now(UTC), status="completed")
-
-    client = Client()
-    await _wait_relay_call(
-        cast("object", client),  # type: ignore[arg-type]
-        "call_test",
-        timeout_s=1,
-        poll_interval_s=0,
-        terminal=True,
-        failure="timeout",
-    )
-    assert client.calls == 2
-
-    class Failed:
-        async def get_call(self, _call_id: str) -> object:
-            return SimpleNamespace(ended_at=datetime.now(UTC), status="failed")
-
-    with pytest.raises(VoiceyError, match="not 'completed'"):
-        await _wait_relay_call(
-            cast("object", Failed()),  # type: ignore[arg-type]
-            "call_test",
-            timeout_s=1,
-            poll_interval_s=0,
-            terminal=True,
-            failure="timeout",
-        )
-
-    with pytest.raises(VoiceyError, match="before media readiness"):
-        await _wait_relay_call(
-            cast("object", Failed()),  # type: ignore[arg-type]
-            "call_test",
-            timeout_s=1,
-            poll_interval_s=0,
-            terminal=False,
-            failure="timeout",
-        )
-
-    class Broken:
-        async def get_call(self, _call_id: str) -> object:
-            raise VoiceyError("VY-DEP-004", detail="relay rejected")
-
-    with pytest.raises(VoiceyError, match="relay rejected"):
-        await _wait_relay_call(
-            cast("object", Broken()),  # type: ignore[arg-type]
-            "call_test",
-            timeout_s=1,
-            poll_interval_s=0,
-            terminal=False,
-            failure="timeout",
-        )
 
 
 def _context_text(path: Path) -> str:

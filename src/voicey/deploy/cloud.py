@@ -25,7 +25,11 @@ from voicey.cli.environment import EnvFileStore
 from voicey.config.catalog import DEFAULT_PROVIDER_CATALOG
 from voicey.config.manifest import ManifestStore, ProjectManifest
 from voicey.config.models import Agent
-from voicey.deploy.cloud_smoke import LiveKitCloudSessionSmoke
+from voicey.deploy.cloud_smoke import (
+    LiveKitCloudSessionSmoke,
+    PipecatCloudSessionSmoke,
+    PipecatDailySession,
+)
 from voicey.errors import VoiceyError
 from voicey.relay.auth import RelayCredential
 from voicey.relay.client import RelayClient
@@ -580,20 +584,22 @@ class PipecatCloudDeploymentManager:
         *,
         runner: CloudCommandRunner | None = None,
         relay_client_factory: (Callable[[str, RelayCredential], RelayClient] | None) = None,
+        session_smoke_runner: PipecatCloudSessionSmoke | None = None,
         smoke_claim_timeout_s: float = 90,
         smoke_terminal_timeout_s: float = 120,
         smoke_poll_interval_s: float = 2,
     ) -> None:
-        if smoke_claim_timeout_s <= 0 or smoke_terminal_timeout_s <= 0 or smoke_poll_interval_s < 0:
-            raise VoiceyError("VY-DEP-008", detail="cloud smoke timeouts are invalid.")
         self.project_root = project_root.resolve()
         self.runner = runner or PlatformCliRunner("pipecat")
         self.store = CloudResourceStore(self.project_root, "pipecat-cloud")
         self.artifacts = CloudArtifactGenerator(self.project_root)
         self._relay_client_factory = relay_client_factory or RelayClient
-        self._smoke_claim_timeout_s = smoke_claim_timeout_s
-        self._smoke_terminal_timeout_s = smoke_terminal_timeout_s
-        self._smoke_poll_interval_s = smoke_poll_interval_s
+        self._session_smoke_runner = session_smoke_runner or PipecatCloudSessionSmoke(
+            relay_client_factory=relay_client_factory,  # type: ignore[arg-type]
+            claim_timeout_s=smoke_claim_timeout_s,
+            terminal_timeout_s=smoke_terminal_timeout_s,
+            poll_interval_s=smoke_poll_interval_s,
+        )
 
     def prepare(
         self,
@@ -852,68 +858,48 @@ class PipecatCloudDeploymentManager:
         artifacts: CloudArtifacts,
         relay: RelayCredential,
     ) -> bool:
-        session_id: str | None = None
-        client = self._relay_client_factory(plan.relay_url, relay)
+        session: PipecatDailySession | None = None
         try:
-            await client.open()
-            try:
-                started = self.runner.run(
+            started = self.runner.run(
+                [
+                    "cloud",
+                    "--output",
+                    "json",
+                    "agent",
+                    "start",
+                    plan.agent_name,
+                    "--organization",
+                    plan.organization,
+                    "--use-daily",
+                    "--force",
+                ],
+                cwd=artifacts.context,
+                timeout_s=300,
+            )
+            session = _pipecat_daily_session(started.stdout)
+            return await self._session_smoke_runner.run(
+                session=session,
+                relay_url=plan.relay_url,
+                relay_credential=relay,
+            )
+        finally:
+            if session is not None:
+                self.runner.run(
                     [
                         "cloud",
                         "agent",
-                        "start",
+                        "stop",
                         plan.agent_name,
+                        "--session-id",
+                        session.session_id,
                         "--organization",
                         plan.organization,
-                        "--use-daily",
                         "--force",
                     ],
                     cwd=artifacts.context,
-                    timeout_s=300,
+                    check=False,
+                    timeout_s=120,
                 )
-                session_id = _session_id(started.stdout)
-                if session_id is None:
-                    raise VoiceyError(
-                        "VY-DEP-004",
-                        detail="Pipecat Cloud session smoke omitted its session id.",
-                    )
-                call_id = f"pcc_{session_id}"
-                await _wait_relay_call(
-                    client,
-                    call_id,
-                    timeout_s=self._smoke_claim_timeout_s,
-                    poll_interval_s=self._smoke_poll_interval_s,
-                    terminal=False,
-                    failure="Pipecat Cloud session did not begin through the results relay.",
-                )
-            finally:
-                if session_id is not None:
-                    self.runner.run(
-                        [
-                            "cloud",
-                            "agent",
-                            "stop",
-                            plan.agent_name,
-                            "--session-id",
-                            session_id,
-                            "--organization",
-                            plan.organization,
-                            "--force",
-                        ],
-                        cwd=artifacts.context,
-                        timeout_s=120,
-                    )
-            await _wait_relay_call(
-                client,
-                f"pcc_{session_id}",
-                timeout_s=self._smoke_terminal_timeout_s,
-                poll_interval_s=self._smoke_poll_interval_s,
-                terminal=True,
-                failure="Pipecat Cloud session stop produced no terminal relay event.",
-            )
-            return True
-        finally:
-            await client.close()
 
     def rollback_created(self, plan: PipecatCloudPlan) -> CloudResourceState:
         state = self.store.load()
@@ -1732,49 +1718,33 @@ def _require_region(output: str, region: str, *, platform: str) -> None:
         )
 
 
-async def _wait_relay_call(
-    client: RelayClient,
-    call_id: str,
-    *,
-    timeout_s: float,
-    poll_interval_s: float,
-    terminal: bool,
-    failure: str,
-) -> None:
-    deadline = asyncio.get_running_loop().time() + timeout_s
-    while True:
-        try:
-            call = await client.get_call(call_id)
-        except VoiceyError as exc:
-            if exc.code != "VY-OBS-003":
-                raise
-            call = None
-        if call is not None:
-            if terminal and call.ended_at is not None:
-                if call.status != "completed":
-                    raise VoiceyError(
-                        "VY-DEP-004",
-                        detail=(
-                            f"cloud session {call_id!r} terminated with status "
-                            f"{call.status!r}, not 'completed'."
-                        ),
-                    )
-                return
-            if not terminal:
-                if call.ended_at is not None:
-                    raise VoiceyError(
-                        "VY-DEP-004",
-                        detail=f"cloud session {call_id!r} failed before media readiness.",
-                    )
-                return
-        if asyncio.get_running_loop().time() >= deadline:
-            raise VoiceyError("VY-DEP-004", detail=failure)
-        await asyncio.sleep(poll_interval_s)
-
-
-def _session_id(output: str) -> str | None:
-    match = re.search(r"Session ID:\s*([A-Za-z0-9_-]+)", output, flags=re.IGNORECASE)
-    return None if match is None else match.group(1)
+def _pipecat_daily_session(output: str) -> PipecatDailySession:
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise VoiceyError(
+            "VY-DEP-004",
+            detail="Pipecat Cloud session start returned invalid JSON.",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise VoiceyError(
+            "VY-DEP-004",
+            detail="Pipecat Cloud session start returned a non-object response.",
+        )
+    values = cast("dict[str, object]", payload)
+    session_id = values.get("sessionId")
+    room_url = values.get("dailyRoom")
+    room_token = values.get("dailyToken")
+    if not all(isinstance(value, str) and value for value in (session_id, room_url, room_token)):
+        raise VoiceyError(
+            "VY-DEP-004",
+            detail="Pipecat Cloud session start omitted required Daily fields.",
+        )
+    return PipecatDailySession(
+        session_id=cast(str, session_id),
+        room_url=cast(str, room_url),
+        room_token=cast(str, room_token),
+    )
 
 
 def _current_version(output: str) -> str | None:

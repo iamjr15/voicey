@@ -7,6 +7,7 @@ import json
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Protocol
 
@@ -55,7 +56,7 @@ class SmokeRelay(Protocol):
 
 
 class SmokeParticipant(Protocol):
-    """Connected synthetic caller used to activate LiveKit RoomIO."""
+    """Connected synthetic caller used to activate a cloud media session."""
 
     async def disconnect(self) -> None: ...
 
@@ -71,6 +72,131 @@ class SmokeParticipantConnector(Protocol):
         api_secret: str,
         room_name: str,
     ) -> SmokeParticipant: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PipecatDailySession:
+    """Secret-bearing Daily room coordinates returned by Pipecat Cloud."""
+
+    session_id: str
+    room_url: str = field(repr=False)
+    room_token: str = field(repr=False)
+
+
+class PipecatParticipantConnector(Protocol):
+    """Connect one non-publishing participant to a Pipecat Daily room."""
+
+    async def __call__(
+        self,
+        *,
+        room_url: str,
+        room_token: str,
+    ) -> SmokeParticipant: ...
+
+
+class PipecatCloudSessionSmoke:
+    """Prove hosted flow startup and a graceful Daily caller disconnect."""
+
+    def __init__(
+        self,
+        *,
+        relay_client_factory: (Callable[[str, RelayCredential], SmokeRelay] | None) = None,
+        participant_connector: PipecatParticipantConnector | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        claim_timeout_s: float = 90,
+        terminal_timeout_s: float = 120,
+        poll_interval_s: float = 2,
+    ) -> None:
+        if claim_timeout_s <= 0 or terminal_timeout_s <= 0 or poll_interval_s < 0:
+            raise VoiceyError("VY-DEP-008", detail="cloud smoke timeouts are invalid.")
+        self._relay_client_factory = relay_client_factory or RelayClient
+        self._participant_connector = participant_connector or _connect_pipecat_smoke_participant
+        self._sleep = sleep
+        self._claim_timeout_s = claim_timeout_s
+        self._terminal_timeout_s = terminal_timeout_s
+        self._poll_interval_s = poll_interval_s
+
+    async def run(
+        self,
+        *,
+        session: PipecatDailySession,
+        relay_url: str,
+        relay_credential: RelayCredential,
+    ) -> bool:
+        """Attach a real caller, await native flow startup, then leave normally."""
+        call_id = f"pcc_{session.session_id}"
+        relay = self._relay_client_factory(relay_url, relay_credential)
+        participant: SmokeParticipant | None = None
+        try:
+            await relay.open()
+            await self._wait_for(
+                relay,
+                call_id,
+                timeout_s=self._claim_timeout_s,
+                predicate=lambda record: record.ended_at is None,
+                failure="Pipecat Cloud session did not begin through the results relay.",
+            )
+            participant = await self._participant_connector(
+                room_url=session.room_url,
+                room_token=session.room_token,
+            )
+            await self._wait_for(
+                relay,
+                call_id,
+                timeout_s=self._claim_timeout_s,
+                predicate=lambda record: any(
+                    event.event_type == "runtime.flow_initialized" for event in record.timeline
+                ),
+                failure="Pipecat Cloud did not initialize the runtime-native flow.",
+                reject_terminal=True,
+            )
+            await participant.disconnect()
+            participant = None
+            terminal_record = await self._wait_for(
+                relay,
+                call_id,
+                timeout_s=self._terminal_timeout_s,
+                predicate=lambda record: record.ended_at is not None,
+                failure="Pipecat Cloud caller disconnect produced no terminal relay event.",
+            )
+            if terminal_record.status != "completed":
+                raise VoiceyError(
+                    "VY-DEP-004",
+                    detail="Pipecat Cloud smoke terminated without a completed call.",
+                )
+            return True
+        finally:
+            if participant is not None:
+                with suppress(Exception):
+                    await participant.disconnect()
+            await relay.close()
+
+    async def _wait_for(
+        self,
+        relay: SmokeRelay,
+        call_id: str,
+        *,
+        timeout_s: float,
+        predicate: Callable[[CallRecord], bool],
+        failure: str,
+        reject_terminal: bool = False,
+    ) -> CallRecord:
+        deadline = asyncio.get_running_loop().time() + timeout_s
+        while True:
+            try:
+                record = await relay.get_call(call_id)
+            except VoiceyError as exc:
+                if exc.code != "VY-OBS-003":
+                    raise
+                record = None
+            if record is not None:
+                if predicate(record):
+                    return record
+                if reject_terminal and record.ended_at is not None:
+                    raise VoiceyError("VY-DEP-004", detail=failure)
+            if asyncio.get_running_loop().time() >= deadline:
+                raise VoiceyError("VY-DEP-004", detail=failure)
+            await self._sleep(self._poll_interval_s)
 
 
 class LiveKitCloudSessionSmoke:
@@ -280,6 +406,101 @@ class LiveKitCloudSessionSmoke:
             if asyncio.get_running_loop().time() >= deadline:
                 raise VoiceyError("VY-DEP-004", detail=failure)
             await self._sleep(self._poll_interval_s)
+
+
+_daily_initialized = False
+
+
+class _DailySmokeParticipant:
+    """Own one Daily client until its normal leave callback is acknowledged."""
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+        self._disconnected = False
+
+    async def disconnect(self) -> None:
+        if self._disconnected:
+            return
+        self._disconnected = True
+        loop = asyncio.get_running_loop()
+        completed: asyncio.Future[str | None] = loop.create_future()
+
+        def finish(error: str | None) -> None:
+            def settle() -> None:
+                if not completed.done():
+                    completed.set_result(error)
+
+            loop.call_soon_threadsafe(settle)
+
+        try:
+            self._client.leave(completion=finish)
+            error = await asyncio.wait_for(completed, timeout=30)
+            if error:
+                raise VoiceyError(
+                    "VY-DEP-004",
+                    detail="Pipecat Cloud synthetic caller could not leave its Daily room.",
+                )
+        finally:
+            self._client.release()
+
+
+async def _connect_pipecat_smoke_participant(
+    *,
+    room_url: str,
+    room_token: str,
+) -> SmokeParticipant:
+    """Join with no publish grants using the installed pinned Daily client."""
+    global _daily_initialized
+
+    try:
+        from daily import CallClient, Daily
+    except ImportError as exc:
+        raise VoiceyError(
+            "VY-DEP-009",
+            detail="Pipecat Cloud session smoke requires the pinned Daily runtime extra.",
+        ) from exc
+    if not _daily_initialized:
+        # Daily is process-global. The deploy CLI is short lived, and calling deinit
+        # while native callback wrappers remain reachable can terminate the process.
+        Daily.init()
+        _daily_initialized = True
+    loop = asyncio.get_running_loop()
+    completed: asyncio.Future[tuple[Mapping[str, Any] | None, str | None]] = loop.create_future()
+    client = CallClient()
+
+    def finish(data: Mapping[str, Any] | None, error: str | None) -> None:
+        def settle() -> None:
+            if not completed.done():
+                completed.set_result((data, error))
+
+        loop.call_soon_threadsafe(settle)
+
+    try:
+        client.join(
+            room_url,
+            room_token,
+            client_settings={
+                "inputs": {
+                    "camera": {"isEnabled": False},
+                    "microphone": {"isEnabled": False},
+                },
+                "publishing": {
+                    "camera": {"isPublishing": False},
+                    "microphone": {"isPublishing": False},
+                },
+            },
+            completion=finish,
+        )
+        data, error = await asyncio.wait_for(completed, timeout=45)
+        if error or data is None:
+            raise VoiceyError(
+                "VY-DEP-004",
+                detail="Pipecat Cloud synthetic caller could not join its Daily room.",
+            )
+    except BaseException:
+        client.release()
+        raise
+    return _DailySmokeParticipant(client)
 
 
 def _livekit_api(*, url: str, api_key: str, api_secret: str) -> Any:

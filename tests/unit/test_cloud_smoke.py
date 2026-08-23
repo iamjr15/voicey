@@ -1,13 +1,22 @@
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 import json
+import sys
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
 from voicey import Agent, Models, Results, Web
-from voicey.deploy.cloud_smoke import LiveKitCloudSessionSmoke
+from voicey.deploy import cloud_smoke
+from voicey.deploy.cloud_smoke import (
+    LiveKitCloudSessionSmoke,
+    PipecatCloudSessionSmoke,
+    PipecatDailySession,
+)
 from voicey.errors import VoiceyError
 from voicey.obs.records import CallRecord, NewCall, TimelineEvent
 from voicey.relay.auth import RelayCredential
@@ -170,6 +179,50 @@ class FakeParticipantConnector:
         return self.participant
 
 
+class FakePipecatSmokeRelay(FakeSmokeRelay):
+    def __init__(self, *, failed: bool = False, terminal_before_flow: bool = False) -> None:
+        super().__init__(failed=failed)
+        self.connected = False
+        self.terminal_before_flow = terminal_before_flow
+        self.dispatched_call_id = "pcc_session_123"
+
+    async def get_call(self, call_id: str) -> CallRecord:
+        assert call_id == "pcc_session_123"
+        self.claimed = True
+        if self.terminal_before_flow and self.connected:
+            self.ended = True
+        record = await super().get_call(call_id)
+        timeline = [*record.timeline]
+        if self.connected and not self.terminal_before_flow:
+            timeline.append(TimelineEvent(event_type="runtime.flow_initialized"))
+        return record.model_copy(
+            update={
+                "runtime": "pipecat",
+                "provider": "pipecat-cloud-smoke",
+                "timeline": tuple(timeline),
+            }
+        )
+
+
+class FakePipecatParticipantConnector:
+    def __init__(self, relay: FakePipecatSmokeRelay) -> None:
+        self.relay = relay
+        self.participant = FakeParticipant(relay)
+        self.room_url: str | None = None
+        self.room_token: str | None = None
+
+    async def __call__(
+        self,
+        *,
+        room_url: str,
+        room_token: str,
+    ) -> FakeParticipant:
+        self.room_url = room_url
+        self.room_token = room_token
+        self.relay.connected = True
+        return self.participant
+
+
 class FakeSipService:
     def __init__(self) -> None:
         self.created: object | None = None
@@ -197,6 +250,138 @@ def _agent() -> Agent:
             secret_env="VOICEY_WEBHOOK_SECRET",
         ),
     )
+
+
+def _pipecat_session() -> PipecatDailySession:
+    return PipecatDailySession(
+        session_id="session_123",
+        room_url="https://daily.example.test/smoke-room",
+        room_token="daily-secret-token",
+    )
+
+
+@pytest.mark.asyncio
+async def test_pipecat_cloud_smoke_proves_flow_and_graceful_terminal() -> None:
+    relay = FakePipecatSmokeRelay()
+    connector = FakePipecatParticipantConnector(relay)
+
+    def relay_factory(_url: str, _credential: RelayCredential) -> FakePipecatSmokeRelay:
+        return relay
+
+    smoke = PipecatCloudSessionSmoke(
+        relay_client_factory=relay_factory,
+        participant_connector=connector,
+        poll_interval_s=0,
+    )
+    assert await smoke.run(
+        session=_pipecat_session(),
+        relay_url="https://relay.example.test",
+        relay_credential=RelayCredential.issue("smoke-key"),
+    )
+    assert relay.opened
+    assert relay.closed
+    assert relay.connected
+    assert relay.ended
+    assert connector.participant.disconnected
+    assert connector.room_url == "https://daily.example.test/smoke-room"
+    assert connector.room_token == "daily-secret-token"
+    assert "daily-secret-token" not in repr(_pipecat_session())
+
+
+@pytest.mark.asyncio
+async def test_pipecat_cloud_smoke_rejects_failed_terminal() -> None:
+    relay = FakePipecatSmokeRelay(failed=True)
+    connector = FakePipecatParticipantConnector(relay)
+    smoke = PipecatCloudSessionSmoke(
+        relay_client_factory=lambda _url, _credential: relay,
+        participant_connector=connector,
+        poll_interval_s=0,
+    )
+    with pytest.raises(VoiceyError, match="without a completed call"):
+        await smoke.run(
+            session=_pipecat_session(),
+            relay_url="https://relay.example.test",
+            relay_credential=RelayCredential.issue("smoke-key"),
+        )
+    assert relay.closed
+
+
+@pytest.mark.asyncio
+async def test_pipecat_cloud_smoke_rejects_terminal_before_flow_start() -> None:
+    relay = FakePipecatSmokeRelay(terminal_before_flow=True)
+    connector = FakePipecatParticipantConnector(relay)
+    smoke = PipecatCloudSessionSmoke(
+        relay_client_factory=lambda _url, _credential: relay,
+        participant_connector=connector,
+        claim_timeout_s=1,
+        poll_interval_s=0,
+    )
+    with pytest.raises(VoiceyError, match="did not initialize"):
+        await smoke.run(
+            session=_pipecat_session(),
+            relay_url="https://relay.example.test",
+            relay_credential=RelayCredential.issue("smoke-key"),
+        )
+    assert connector.participant.disconnected
+    assert relay.closed
+
+
+@pytest.mark.asyncio
+async def test_pipecat_daily_connector_is_nonpublishing_and_releases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clients: list[Any] = []
+    initialized = 0
+
+    class Daily:
+        @staticmethod
+        def init() -> None:
+            nonlocal initialized
+            initialized += 1
+
+    class CallClient:
+        def __init__(self) -> None:
+            self.settings: dict[str, Any] | None = None
+            self.released = False
+            clients.append(self)
+
+        def join(
+            self,
+            _room_url: str,
+            _room_token: str,
+            *,
+            client_settings: dict[str, Any],
+            completion: Any,
+        ) -> None:
+            self.settings = client_settings
+            completion({"participants": {}}, None)
+
+        def leave(self, *, completion: Any) -> None:
+            completion(None)
+
+        def release(self) -> None:
+            self.released = True
+
+    monkeypatch.setitem(sys.modules, "daily", SimpleNamespace(CallClient=CallClient, Daily=Daily))
+    monkeypatch.setattr(cloud_smoke, "_daily_initialized", False)
+    participant = await cloud_smoke._connect_pipecat_smoke_participant(
+        room_url="https://daily.example.test/smoke-room",
+        room_token="secret-token",
+    )
+    assert initialized == 1
+    assert clients[0].settings == {
+        "inputs": {
+            "camera": {"isEnabled": False},
+            "microphone": {"isEnabled": False},
+        },
+        "publishing": {
+            "camera": {"isPublishing": False},
+            "microphone": {"isPublishing": False},
+        },
+    }
+    await participant.disconnect()
+    await participant.disconnect()
+    assert clients[0].released
 
 
 @pytest.mark.asyncio
@@ -460,6 +645,8 @@ async def test_livekit_cloud_smoke_timeout_deletes_room_and_terminalizes_reserva
     assert relay.terminalized == 1
 
 
-def test_livekit_cloud_smoke_rejects_invalid_timeouts() -> None:
+def test_cloud_smokes_reject_invalid_timeouts() -> None:
+    with pytest.raises(VoiceyError, match="VY-DEP-008"):
+        PipecatCloudSessionSmoke(terminal_timeout_s=0)
     with pytest.raises(VoiceyError, match="VY-DEP-008"):
         LiveKitCloudSessionSmoke(claim_timeout_s=0)

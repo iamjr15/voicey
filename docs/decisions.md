@@ -830,6 +830,14 @@ These choices apply the documented proposals authorized in the build mandate and
   credentials. The former manages deployments; `agent start` uses the latter.
   Live certification creates an explicitly named disposable public key and
   revokes it during teardown.
+- Do not classify a control-plane `agent stop` as a successful media terminal.
+  The installed platform cancels the worker, which correctly maps an
+  unattributed `CancelFrame` to `worker_crash`. Instead parse the installed
+  CLI's exact `sessionId`/`dailyRoom`/`dailyToken` JSON, attach a camera-off,
+  microphone-off, non-publishing Daily participant, wait for durable
+  `runtime.flow_initialized`, and disconnect it normally. Only the resulting
+  `completed` relay terminal promotes the smoke; `agent stop` remains
+  best-effort cleanup.
 
 ## 2026-08-23 — LiveKit Cloud CLI project shape
 

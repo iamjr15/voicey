@@ -105,9 +105,12 @@ Voicey verifies signed relay readiness before any platform mutation,
 authenticates the CLI, validates the selected region, refuses an unledgered
 existing agent, syncs secrets through a temporary `0600` file, deploys the
 exact image, and requires ready status. It then starts a real Daily-backed
-platform session and proves an active durable begin plus a `completed` terminal
-record. A setup-failed or failed terminal makes the deployment fail even when
-the control plane reported the worker ready.
+platform session and attaches a synthetic caller with its camera, microphone,
+and publishing disabled. The caller stays connected until the relay durably
+records `runtime.flow_initialized`, then leaves normally. Promotion requires
+an active durable begin plus a `completed` terminal record; the platform stop
+command is best-effort cleanup only. A setup-failed or failed terminal makes
+the deployment fail even when the control plane reported the worker ready.
 A retry after a post-deploy interruption reconciles the current `Agent:`,
 `Ready:`, `Deployment Phase:`, and exact `Image:` status fields against the
 owner-only ledger, then resumes at readiness/session smoke without redeploying.
