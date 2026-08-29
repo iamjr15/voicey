@@ -982,3 +982,7 @@ These choices apply the documented proposals authorized in the build mandate and
   repository creation, the protected environment, and PyPI's exact Trusted
   Publisher binding remain human-authorized setup. Use the project-scoped
   token only for the explicitly approved bootstrap `1.0.0` upload.
+- The approved bootstrap upload published exact tagged commit `e414bee`. Public
+  wheel and sdist bytes matched the gated artifacts, clean Python 3.14 default
+  and both-runtime-extra installs selected 1.0.0, and the superseded
+  `0.0.0.dev0` release was yanked rather than deleting its historical record.

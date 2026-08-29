@@ -174,7 +174,12 @@ operator authorized free-tier resources only. The exact paid gate remains in
 `docs/GAPS.md`. The first public `0.0.0.dev0` PyPI canary is explicitly
 approved, locally release-gated, published from commit `25a75f7`, and
 cache-disabled clean-install verified from PyPI on Python 3.14. Stable
-promotion remains a separate human-only decision after the remaining gates.
+`voicey==1.0.0` was then published from exact tagged commit `e414bee` after its
+same-line `1.0.0rc1`, stable installed-wheel, and security gates passed. Public
+wheel/sdist bytes and default plus both-runtime-extra clean installs are
+verified; the development release is yanked. Tokenless release CI is complete,
+while the public GitHub repository, protected environment, and exact PyPI
+Trusted Publisher binding remain human-authorized one-time setup.
 
 Full chaos suite; 24h soak at max_concurrent; drain/zero-downtime redeploy per target (against the rolling-generation invariant test); Prometheus endpoint + opt-in OTLP; **railway target** (platform-managed PG provisioning + migrations + persistence preflight + rolling-generation invariant tests — fly moved to P3 as the companion foundation); `upgrade` + `recipes update-check` drift tooling (AI-merge guidance, never overwrite); **release engineering as concrete tasks (Codex R3, spec §15)**: SemVer policy implementation + deprecation-warning machinery (2-minor minimum), runtime version-range checks with out-of-range warnings + compatibility table, canary channel (`--pre`) validated by first-party recipes before stable, **API/schema snapshot diff in CI** (config schema, webhook payload, CLI surface — docs PR required on change); **docs completion per spec §16 as an enumerated checklist** (per-runtime quickstarts CI-executed verbatim, concepts, per-carrier + per-deploy-target guides, webhook receiving in 3 languages, testing, upgrading, recipe pages, generated API reference, error-catalog pages, troubleshooting index); security pass (signature negative tests, secret-leak scans of logs/records/images, dependency + container audit — baseline scanning already running since P0/P1); **rename step** (RENAME.md executed once the real name is chosen: package dir, pyproject, console script, entry-point groups, imports, docs) → publish to PyPI + launch.
 
@@ -273,6 +278,10 @@ both native runtimes. Canary artifacts remain private; stable requires a green
 same-release-line canary report, reruns the wheel gate, and publishes only from
 an isolated OIDC job after protected-environment approval. GitHub repository
 creation and the exact PyPI Trusted Publisher binding remain human-authorized.
+The bootstrap stable `voicey==1.0.0` release was published from exact tagged
+commit `e414bee` on 2026-08-29 after same-line canary, stable, security, Twine,
+public-byte, and source-free Python 3.14 install verification; its superseded
+development release is yanked.
 Local Python 3.11 and 3.14 runtime-edge evidence is green. Historical exact gate:
 `uv run python tests/verification/run_p4_release_gate.py --wheel
 dist/voicey-0.0.0.dev0-py3-none-any.whl --channel canary`. Ruff, formatting,

@@ -4,7 +4,9 @@ Voicey release preparation and stable publication are automated behind explicit
 human approval. The workflow builds without publishing authority, then gives a
 separate protected job only a short-lived OIDC identity. It never stores a PyPI
 token. Repository creation and the one-time GitHub/PyPI trust binding remain
-human-authorized operations.
+human-authorized operations. Voicey 1.0.0 used the documented bootstrap path
+because this checkout did not yet have a GitHub remote; OIDC is the required
+steady-state path once that binding exists.
 
 ## Version policy
 
@@ -139,9 +141,9 @@ completed locally.
 
 ## Approved bootstrap upload
 
-The public project was bootstrapped before a GitHub repository existed. A
-manually approved stable upload therefore uses the project-scoped `voicey`
-token from the operator credential manager. This is a bootstrap path, not the
+The public project was bootstrapped before a GitHub repository existed. The
+manually approved stable upload therefore used the project-scoped `voicey`
+token from the operator credential manager. This was a bootstrap path, not the
 steady-state CI/CD design.
 
 Build from the exact reviewed commit into a fresh directory, validate both
@@ -189,3 +191,26 @@ Record the PyPI URL, artifact SHA-256, clean-install output, and exact source
 commit in `docs/COMPLETION-REPORT.md`. Never store the account password or
 upload token in the repository, shell history, release report, or generated
 artifact.
+
+## Published 1.0.0 evidence
+
+The bootstrap publication completed on 2026-08-29 from exact commit `e414bee`,
+which remains the target of annotated tag `v1.0.0`. The same-line `1.0.0rc1`
+canary, stable installed-wheel gate, security gate, and Twine validation were
+green before upload. Public artifacts are:
+
+- wheel SHA-256:
+  `6df19c44cb5ffe6f97feca11d7824d75c398118d844aaa31c19045c5bd3733fe`;
+- sdist SHA-256:
+  `af9929a49bf8a7bc2c828c522707a295027d98c381fcaca40bd2c1c4ab7001e8`.
+
+Direct public redownloads matched the gated artifacts byte-for-byte. A clean
+Python 3.14 environment installed 148 packages with both runtime extras and
+loaded Voicey only from temporary site-packages; a separate cache-disabled
+unversioned install selected 1.0.0. The superseded `0.0.0.dev0` release is
+yanked, not deleted.
+
+The project-scoped bootstrap token remains only until a Trusted Publishing run
+succeeds. The temporary account-wide claim token still requires manual removal
+because PyPI rejected the supplied account password during the revocation
+attempt; see `docs/GAPS.md`. No credential value is stored in this repository.

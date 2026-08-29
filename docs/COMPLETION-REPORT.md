@@ -2,11 +2,13 @@
 
 Implementation of the P0–P4 build plan is complete. Every credential-free,
 locally runnable phase gate is green. The free-tier Railway companion and both
-cloud runtimes passed real web/model/audio certification. The product is not
-represented as fully released or fully externally certified: paid provider
-media, live PSTN, human audio/handset checks, active-call drain, managed-object
-compatibility, paid Fly resources, the full 24-hour soak, and stable promotion
-remain pending under the repository's reality boundary.
+cloud runtimes passed real web/model/audio certification, and Voicey 1.0.0 is
+publicly released. The product is not represented as fully externally
+certified: paid provider media, live PSTN, human audio/handset checks,
+active-call drain, managed-object compatibility, paid Fly resources, and the
+full 24-hour soak remain pending under the repository's reality boundary. The
+tokenless release workflow is complete; activating it requires the one-time
+GitHub environment and PyPI Trusted Publisher binding described below.
 
 ## Phase gate summary
 
@@ -27,8 +29,8 @@ all four pending rows name their unpromoted evidence class.
 
 - Full Python suite: 1,127 passed, 41 truthful skips, 90.42% branch coverage on
   Python 3.11.
-- Current post-certification regression: 1,177 passed, 41 truthful skips, and
-  90.00% coverage; Ruff, formatting, strict Pyright, 11 frontend tests,
+- Current post-certification regression: 1,181 passed, 41 truthful skips, and
+  90.02% coverage; Ruff, formatting, strict Pyright, 11 frontend tests,
   frontend type checking/build, and Python/npm dependency audits are green.
 - Reference-provider text certification: fresh appointment and P3 recipe
   projects on both runtimes used Claude Sonnet 5, native Anthropic judges,
@@ -70,6 +72,20 @@ all four pending rows name their unpromoted evidence class.
   temporary site-packages. Redownloaded SHA-256 values exactly matched the
   reviewed wheel `83c3ba8180d4029804121294cab2552a572fe5ff6b252f2e4d2b59f8163e76e1`
   and sdist `baae694853b0492f97634a37d2d5eeb037a255d6f7d25deb7dfb0f9cf64e9518`.
+  This historical development release was yanked, not deleted, after the
+  stable release superseded it.
+- Stable release: tag `v1.0.0` points to exact source commit `e414bee`. A
+  same-line `1.0.0rc1` canary and the stable installed-wheel gate both passed
+  all four first-party recipes on Pipecat and LiveKit. The exact gated wheel
+  SHA-256 is `6df19c44cb5ffe6f97feca11d7824d75c398118d844aaa31c19045c5bd3733fe`;
+  the sdist SHA-256 is
+  `af9929a49bf8a7bc2c828c522707a295027d98c381fcaca40bd2c1c4ab7001e8`.
+  Those bytes are public at
+  [PyPI](https://pypi.org/project/voicey/1.0.0/), and direct redownloads matched
+  both gated artifacts byte-for-byte. A source-free Python 3.14 environment
+  installed 148 packages with both runtime extras, imported only from its
+  temporary site-packages, reported version 1.0.0, and exposed every recipe on
+  both runtimes. A separate cache-disabled unversioned install selected 1.0.0.
 - Fly account/CLI access: authentication succeeded for organization `personal`
   on 2026-08-29. The account has no applicable credit and the production
   Managed Postgres topology is paid, so the free-tier-only constraint prevented
@@ -78,10 +94,12 @@ all four pending rows name their unpromoted evidence class.
   native flow/Agent and typed-tool execution, provider-mocked browser/media
   connection, terminal result, and Standard Webhooks verification all green.
 - Security: 18 signature-negative tests and 35 log/record/deploy secret-boundary
-  tests green; 502 repository files scanned; Python and npm audits clean; wheel
+  tests green; 503 repository files scanned; Python and npm audits clean; wheel
   and sdist unpacked and secret-scanned; canonical Python 3.14 container built,
   started read-only/non-root, health-checked, SIGTERM-drained with exit zero,
   and scanned with zero fixed high/critical vulnerability or secret finding.
+  Stable evidence is recorded in
+  `.voicey/verification/p4-1.0.0-security-report.json`.
 - Static/release gates: Ruff, formatting, strict Pyright, Actionlint, generated
   API reference, public snapshots, demo-audio validation, package build, and
   pre-commit checks are green.
@@ -106,8 +124,8 @@ all four pending rows name their unpromoted evidence class.
 ## Decisions taken
 
 - The public name is Voicey. The unscoped npm name is reserved as
-  `voicey@0.0.1`; the Python distribution is reserved by the public
-  `voicey==0.0.0.dev0` canary.
+  `voicey@0.0.1`; the stable Python distribution `voicey==1.0.0` is public,
+  and the superseded `0.0.0.dev0` release is yanked.
 - The reference stack is Deepgram Nova-3, Anthropic Claude, and Cartesia Sonic
   3.5.
 - The simulator judge defaults to local Ollama with an explicit cloud override.
@@ -145,10 +163,14 @@ The remaining human-owned actions are:
    microphone, guided-wizard, doctor-usability, active-call drain, paid Fly, and
    physical-handset procedures when their accounts, balance, or human input
    exist.
-3. Approve and publish a stable Python release only after selecting its version
-   and accepting the evidence state of any still-pending external gates.
-4. Create any public repository or domain resources manually.
+3. Create or authorize the public GitHub repository, then configure the
+   protected `pypi` environment and exact PyPI Trusted Publisher binding. Once
+   the first OIDC publication succeeds, revoke the bootstrap project token.
+4. Remove the temporary account-wide PyPI token and rotate the PyPI account
+   password as recorded in [GAPS](GAPS.md). Create any remaining domain
+   resources manually.
 
 Until those items pass, the accurate release state is: implementation complete,
 local automation, free-tier cloud web/model/audio certification, and public
-Python canary green; paid/human/time certification and stable release pending.
+stable Python 1.0.0 release green; paid/human/time external certification and
+the one-time GitHub/PyPI trust binding remain pending.

@@ -23,6 +23,9 @@ to PEP 440.
   green canary evidence.
 - First public Python canary, `voicey==0.0.0.dev0`, published from reviewed
   commit `25a75f7` and clean-install verified from PyPI on Python 3.14.
+- Stable `voicey==1.0.0` published from exact tagged commit `e414bee`; its
+  public wheel/sdist bytes, default install, and both-runtime-extra install were
+  independently verified, and the superseded development release was yanked.
 - Stable PyPI CI/CD with exact release tags, same-line canary promotion,
   protected-environment approval, isolated OIDC authority, artifact checksum
   verification, and PEP 740 attestations.
