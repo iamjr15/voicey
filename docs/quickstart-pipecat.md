@@ -6,15 +6,11 @@ are installed.
 
 ## 1. Install the CLI
 
-Until Voicey is published to PyPI, install the reviewed wheel from a private
-release artifact:
+Install the pinned stable release with the Pipecat runtime:
 
 ```bash
-uv tool install --from "./voicey-0.0.0.dev0-py3-none-any.whl[pipecat]" voicey
+uv tool install 'voicey[pipecat]==1.0.0'
 ```
-
-After the Python distribution is published, replace the local wheel path with
-its pinned package version.
 
 ## 2. Create the project
 

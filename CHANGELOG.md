@@ -6,6 +6,8 @@ to PEP 440.
 
 ## Unreleased
 
+## 1.0.0 - 2026-08-29
+
 ### Added
 
 - Production dual-runtime Pipecat and LiveKit engine, carrier adapters, native
@@ -19,6 +21,11 @@ to PEP 440.
 - Installed-wheel canary verification across all four first-party recipes and
   both native runtimes, plus a stable-promotion gate that requires matching
   green canary evidence.
+- First public Python canary, `voicey==0.0.0.dev0`, published from reviewed
+  commit `25a75f7` and clean-install verified from PyPI on Python 3.14.
+- Stable PyPI CI/CD with exact release tags, same-line canary promotion,
+  protected-environment approval, isolated OIDC authority, artifact checksum
+  verification, and PEP 740 attestations.
 
 ### Changed
 
@@ -35,11 +42,11 @@ to PEP 440.
 - Build every Voicey-owned container virtual environment without pip and
   remove system pip from final stages, eliminating pip's unused vendored
   build-tool dependency set from runtime images.
-- Keep PyPI credentials out of command arguments and shell history; the first
-  account-wide upload token is revoked after project creation and replaced by
-  a project-scoped token.
+- Keep PyPI credentials out of command arguments and shell history; bootstrap
+  uploads use a project-scoped token, while normal CI/CD uses tokenless PyPI
+  Trusted Publishing with short-lived GitHub OIDC identity.
 - Raise the Telnyx/companion cryptography floor to 50 and pin the audited
   development installer to pip 26.2+, resolving PYSEC-2026-3552 and
   PYSEC-2026-3721 without suppressions.
-- Release workflows produce private CI artifacts only. Public package
-  publishing remains an explicit human-only action after rename and review.
+- Release publishing authority is isolated from all checkout/build/test steps,
+  and every third-party action in the release workflow is commit-pinned.

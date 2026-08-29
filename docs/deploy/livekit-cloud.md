@@ -36,7 +36,7 @@ voicey deploy livekit-cloud \
   --project my-livekit-project \
   --region us-west \
   --relay-url https://my-agent-results.fly.dev \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 
@@ -102,7 +102,7 @@ voicey deploy livekit-cloud \
   --region us-west \
   --relay-url https://my-agent-results.fly.dev \
   --smoke-to +15551234567 \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 

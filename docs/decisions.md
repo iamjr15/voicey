@@ -937,8 +937,8 @@ These choices apply the documented proposals authorized in the build mandate and
   runtime extras, and no source-checkout import path. Compile every first-party
   scenario and instantiate every native Pipecat/LiveKit entrypoint.
 - A stable artifact requires green canary evidence for the same release line
-  and reruns the installed-wheel gate. Release workflows upload private CI
-  artifacts only; final naming and any public publication remain human-only.
+  and reruns the installed-wheel gate. Canary workflow artifacts remain
+  private; stable publication is an explicit protected-environment decision.
 
 ## 2026-08-29 — First public Python canary security floor
 
@@ -963,3 +963,22 @@ These choices apply the documented proposals authorized in the build mandate and
   soon as PyPI creates `voicey`, and replace it with a project-scoped token.
   Tokens enter `uv publish` through the process environment, never a command
   argument, repository file, or literal shell-history entry.
+
+## 2026-08-29 — Stable 1.0.0 and tokenless PyPI CI/CD
+
+- Publish `voicey==1.0.0` at the operator's explicit request. Paid PSTN,
+  physical-device, managed-Fly/object-store, active-call drain, and 24-hour
+  evidence remain truthfully pending; the distribution classifier stays Beta
+  until that external evidence is closed.
+- Keep canary build/evidence private, but permit a stable workflow to publish
+  only after exact-tag validation, same-line green canary evidence, complete
+  bundle checksums, and approval of a protected `pypi` environment.
+- Use PyPI Trusted Publishing and GitHub OIDC for steady-state releases. The
+  build/gate job has no OIDC authority. A separate publish-only job has
+  `id-token: write`, no checkout or build step, no stored PyPI secret, and the
+  official publishing action pinned to immutable commit
+  `dc37677b2e1c63e2034f94d8a5b11f265b73ba33` (`v1.14.2`).
+- Do not invent a GitHub owner/repository binding. This checkout has no remote;
+  repository creation, the protected environment, and PyPI's exact Trusted
+  Publisher binding remain human-authorized setup. Use the project-scoped
+  token only for the explicitly approved bootstrap `1.0.0` upload.

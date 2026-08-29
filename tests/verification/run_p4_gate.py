@@ -173,7 +173,7 @@ def main() -> int:
         "pending_count": len(local_pending) + len(external_pending),
         "truthfulness": (
             "green local automation does not promote paid providers, cloud accounts, "
-            "physical handsets, public publishing, or the unshortened 24-hour soak"
+            "physical handsets, external trust bindings, or the unshortened 24-hour soak"
         ),
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -261,10 +261,16 @@ def _pending_external_results(max_concurrent: int) -> list[GateResult]:
             detail="requires microphones, human speech, and physical endpoints",
         ),
         GateResult(
-            name="name_and_publication",
+            name="repository_and_trusted_publisher_binding",
             status="pending-human",
-            command="select the public name, execute RENAME.md, then publish manually",
-            detail="repository creation, registration, and publishing are human-only",
+            command=(
+                "create the GitHub repository and protected pypi environment, then bind "
+                "its exact owner/repository/release.yml/pypi identity on PyPI"
+            ),
+            detail=(
+                "stable CI/CD is implemented, but this checkout has no remote and public "
+                "repository creation remains human-authorized"
+            ),
         ),
     ]
 

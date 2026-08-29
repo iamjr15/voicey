@@ -96,11 +96,13 @@ def test_generator_emits_idempotent_secret_free_hardened_artifacts(tmp_path: Pat
 
 
 def test_generator_rejects_conflicts_bad_wheels_and_unpublished_default(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     project = _docker_project(tmp_path / "project")
     generator = DockerDeploymentGenerator(project)
 
+    monkeypatch.setattr("voicey.deploy.docker.__version__", "1.0.0.dev0")
     with pytest.raises(VoiceyError) as missing:
         generator.generate()
     assert missing.value.code == "VY-DEP-003"
@@ -110,6 +112,11 @@ def test_generator_rejects_conflicts_bad_wheels_and_unpublished_default(
     with pytest.raises(VoiceyError) as invalid:
         generator.generate(engine_wheel=bad)
     assert invalid.value.code == "VY-DEP-003"
+
+    monkeypatch.setattr("voicey.deploy.docker.__version__", "1.0.0")
+    published = generator.generate()
+    assert published.engine_wheel is None
+    assert '"voicey[pipecat]==1.0.0"' in published.dockerfile.read_text(encoding="utf-8")
 
     (project / "Dockerfile.voicey").write_text("owned\n", encoding="utf-8")
     with pytest.raises(VoiceyError) as conflict:

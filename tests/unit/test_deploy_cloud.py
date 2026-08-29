@@ -1066,11 +1066,17 @@ async def test_livekit_readiness_polls_through_building(tmp_path: Path) -> None:
     assert _runtime_extras(cast("ProjectManifest", manifest)) == "livekit,twilio"
 
 
-def test_cloud_wheel_requirements_and_secret_file_validation(tmp_path: Path) -> None:
+def test_cloud_wheel_requirements_and_secret_file_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     destination = tmp_path / "stage"
     destination.mkdir()
+    monkeypatch.setattr("voicey.deploy.cloud.__version__", "1.0.0.dev0")
     with pytest.raises(VoiceyError, match="unpublished builds require"):
         _stage_wheel(None, destination)
+    monkeypatch.setattr("voicey.deploy.cloud.__version__", "1.0.0")
+    assert _stage_wheel(None, destination) is None
     wrong = tmp_path / "package.whl"
     wrong.write_bytes(b"wrong")
     with pytest.raises(VoiceyError, match="engine wheel is invalid"):

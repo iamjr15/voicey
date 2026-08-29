@@ -13,7 +13,7 @@ Build the exact wheel under test and run:
 ```bash
 uv build --wheel --out-dir dist
 uv run python tests/verification/run_p2_gate.py \
-  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl
+  --wheel dist/voicey-1.0.0-py3-none-any.whl
 ```
 
 The runner writes `.voicey/verification/p2-gate-report.json` atomically. It

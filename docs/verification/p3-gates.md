@@ -14,7 +14,7 @@ and run:
 export VOICEY_TEST_POSTGRES_DSN='postgresql://voicey:voicey-test@127.0.0.1:5432/voicey' # pragma: allowlist secret
 uv build --wheel --out-dir dist
 uv run python tests/verification/run_p3_gate.py \
-  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl
+  --wheel dist/voicey-1.0.0-py3-none-any.whl
 ```
 
 The runner writes `.voicey/verification/p3-gate-report.json` atomically and

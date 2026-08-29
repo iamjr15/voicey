@@ -5,18 +5,18 @@ locally runnable phase gate is green. The free-tier Railway companion and both
 cloud runtimes passed real web/model/audio certification. The product is not
 represented as fully released or fully externally certified: paid provider
 media, live PSTN, human audio/handset checks, active-call drain, managed-object
-compatibility, paid Fly resources, the full 24-hour soak, and the approved
-PyPI canary upload remain pending under the repository's reality boundary.
+compatibility, paid Fly resources, the full 24-hour soak, and stable promotion
+remain pending under the repository's reality boundary.
 
 ## Phase gate summary
 
 | Phase | Local automation | External status | Reproduce |
 |---|---|---|---|
 | P0 — pins, repository, security baseline, dual walking skeleton | green | green | `uv run pytest -m integration --no-cov tests/integration/test_p0_walking_skeleton.py` |
-| P1 — Pipecat engine, Twilio, CLI, playground, recipe, Docker | green | pending-live / pending-human | Local: `uv run python tests/verification/run_p1_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl`; credentialed: `uv run python tests/verification/run_p1_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl --require-live --latency-project "$VOICEY_EVAL_PROJECT"`; manual commands are in [GAPS](GAPS.md) |
-| P2 — LiveKit parity, SIP, Telnyx, unified testing | green | pending-live / pending-human | Local: `uv run python tests/verification/run_p2_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl`; carrier: `uv run pytest -m live --no-cov tests/live/test_twilio_livekit_live.py tests/live/test_telnyx_live.py tests/live/test_telnyx_livekit_live.py`; microphone and handset checklists are in [GAPS](GAPS.md) |
-| P3 — recipes, Vobiz, Plivo/SIP, tier-3 PSTN, cloud relay/deploy, warm transfer | green | pending-live / pending-human | Local: `VOICEY_TEST_POSTGRES_DSN=postgresql://... uv run python tests/verification/run_p3_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl`; carrier: `uv run pytest -m live --no-cov tests/live/test_vobiz_live.py tests/live/test_vobiz_livekit_live.py tests/live/test_plivo_live.py tests/live/test_plivo_livekit_live.py tests/live/test_generic_sip_live.py`; paid cloud/PSTN/handset commands are in [GAPS](GAPS.md) |
-| P4 — hardening, observability, Railway, upgrade, release, docs, security | green | pending-time / pending-live / pending-human | Local: `VOICEY_TEST_POSTGRES_DSN=postgresql://... uv run python tests/verification/run_p4_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl`; soak: `uv run python tests/verification/p4_soak.py --duration-s 86400 --max-concurrent 8 --runtime both --report .voicey/verification/p4-24h-soak-report.json`; cloud and active-call drain commands are in [GAPS](GAPS.md) |
+| P1 — Pipecat engine, Twilio, CLI, playground, recipe, Docker | green | pending-live / pending-human | Local: `uv run python tests/verification/run_p1_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl`; credentialed: `uv run python tests/verification/run_p1_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl --require-live --latency-project "$VOICEY_EVAL_PROJECT"`; manual commands are in [GAPS](GAPS.md) |
+| P2 — LiveKit parity, SIP, Telnyx, unified testing | green | pending-live / pending-human | Local: `uv run python tests/verification/run_p2_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl`; carrier: `uv run pytest -m live --no-cov tests/live/test_twilio_livekit_live.py tests/live/test_telnyx_live.py tests/live/test_telnyx_livekit_live.py`; microphone and handset checklists are in [GAPS](GAPS.md) |
+| P3 — recipes, Vobiz, Plivo/SIP, tier-3 PSTN, cloud relay/deploy, warm transfer | green | pending-live / pending-human | Local: `VOICEY_TEST_POSTGRES_DSN=postgresql://... uv run python tests/verification/run_p3_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl`; carrier: `uv run pytest -m live --no-cov tests/live/test_vobiz_live.py tests/live/test_vobiz_livekit_live.py tests/live/test_plivo_live.py tests/live/test_plivo_livekit_live.py tests/live/test_generic_sip_live.py`; paid cloud/PSTN/handset commands are in [GAPS](GAPS.md) |
+| P4 — hardening, observability, Railway, upgrade, release, docs, security | green | pending-time / pending-live / pending-human | Local: `VOICEY_TEST_POSTGRES_DSN=postgresql://... uv run python tests/verification/run_p4_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl`; soak: `uv run python tests/verification/p4_soak.py --duration-s 86400 --max-concurrent 8 --runtime both --report .voicey/verification/p4-24h-soak-report.json`; cloud and active-call drain commands are in [GAPS](GAPS.md) |
 
 The final aggregate report is
 `.voicey/verification/p4-gate-report.json`. Its
@@ -62,8 +62,14 @@ all four pending rows name their unpromoted evidence class.
   This is not the 24-hour gate.
 - Observability wire test: two OTLP/HTTP protobuf requests, 1,995 bytes, both
   runtime Prometheus surfaces green, protected-payload scan green.
-- Release canary: a fresh source-free install compiled and instantiated all
-  four first-party recipes on both native runtimes.
+- Release canary: `voicey==0.0.0.dev0` was built from exact commit `25a75f7`,
+  passed Twine plus all four first-party recipes on both native runtimes, and
+  was published at [PyPI](https://pypi.org/project/voicey/0.0.0.dev0/). A
+  cache-disabled Python 3.14 environment installed 148 packages with both
+  runtime extras from the public index and imported Voicey only from its
+  temporary site-packages. Redownloaded SHA-256 values exactly matched the
+  reviewed wheel `83c3ba8180d4029804121294cab2552a572fe5ff6b252f2e4d2b59f8163e76e1`
+  and sdist `baae694853b0492f97634a37d2d5eeb037a255d6f7d25deb7dfb0f9cf64e9518`.
 - Fly account/CLI access: authentication succeeded for organization `personal`
   on 2026-08-29. The account has no applicable credit and the production
   Managed Postgres topology is paid, so the free-tier-only constraint prevented
@@ -93,14 +99,15 @@ all four pending rows name their unpromoted evidence class.
 | Deploy | local invariants and Railway/Pipecat/LiveKit web smokes green; paid/drain/Fly pending-live | The Railway companion and both cloud workers passed real platform plus model/audio smokes. Run each target's remaining paid smoke, active-call replacement, and rollback sequence in [GAPS](GAPS.md). |
 | Storage | green locally on SQLite and PostgreSQL 17; managed bucket pending-live | `VOICEY_LIVE_OBJECT_ACK=I_ACKNOWLEDGE_OBJECT_STORE_MUTATION uv run pytest -m live --no-cov tests/live/test_s3_artifacts_live.py` |
 | Cloud relay | Railway companion and both immutable cloud workers green; paid PSTN/Fly pending-live | Signed relay admission, migration, platform sessions, durable completed terminals, and full model/audio probes passed on Railway, Pipecat Cloud, and LiveKit Cloud. Fly and paid carrier paths remain in [GAPS](GAPS.md). |
-| Docs | green | `uv run python tests/verification/run_p4_docs_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl` |
+| Docs | green | `uv run python tests/verification/run_p4_docs_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl` |
 | Reliability | bounded chaos/soak green; full soak pending-time | `uv run python tests/verification/p4_soak.py --duration-s 86400 --max-concurrent 8 --runtime both --report .voicey/verification/p4-24h-soak-report.json` |
-| Security | green | `uv run python tests/verification/run_p4_security_gate.py --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl` |
+| Security | green | `uv run python tests/verification/run_p4_security_gate.py --wheel dist/voicey-1.0.0-py3-none-any.whl` |
 
 ## Decisions taken
 
 - The public name is Voicey. The unscoped npm name is reserved as
-  `voicey@0.0.1`; the Python distribution is not published yet.
+  `voicey@0.0.1`; the Python distribution is reserved by the public
+  `voicey==0.0.0.dev0` canary.
 - The reference stack is Deepgram Nova-3, Anthropic Claude, and Cartesia Sonic
   3.5.
 - The simulator judge defaults to local Ollama with an explicit cloud override.
@@ -138,10 +145,10 @@ The remaining human-owned actions are:
    microphone, guided-wizard, doctor-usability, active-call drain, paid Fly, and
    physical-handset procedures when their accounts, balance, or human input
    exist.
-3. Complete the PyPI account challenge, email verification, and mandatory 2FA,
-   then upload and clean-install-verify the already approved canary.
-4. Create any remaining public repository or domain resources manually.
+3. Approve and publish a stable Python release only after selecting its version
+   and accepting the evidence state of any still-pending external gates.
+4. Create any public repository or domain resources manually.
 
 Until those items pass, the accurate release state is: implementation complete,
-local automation and free-tier cloud web/model/audio certification green;
-paid/human/time certification and public release pending.
+local automation, free-tier cloud web/model/audio certification, and public
+Python canary green; paid/human/time certification and stable release pending.

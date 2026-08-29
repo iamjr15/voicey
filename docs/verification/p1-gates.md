@@ -11,7 +11,7 @@ Build the exact wheel under test, then run the phase aggregator:
 ```bash
 uv build --wheel --out-dir dist
 uv run python tests/verification/run_p1_gate.py \
-  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl
+  --wheel dist/voicey-1.0.0-py3-none-any.whl
 ```
 
 The report is written atomically to
@@ -68,7 +68,7 @@ explicit acknowledgements are present:
 
 ```bash
 uv run python tests/verification/run_p1_gate.py \
-  --wheel dist/voicey-0.0.0.dev0-py3-none-any.whl \
+  --wheel dist/voicey-1.0.0-py3-none-any.whl \
   --require-live \
   --latency-project "$VOICEY_EVAL_PROJECT"
 ```

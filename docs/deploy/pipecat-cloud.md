@@ -49,7 +49,7 @@ voicey deploy pipecat-cloud \
   --max-agents 4 \
   --profile agent-1x \
   --relay-url https://my-agent-results.fly.dev \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --prepare-only
 ```
 
@@ -102,7 +102,7 @@ voicey deploy pipecat-cloud \
   --max-agents 4 \
   --profile agent-1x \
   --relay-url https://my-agent-results.fly.dev \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 

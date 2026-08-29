@@ -20,7 +20,7 @@ explicitly:
 uv build --wheel --out-dir dist
 cd /path/to/agent
 voicey deploy docker \
-  --engine-wheel /path/to/voicey/dist/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /path/to/voicey/dist/voicey-1.0.0-py3-none-any.whl \
   --skip-smoke
 ```
 

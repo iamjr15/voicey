@@ -29,11 +29,17 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P4 Railway deploy | companion + paired web model/audio green; paid active-call drain pending | Commands below | Funded carrier call held open across a replacement deployment |
 | P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
 | P4 live rolling drain on every target | ready-to-run, pending credentials/paid calls | P4.1 procedure below, using each target's exact deploy command above | Public Docker ingress plus authenticated Fly, Pipecat Cloud, LiveKit Cloud, and Railway targets with active paid calls |
-| P4 public canary/stable publication | canary review green; pending PyPI account challenge/upload | Commands in `docs/releasing.md` | Complete PyPI hCaptcha/email/2FA, create an upload token, publish, and verify a source-free install |
+| P4 GitHub/PyPI Trusted Publisher binding | workflow implemented; pending public repository | One-time setup in `docs/releasing.md` | Human-created GitHub repository, protected `pypi` environment/reviewer, and exact PyPI owner/repository/workflow/environment binding |
 
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
+
+Security follow-up: remove the temporary account-wide PyPI token named
+`voicey initial claim 2026-08-29` from Account settings → API tokens. PyPI
+rejected the supplied account password during the automated attempt, so this
+token is not represented as revoked. Rotate the account password because it was
+shared in chat. The release uses the separate project-scoped token only.
 
 ## 2026-08-23 free-tier cloud evidence already green
 
@@ -136,7 +142,7 @@ uv build --out-dir dist
     --postgres-volume-gb 10 \
     --bucket "$VOICEY_FLY_BUCKET" \
     --engine-wheel \
-      "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
+      "$VOICEY_REPO_ROOT/dist/voicey-1.0.0-py3-none-any.whl" \
     --yes \
     --json
 )
@@ -165,7 +171,7 @@ is created. Then exercise current/previous credential cutover:
     --bucket "$VOICEY_FLY_BUCKET" \
     --rotate-credentials \
     --engine-wheel \
-      "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
+      "$VOICEY_REPO_ROOT/dist/voicey-1.0.0-py3-none-any.whl" \
     --yes
 )
 ```
@@ -198,7 +204,7 @@ the unpublished engine wheel:
 export VOICEY_REPO_ROOT="$PWD"
 export VOICEY_AGENT_PROJECT='/absolute/path/to/agent-project'
 export VOICEY_RELAY_URL='https://voicey-results-cert.fly.dev'
-export VOICEY_ENGINE_WHEEL="$PWD/dist/voicey-0.0.0.dev0-py3-none-any.whl"
+export VOICEY_ENGINE_WHEEL="$PWD/dist/voicey-1.0.0-py3-none-any.whl"
 uv build --out-dir dist
 ```
 
@@ -963,7 +969,7 @@ uv build --wheel --out-dir dist
 cd /path/to/agent-project
 "$VOICEY_REPO_ROOT/.venv/bin/voicey" deploy docker \
   --engine-wheel \
-  "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
+  "$VOICEY_REPO_ROOT/dist/voicey-1.0.0-py3-none-any.whl" \
   --skip-smoke
 VOICEY_PUBLIC_BASE=https://voice.example.com \
   docker compose -f compose.voicey.yaml up -d --build
@@ -983,7 +989,7 @@ smoke:
   --smoke https://voice.example.com \
   --to +15551234567 \
   --engine-wheel \
-  "$VOICEY_REPO_ROOT/dist/voicey-0.0.0.dev0-py3-none-any.whl" \
+  "$VOICEY_REPO_ROOT/dist/voicey-1.0.0-py3-none-any.whl" \
   --yes
 ```
 
@@ -1339,7 +1345,7 @@ identity. Authenticate, build the unpublished engine wheel, and run:
 ```bash
 export VOICEY_REPO_ROOT="$PWD"
 export VOICEY_AGENT_PROJECT='/absolute/path/to/disposable-agent-project'
-export VOICEY_ENGINE_WHEEL="$PWD/dist/voicey-0.0.0.dev0-py3-none-any.whl"
+export VOICEY_ENGINE_WHEEL="$PWD/dist/voicey-1.0.0-py3-none-any.whl"
 export VOICEY_RAILWAY_PROJECT='voicey-results-cert'
 export VOICEY_RAILWAY_WORKSPACE='exact-workspace-id-or-name'
 export VOICEY_RAILWAY_ENVIRONMENT='production'

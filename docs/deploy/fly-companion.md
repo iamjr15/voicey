@@ -27,7 +27,7 @@ voicey deploy fly \
   --postgres-plan Basic \
   --postgres-volume-gb 10 \
   --bucket my-agent-results-objects \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 
@@ -73,7 +73,7 @@ voicey deploy fly \
   --postgres-volume-gb 10 \
   --bucket my-agent-results-objects \
   --rotate-credentials \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 

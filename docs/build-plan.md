@@ -172,8 +172,9 @@ succeed for organization `personal`. No resource was created because the
 account has no applicable credit, Managed Postgres has no free plan, and the
 operator authorized free-tier resources only. The exact paid gate remains in
 `docs/GAPS.md`. The first public `0.0.0.dev0` PyPI canary is explicitly
-approved and locally release-gated; account challenge, upload, and clean-install
-verification remain external steps.
+approved, locally release-gated, published from commit `25a75f7`, and
+cache-disabled clean-install verified from PyPI on Python 3.14. Stable
+promotion remains a separate human-only decision after the remaining gates.
 
 Full chaos suite; 24h soak at max_concurrent; drain/zero-downtime redeploy per target (against the rolling-generation invariant test); Prometheus endpoint + opt-in OTLP; **railway target** (platform-managed PG provisioning + migrations + persistence preflight + rolling-generation invariant tests — fly moved to P3 as the companion foundation); `upgrade` + `recipes update-check` drift tooling (AI-merge guidance, never overwrite); **release engineering as concrete tasks (Codex R3, spec §15)**: SemVer policy implementation + deprecation-warning machinery (2-minor minimum), runtime version-range checks with out-of-range warnings + compatibility table, canary channel (`--pre`) validated by first-party recipes before stable, **API/schema snapshot diff in CI** (config schema, webhook payload, CLI surface — docs PR required on change); **docs completion per spec §16 as an enumerated checklist** (per-runtime quickstarts CI-executed verbatim, concepts, per-carrier + per-deploy-target guides, webhook receiving in 3 languages, testing, upgrading, recipe pages, generated API reference, error-catalog pages, troubleshooting index); security pass (signature negative tests, secret-leak scans of logs/records/images, dependency + container audit — baseline scanning already running since P0/P1); **rename step** (RENAME.md executed once the real name is chosen: package dir, pyproject, console script, entry-point groups, imports, docs) → publish to PyPI + launch.
 
@@ -268,10 +269,11 @@ validated webhook envelope, and the full Typer tree generate canonical
 committed snapshots; CI rejects drift and requires changelog plus explanatory
 docs on public changes. The real release gate built a wheel, installed it into
 a fresh source-free environment, and compiled/instantiated all four recipes on
-both native runtimes. Private artifact automation supports canary and stable;
-stable requires a green same-release-line canary report and reruns the wheel
-gate, while public publishing remains human-only. Local Python 3.11 and 3.14
-runtime-edge evidence is green. Exact gate:
+both native runtimes. Canary artifacts remain private; stable requires a green
+same-release-line canary report, reruns the wheel gate, and publishes only from
+an isolated OIDC job after protected-environment approval. GitHub repository
+creation and the exact PyPI Trusted Publisher binding remain human-authorized.
+Local Python 3.11 and 3.14 runtime-edge evidence is green. Historical exact gate:
 `uv run python tests/verification/run_p4_release_gate.py --wheel
 dist/voicey-0.0.0.dev0-py3-none-any.whl --channel canary`. Ruff, formatting,
 strict pyright, snapshot checks, workflow lint, and the full suite are green:

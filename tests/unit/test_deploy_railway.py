@@ -565,6 +565,7 @@ def test_railway_artifacts_support_published_install_and_reject_bad_wheels(
     tmp_path: Path,
 ) -> None:
     generator = RailwayArtifactGenerator(tmp_path)
+    monkeypatch.setattr("voicey.deploy.railway.__version__", "1.0.0.dev0")
     with pytest.raises(VoiceyError, match=r"requires.*engine-wheel"):
         generator.generate(engine_wheel=None)
     bad = tmp_path / "not-voicey.txt"

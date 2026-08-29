@@ -27,7 +27,7 @@ voicey deploy railway \
   --bucket my-agent-results-objects \
   --service-region us-east \
   --bucket-region iad \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 
@@ -110,7 +110,7 @@ voicey deploy railway \
   --service-region us-east \
   --bucket-region iad \
   --adopt \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 
@@ -129,7 +129,7 @@ voicey deploy railway \
   --service-region us-east \
   --bucket-region iad \
   --rotate-credentials \
-  --engine-wheel /absolute/path/to/voicey-0.0.0.dev0-py3-none-any.whl \
+  --engine-wheel /absolute/path/to/voicey-1.0.0-py3-none-any.whl \
   --yes
 ```
 

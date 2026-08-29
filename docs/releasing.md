@@ -1,9 +1,10 @@
 # Release engineering
 
-Voicey release preparation is automated, but publication requires explicit
-human approval. The workflow never uploads to PyPI, creates a repository,
-registers a name, or mutates a public release. An approved operator may perform
-the upload with the guarded procedure below.
+Voicey release preparation and stable publication are automated behind explicit
+human approval. The workflow builds without publishing authority, then gives a
+separate protected job only a short-lived OIDC identity. It never stores a PyPI
+token. Repository creation and the one-time GitHub/PyPI trust binding remain
+human-authorized operations.
 
 ## Version policy
 
@@ -89,10 +90,11 @@ instantiates each recipe's native Pipecat node and LiveKit `Agent`. It also
 checks SemVer/deprecation policy, compatibility policy, and all public
 snapshots.
 
-The manually dispatched `Prepare release artifacts` workflow accepts an exact
-ref and channel. Canary runs upload the wheel, sdist, and signed-by-CI evidence
-as a private Actions artifact. A stable run must name the prior canary workflow
-run id. Stable preparation downloads that report and requires:
+The manually dispatched `Release to PyPI` workflow accepts only an exact
+`refs/tags/v<project.version>` ref and a matching channel. Canary runs upload
+the wheel, sdist, checksums, and evidence as a private Actions artifact. A
+stable run must name this workflow's prior canary run id. Stable preparation
+downloads the exact named artifact and requires:
 
 - a green P4.5 canary result;
 - the same `MAJOR.MINOR.PATCH` release line;
@@ -109,16 +111,38 @@ uv run python tests/verification/run_p4_release_gate.py \
   --report .voicey/verification/p4-stable-report.json
 ```
 
-Stable publishing remains blocked until the human reviews the evidence for the
-same release line and explicitly approves that public upload. The separately
-approved first canary follows the procedure below.
+The stable job then pauses at GitHub's protected `pypi` environment. After an
+authorized reviewer approves it, the job downloads the current run's exact
+bundle, verifies its checksum manifest and one-wheel/one-sdist shape, and uses
+PyPI Trusted Publishing. Build code has no OIDC permission; the publishing job
+does not check out or build source. Duplicate uploads fail closed and PEP 740
+attestations are enabled.
 
-## Human-approved PyPI upload
+## One-time Trusted Publisher setup
 
-The name is finalized as Voicey and `RENAME.md` is complete. The first public
-Python artifact is the existing `0.0.0.dev0` canary: it reserves the name
-without claiming a stable release while paid, physical, and wall-clock gates
-remain open.
+After a human creates the GitHub repository:
+
+1. Create a GitHub environment named `pypi`, restrict it to release tags, and
+   require a reviewer before deployment.
+2. In the existing PyPI `voicey` project, add a GitHub Trusted Publisher with
+   the exact repository owner, repository name, workflow `release.yml`, and
+   environment `pypi`.
+3. Do not create `PYPI_API_TOKEN` or any other upload secret in GitHub.
+4. Push an exact prerelease tag such as `v1.1.0rc1`, dispatch the canary
+   channel, and retain its run id.
+5. Push `v1.1.0`, dispatch the stable channel with that canary run id, review
+   the private evidence, and approve the protected environment.
+
+This checkout currently has no Git remote, so the workflow is implemented and
+tested but its repository environment and PyPI identity binding cannot be
+completed locally.
+
+## Approved bootstrap upload
+
+The public project was bootstrapped before a GitHub repository existed. A
+manually approved stable upload therefore uses the project-scoped `voicey`
+token from the operator credential manager. This is a bootstrap path, not the
+steady-state CI/CD design.
 
 Build from the exact reviewed commit into a fresh directory, validate both
 artifacts, and rerun the installed-wheel canary gate:
@@ -130,22 +154,25 @@ uvx --from twine twine check "$RELEASE_DIST"/*
 VOICEY_WHEEL="$(find "$RELEASE_DIST" -maxdepth 1 -name '*.whl' -type f)"
 uv run python tests/verification/run_p4_release_gate.py \
   --wheel "$VOICEY_WHEEL" \
-  --channel canary \
-  --report .voicey/verification/p4-pypi-canary-report.json
+  --channel stable \
+  --canary-report .voicey/verification/p4-1.0.0-canary-report.json \
+  --report .voicey/verification/p4-1.0.0-stable-report.json
 ```
 
-An unclaimed project cannot have a project-scoped token yet. Create one
-account-wide token for the first upload, enter it through a hidden prompt, and
-upload the exact checked wheel and sdist without putting the token in command
-arguments or shell history:
+Load the project-scoped token from the credential manager into the publisher
+process only, upload the exact checked wheel and sdist, and clear it from the
+environment immediately. Never paste it into a command argument or repository
+file:
 
 ```bash
-UV_PUBLISH_TOKEN="$(python -c 'import getpass; print(getpass.getpass("PyPI token: "))')" \
+UV_PUBLISH_TOKEN="$(security find-generic-password \
+  -s pypi.org.voicey.project-upload -a iamjr15 -w)" \
   uv publish --check-url https://pypi.org/simple/ "$RELEASE_DIST"/*
+unset UV_PUBLISH_TOKEN
 ```
 
-As soon as PyPI creates `voicey`, create a token scoped to that project, store
-it in the operator's credential manager, and revoke the account-wide token.
+Revoke every bootstrap account-wide token once the project-scoped token exists.
+After Trusted Publishing succeeds, revoke the project-scoped token too.
 
 Verify index bytes from a clean environment with no checkout import path:
 
@@ -153,7 +180,8 @@ Verify index bytes from a clean environment with no checkout import path:
 VERIFY_ROOT="$(mktemp -d)"
 uv venv --python 3.14 "$VERIFY_ROOT/.venv"
 uv pip install --python "$VERIFY_ROOT/.venv/bin/python" \
-  'voicey==0.0.0.dev0'
+  --no-cache --default-index https://pypi.org/simple \
+  'voicey[pipecat,livekit]==1.0.0'
 (cd "$VERIFY_ROOT" && "$VERIFY_ROOT/.venv/bin/voicey" --version)
 ```
 
