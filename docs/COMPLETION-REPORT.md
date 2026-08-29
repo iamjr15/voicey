@@ -92,6 +92,9 @@ all three pending rows name their unpromoted evidence class.
   Trusted Publisher `iamjr15/voicey`, workflow `release.yml`, environment
   `pypi`. The first future OIDC publication remains the evidence needed before
   revoking the bootstrap project token.
+- Hosted regression: CI run `33250660435`, Security run `33250660447`, and P4
+  Aggregate run `33250660443` all passed on commit `dcfdbf1` after the public
+  repository and release authorization were configured.
 - Fly account/CLI access: authentication succeeded for organization `personal`
   on 2026-08-29. The account has no applicable credit and the production
   Managed Postgres topology is paid, so the free-tier-only constraint prevented
