@@ -12,7 +12,7 @@ from typing import Literal, TypeAlias, cast
 
 from packaging.version import InvalidVersion, Version
 
-ReleaseChannel: TypeAlias = Literal["canary", "stable"]
+ReleaseChannel: TypeAlias = Literal["verification", "canary", "stable"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +27,7 @@ class ReleaseArtifact:
 
 
 def inspect_wheel(path: Path, channel: ReleaseChannel) -> ReleaseArtifact:
-    """Validate wheel metadata, bytes, and the requested release channel."""
+    """Validate wheel metadata, bytes, and any requested publication channel."""
     if not path.is_file() or path.suffix != ".whl":
         msg = f"{path} is not a wheel."
         raise ValueError(msg)

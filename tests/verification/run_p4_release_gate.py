@@ -31,7 +31,11 @@ class GateResult:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--wheel", type=Path, required=True)
-    parser.add_argument("--channel", choices=("canary", "stable"), required=True)
+    parser.add_argument(
+        "--channel",
+        choices=("verification", "canary", "stable"),
+        required=True,
+    )
     parser.add_argument("--canary-report", type=Path)
     parser.add_argument(
         "--report",
@@ -45,11 +49,18 @@ def main() -> int:
         artifact = inspect_wheel(args.wheel.expanduser().resolve(), args.channel)
         results.append(
             GateResult(
-                name="artifact_channel",
+                name=(
+                    "artifact_identity" if args.channel == "verification" else "artifact_channel"
+                ),
                 status="green",
                 command=f"inspect {artifact.path.name}",
                 duration_s=0.0,
-                detail=f"{artifact.version} ({artifact.sha256[:12]})",
+                detail=(
+                    f"{artifact.version} ({artifact.sha256[:12]}); "
+                    "publication channel intentionally not asserted"
+                    if args.channel == "verification"
+                    else f"{artifact.version} ({artifact.sha256[:12]})"
+                ),
             )
         )
         if args.channel == "stable":
@@ -89,8 +100,9 @@ def main() -> int:
         "artifact_sha256": None if artifact is None else artifact.sha256,
         "results": [asdict(result) for result in results],
         "truthfulness": (
-            "This report validates a local wheel and first-party recipes. It does not "
-            "claim that an artifact was uploaded to a public package index."
+            "This report validates a local wheel and first-party recipes. The "
+            "verification channel does not authorize publication; no channel claims "
+            "that an artifact was uploaded to a public package index."
         ),
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)

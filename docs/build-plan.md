@@ -276,8 +276,10 @@ docs on public changes. The real release gate built a wheel, installed it into
 a fresh source-free environment, and compiled/instantiated all four recipes on
 both native runtimes. Canary artifacts remain private; stable requires a green
 same-release-line canary report, reruns the wheel gate, and publishes only from
-an isolated OIDC job after protected-environment approval. GitHub repository
-creation and the exact PyPI Trusted Publisher binding remain human-authorized.
+an isolated OIDC job after protected-environment approval. The public
+`iamjr15/voicey` repository now preserves the prior npm lineage; its protected
+environment and exact PyPI Trusted Publisher binding remain externally
+authorized setup.
 The bootstrap stable `voicey==1.0.0` release was published from exact tagged
 commit `e414bee` on 2026-08-29 after same-line canary, stable, security, Twine,
 public-byte, and source-free Python 3.14 install verification; its superseded

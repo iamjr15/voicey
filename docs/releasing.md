@@ -3,10 +3,10 @@
 Voicey release preparation and stable publication are automated behind explicit
 human approval. The workflow builds without publishing authority, then gives a
 separate protected job only a short-lived OIDC identity. It never stores a PyPI
-token. Repository creation and the one-time GitHub/PyPI trust binding remain
-human-authorized operations. Voicey 1.0.0 used the documented bootstrap path
-because this checkout did not yet have a GitHub remote; OIDC is the required
-steady-state path once that binding exists.
+token. The public repository is `iamjr15/voicey`; the one-time GitHub/PyPI
+trust binding remains a human-authorized operation. Voicey 1.0.0 used the
+documented bootstrap path because that remote was not yet integrated; OIDC is
+the required steady-state path once the binding exists.
 
 ## Version policy
 
@@ -122,7 +122,7 @@ attestations are enabled.
 
 ## One-time Trusted Publisher setup
 
-After a human creates the GitHub repository:
+For the existing `iamjr15/voicey` GitHub repository:
 
 1. Create a GitHub environment named `pypi`, restrict it to release tags, and
    require a reviewer before deployment.
@@ -135,9 +135,8 @@ After a human creates the GitHub repository:
 5. Push `v1.1.0`, dispatch the stable channel with that canary run id, review
    the private evidence, and approve the protected environment.
 
-This checkout currently has no Git remote, so the workflow is implemented and
-tested but its repository environment and PyPI identity binding cannot be
-completed locally.
+The repository workflow is implemented and tested. Its protected environment
+and PyPI identity binding must both exist before an OIDC publication can run.
 
 ## Approved bootstrap upload
 

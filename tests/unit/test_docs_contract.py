@@ -144,7 +144,7 @@ def test_naming_record_covers_every_public_naming_surface() -> None:
     for required in (
         "# Voicey naming record",
         "finalized on 2026-07-31",
-        "`voicey@0.0.1`",
+        "`voicey@1.0.1`",
         "`iamjr15`",
         "PyPI distribution name",
         "Python distribution/import namespace",

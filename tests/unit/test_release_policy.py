@@ -36,8 +36,11 @@ def _canary_report(path: Path, **overrides: object) -> Path:
 def test_inspect_wheel_enforces_release_channel(tmp_path: Path) -> None:
     canary = inspect_wheel(_wheel(tmp_path, "1.2.0rc1"), "canary")
     stable = inspect_wheel(_wheel(tmp_path, "1.2.0"), "stable")
+    verification_stable = inspect_wheel(_wheel(tmp_path, "1.2.1"), "verification")
+    verification_canary = inspect_wheel(_wheel(tmp_path, "1.2.2rc1"), "verification")
 
     assert canary.release_line == stable.release_line == "1.2.0"
+    assert verification_stable.channel == verification_canary.channel == "verification"
     assert len(canary.sha256) == 64
     with pytest.raises(ValueError, match="prerelease version"):
         inspect_wheel(stable.path, "canary")

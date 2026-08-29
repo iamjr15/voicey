@@ -18,8 +18,8 @@ jobs:
     runs-on: [self-hosted, linux, voicey-soak]
     timeout-minutes: 1560
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
       - name: Install uv
@@ -36,7 +36,7 @@ jobs:
             --report p4-soak-report.json
       - name: Upload the soak report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: p4-24h-soak-report
           path: p4-soak-report.json

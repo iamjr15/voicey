@@ -105,14 +105,14 @@ def main() -> int:
             timeout_s=2400,
         ),
         _run_child(
-            "release_canary",
+            "release_artifact_verification",
             [
                 python,
                 str(verification / "run_p4_release_gate.py"),
                 "--wheel",
                 str(wheel),
                 "--channel",
-                "canary",
+                "verification",
                 "--report",
                 str(children / "p4-release-report.json"),
             ],
@@ -261,15 +261,15 @@ def _pending_external_results(max_concurrent: int) -> list[GateResult]:
             detail="requires microphones, human speech, and physical endpoints",
         ),
         GateResult(
-            name="repository_and_trusted_publisher_binding",
+            name="trusted_publisher_environment_and_binding",
             status="pending-human",
             command=(
-                "create the GitHub repository and protected pypi environment, then bind "
-                "its exact owner/repository/release.yml/pypi identity on PyPI"
+                "configure the protected pypi environment, then bind the exact "
+                "iamjr15/voicey/release.yml/pypi identity on PyPI"
             ),
             detail=(
-                "stable CI/CD is implemented, but this checkout has no remote and public "
-                "repository creation remains human-authorized"
+                "the public repository and stable CI/CD exist; environment protection "
+                "and PyPI identity binding require external authorization"
             ),
         ),
     ]

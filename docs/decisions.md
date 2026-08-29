@@ -978,11 +978,26 @@ These choices apply the documented proposals authorized in the build mandate and
   `id-token: write`, no checkout or build step, no stored PyPI secret, and the
   official publishing action pinned to immutable commit
   `dc37677b2e1c63e2034f94d8a5b11f265b73ba33` (`v1.14.2`).
-- Do not invent a GitHub owner/repository binding. This checkout has no remote;
-  repository creation, the protected environment, and PyPI's exact Trusted
-  Publisher binding remain human-authorized setup. Use the project-scoped
-  token only for the explicitly approved bootstrap `1.0.0` upload.
+- At bootstrap time, do not invent a GitHub owner/repository binding: the
+  checkout then had no remote. That temporary state is superseded by the
+  public-monorepo decision below. Use the project-scoped token only for the
+  explicitly approved bootstrap `1.0.0` upload.
 - The approved bootstrap upload published exact tagged commit `e414bee`. Public
   wheel and sdist bytes matched the gated artifacts, clean Python 3.14 default
   and both-runtime-extra installs selected 1.0.0, and the superseded
   `0.0.0.dev0` release was yanked rather than deleting its historical record.
+
+## 2026-08-29 — Public monorepo lineage and release namespaces
+
+- Preserve the existing public npm repository as an explicit parent of the
+  full product history. The published npm source moves to `npm/voicey/`; it is
+  not overwritten or represented as Python history.
+- Preserve the old npm release commits under `npm-v1.0.0` and `npm-v1.0.1`.
+  Python owns exact `v<version>` tags and npm owns exact
+  `npm-v<version>` tags, preventing either Trusted Publishing workflow from
+  responding to the other registry's release.
+- Normal branch CI verifies release-shaped wheels without asserting a
+  publication channel. Only the protected release workflow may assert canary
+  or stable semantics, and stable still requires same-line canary evidence.
+- Pin every third-party GitHub Action to an immutable commit across all
+  workflows, not only the registry publishing jobs.

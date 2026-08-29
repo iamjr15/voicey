@@ -29,7 +29,7 @@ all four pending rows name their unpromoted evidence class.
 
 - Full Python suite: 1,127 passed, 41 truthful skips, 90.42% branch coverage on
   Python 3.11.
-- Current post-certification regression: 1,181 passed, 41 truthful skips, and
+- Current post-certification regression: 1,184 passed, 41 truthful skips, and
   90.02% coverage; Ruff, formatting, strict Pyright, 11 frontend tests,
   frontend type checking/build, and Python/npm dependency audits are green.
 - Reference-provider text certification: fresh appointment and P3 recipe
@@ -124,8 +124,9 @@ all four pending rows name their unpromoted evidence class.
 ## Decisions taken
 
 - The public name is Voicey. The unscoped npm name is reserved as
-  `voicey@0.0.1`; the stable Python distribution `voicey==1.0.0` is public,
-  and the superseded `0.0.0.dev0` release is yanked.
+  `voicey@1.0.1`; the stable Python distribution `voicey==1.0.0` is public,
+  and the superseded `0.0.0.dev0` release is yanked. The public monorepo keeps
+  independent `npm-v*` and Python `v*` release namespaces.
 - The reference stack is Deepgram Nova-3, Anthropic Claude, and Cartesia Sonic
   3.5.
 - The simulator judge defaults to local Ollama with an explicit cloud override.
@@ -163,9 +164,9 @@ The remaining human-owned actions are:
    microphone, guided-wizard, doctor-usability, active-call drain, paid Fly, and
    physical-handset procedures when their accounts, balance, or human input
    exist.
-3. Create or authorize the public GitHub repository, then configure the
-   protected `pypi` environment and exact PyPI Trusted Publisher binding. Once
-   the first OIDC publication succeeds, revoke the bootstrap project token.
+3. Configure the protected `pypi` environment and exact PyPI Trusted Publisher
+   binding for the authorized public `iamjr15/voicey` repository. Once the
+   first OIDC publication succeeds, revoke the bootstrap project token.
 4. Remove the temporary account-wide PyPI token and rotate the PyPI account
    password as recorded in [GAPS](GAPS.md). Create any remaining domain
    resources manually.

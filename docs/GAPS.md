@@ -29,7 +29,7 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P4 Railway deploy | companion + paired web model/audio green; paid active-call drain pending | Commands below | Funded carrier call held open across a replacement deployment |
 | P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
 | P4 live rolling drain on every target | ready-to-run, pending credentials/paid calls | P4.1 procedure below, using each target's exact deploy command above | Public Docker ingress plus authenticated Fly, Pipecat Cloud, LiveKit Cloud, and Railway targets with active paid calls |
-| P4 GitHub/PyPI Trusted Publisher binding | workflow implemented; pending public repository | One-time setup in `docs/releasing.md` | Human-created GitHub repository, protected `pypi` environment/reviewer, and exact PyPI owner/repository/workflow/environment binding |
+| P4 GitHub/PyPI Trusted Publisher binding | public repository and workflow ready; pending environment/binding | One-time setup in `docs/releasing.md` | Protected `pypi` environment/reviewer and exact PyPI owner/repository/workflow/environment binding |
 
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report

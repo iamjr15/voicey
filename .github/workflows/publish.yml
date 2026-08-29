@@ -1,0 +1,50 @@
+name: Publish npm package
+
+on:
+  push:
+    tags:
+      - "npm-v*"
+
+permissions: {}
+
+concurrency:
+  group: npm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish npm package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: npm/voicey
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Validate exact npm release tag
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          test "$RELEASE_REF" = "refs/tags/npm-v$version"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_REF")"
+      - name: Verify package entry point
+        run: >-
+          node --input-type=module -e
+          'import pkg from "./index.js";
+          import manifest from "./package.json" with { type: "json" };
+          if (pkg.name !== manifest.name || pkg.version !== manifest.version)
+          process.exit(1)'
+      - name: Verify package contents
+        run: npm pack --dry-run
+      - name: Publish through npm Trusted Publishing
+        run: npm publish --access public --provenance

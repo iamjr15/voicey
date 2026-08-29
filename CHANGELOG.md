@@ -6,6 +6,14 @@ to PEP 440.
 
 ## Unreleased
 
+### Changed
+
+- Integrated the existing public npm history into the full monorepo, with
+  collision-free `npm-v*` and Python `v*` release tag namespaces.
+- Made branch CI resolve the built wheel by metadata instead of the historical
+  development filename, separated non-publishing artifact verification from
+  canary/stable promotion, and pinned every third-party Action immutably.
+
 ## 1.0.0 - 2026-08-29
 
 ### Added
