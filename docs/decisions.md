@@ -939,3 +939,27 @@ These choices apply the documented proposals authorized in the build mandate and
 - A stable artifact requires green canary evidence for the same release line
   and reruns the installed-wheel gate. Release workflows upload private CI
   artifacts only; final naming and any public publication remain human-only.
+
+## 2026-08-29 — First public Python canary security floor
+
+- Publish the existing `0.0.0.dev0` artifact as the first PyPI canary. It
+  reserves the finalized `voicey` name without representing the remaining
+  paid, physical, or wall-clock gates as a stable release.
+- Constrain the Pipecat extra's transitive NLTK dependency to `>=3.10.2,<4`.
+  Pipecat 1.6.0 declares `nltk>=3.10.0,<4`; the stronger compatible floor
+  removes PYSEC-2026-3726 instead of suppressing the release audit.
+- Keep synthetic LiveKit credential-shaped values in tests, but mark those
+  exact fixtures as detector allowlists. They are exercised by secret-boundary
+  tests and contain no usable provider credential.
+- Create every Voicey-owned container virtual environment with
+  `python -m venv --without-pip` and install it through pinned `uv` in the
+  build stage. Runtime services never install packages, so carrying pip and
+  its vendored setuptools/msgpack copies only expands the attack surface.
+  Remove the system pip bundled by each final base image as well. Pipecat
+  Cloud otherwise leaves its separately pinned upstream system package set
+  intact.
+- The unclaimed project cannot have a project-scoped PyPI token before its
+  first upload. Use one account-wide token for that upload only, revoke it as
+  soon as PyPI creates `voicey`, and replace it with a project-scoped token.
+  Tokens enter `uv publish` through the process environment, never a command
+  argument, repository file, or literal shell-history entry.

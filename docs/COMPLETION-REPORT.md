@@ -5,8 +5,8 @@ locally runnable phase gate is green. The free-tier Railway companion and both
 cloud runtimes passed real web/model/audio certification. The product is not
 represented as fully released or fully externally certified: paid provider
 media, live PSTN, human audio/handset checks, active-call drain, managed-object
-compatibility, Fly, the full 24-hour soak, and public publishing remain pending
-under the repository's reality boundary.
+compatibility, paid Fly resources, the full 24-hour soak, and the approved
+PyPI canary upload remain pending under the repository's reality boundary.
 
 ## Phase gate summary
 
@@ -64,11 +64,15 @@ all four pending rows name their unpromoted evidence class.
   runtime Prometheus surfaces green, protected-payload scan green.
 - Release canary: a fresh source-free install compiled and instantiated all
   four first-party recipes on both native runtimes.
+- Fly account/CLI access: authentication succeeded for organization `personal`
+  on 2026-08-29. The account has no applicable credit and the production
+  Managed Postgres topology is paid, so the free-tier-only constraint prevented
+  resource creation; no charge or external Fly result is claimed.
 - Documentation: both verbatim fresh-wheel quickstarts green in 43.170 seconds;
   native flow/Agent and typed-tool execution, provider-mocked browser/media
   connection, terminal result, and Standard Webhooks verification all green.
 - Security: 18 signature-negative tests and 35 log/record/deploy secret-boundary
-  tests green; 491 repository files scanned; Python and npm audits clean; wheel
+  tests green; 502 repository files scanned; Python and npm audits clean; wheel
   and sdist unpacked and secret-scanned; canonical Python 3.14 container built,
   started read-only/non-root, health-checked, SIGTERM-drained with exit zero,
   and scanned with zero fixed high/critical vulnerability or secret finding.
@@ -131,11 +135,12 @@ The remaining human-owned actions are:
 1. Run the full 24-hour soak only if release policy requires it; the user
    explicitly declined that wall-clock exercise for the current validation.
 2. Execute the remaining provider-audio/JUnit, paid carrier, managed-object,
-   microphone, guided-wizard, doctor-usability, active-call drain, Fly, and
+   microphone, guided-wizard, doctor-usability, active-call drain, paid Fly, and
    physical-handset procedures when their accounts, balance, or human input
    exist.
-3. Review the Voicey wheel/sdist and canary evidence.
-4. Create any public repository/package/domain resources and publish manually.
+3. Complete the PyPI account challenge, email verification, and mandatory 2FA,
+   then upload and clean-install-verify the already approved canary.
+4. Create any remaining public repository or domain resources manually.
 
 Until those items pass, the accurate release state is: implementation complete,
 local automation and free-tier cloud web/model/audio certification green;

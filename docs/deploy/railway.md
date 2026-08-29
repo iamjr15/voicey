@@ -79,6 +79,11 @@ non-secret checkpoint is `.voicey/deploy/railway-resources.json`. It stores
 exact platform ids, created/adopted flags, artifact and credential
 fingerprints, release id, and gate status—never secret values.
 
+Pinned `uv` installs the companion into a virtual environment created with
+`--without-pip`, so the runtime image does not carry pip or pip's vendored
+build-tool dependency set. The final stage removes the base image's system pip
+as well.
+
 The ignored `.env` holds generated current/previous relay and results
 credentials. Railway receives secret values only through
 `railway variable set NAME --stdin`; they do not appear in process arguments,

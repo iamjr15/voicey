@@ -167,6 +167,14 @@ recording, and handset evidence remain unpromoted.
 
 ### P4 — Hardening → 1.0
 
+**External checkpoint 2026-08-29:** Fly account and CLI authentication now
+succeed for organization `personal`. No resource was created because the
+account has no applicable credit, Managed Postgres has no free plan, and the
+operator authorized free-tier resources only. The exact paid gate remains in
+`docs/GAPS.md`. The first public `0.0.0.dev0` PyPI canary is explicitly
+approved and locally release-gated; account challenge, upload, and clean-install
+verification remain external steps.
+
 Full chaos suite; 24h soak at max_concurrent; drain/zero-downtime redeploy per target (against the rolling-generation invariant test); Prometheus endpoint + opt-in OTLP; **railway target** (platform-managed PG provisioning + migrations + persistence preflight + rolling-generation invariant tests — fly moved to P3 as the companion foundation); `upgrade` + `recipes update-check` drift tooling (AI-merge guidance, never overwrite); **release engineering as concrete tasks (Codex R3, spec §15)**: SemVer policy implementation + deprecation-warning machinery (2-minor minimum), runtime version-range checks with out-of-range warnings + compatibility table, canary channel (`--pre`) validated by first-party recipes before stable, **API/schema snapshot diff in CI** (config schema, webhook payload, CLI surface — docs PR required on change); **docs completion per spec §16 as an enumerated checklist** (per-runtime quickstarts CI-executed verbatim, concepts, per-carrier + per-deploy-target guides, webhook receiving in 3 languages, testing, upgrading, recipe pages, generated API reference, error-catalog pages, troubleshooting index); security pass (signature negative tests, secret-leak scans of logs/records/images, dependency + container audit — baseline scanning already running since P0/P1); **rename step** (RENAME.md executed once the real name is chosen: package dir, pyproject, console script, entry-point groups, imports, docs) → publish to PyPI + launch.
 
 **P4.1 checkpoint complete locally 2026-07-28; 24-hour and external-target

@@ -50,6 +50,11 @@ exact resource identifiers, ownership flags, artifact and secret fingerprints,
 and gate status, never secret values. Generated credential material is kept in
 the existing owner-only, ignored `.env`.
 
+Pinned `uv` installs the companion into a virtual environment created with
+`--without-pip`, so the runtime image does not carry pip or pip's vendored
+build-tool dependency set. The final stage removes the base image's system pip
+as well.
+
 Rerunning the same command resumes from the ledger and revalidates every
 resource. An existing unledgered app, cluster, bucket, `DATABASE_URL`, or
 Tigris credential set stops the command. After verifying ownership and

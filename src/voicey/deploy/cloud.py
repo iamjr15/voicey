@@ -1331,7 +1331,7 @@ def _cloud_dockerfile(
 FROM {_PIPECAT_CLOUD_BASE} AS build
 USER root
 RUN python -m pip install --no-cache-dir uv==0.11.7 \\
-    && python -m venv --system-site-packages /opt/voicey
+    && python -m venv --without-pip --system-site-packages /opt/voicey
 {wheel_copy}COPY project-requirements.txt /tmp/project-requirements.txt
 RUN uv pip install --python /opt/voicey/bin/python {package} \\
     && if [ -s /tmp/project-requirements.txt ]; then \\
@@ -1344,7 +1344,8 @@ RUN uv pip install --python /opt/voicey/bin/python {package} \\
 
 FROM {_PIPECAT_CLOUD_BASE} AS runtime
 USER root
-RUN if ! getent group 10001 >/dev/null; then \\
+RUN python -m pip uninstall --yes pip \\
+    && if ! getent group 10001 >/dev/null; then \\
       groupadd --system --gid 10001 voicey; \\
     fi \\
     && if ! getent passwd 10001 >/dev/null; then \\
@@ -1369,7 +1370,7 @@ USER 10001:10001
     return f"""# syntax=docker/dockerfile:1.7
 FROM python:3.14-slim-bookworm AS build
 RUN python -m pip install --no-cache-dir uv==0.11.7 \\
-    && python -m venv /opt/voicey
+    && python -m venv --without-pip /opt/voicey
 {wheel_copy}COPY project-requirements.txt /tmp/project-requirements.txt
 RUN uv pip install --python /opt/voicey/bin/python {package} \\
     && if [ -s /tmp/project-requirements.txt ]; then \\
@@ -1380,6 +1381,7 @@ FROM python:3.14-slim-bookworm AS runtime
 RUN apt-get update \\
     && apt-get install --no-install-recommends -y ca-certificates \\
     && rm -rf /var/lib/apt/lists/* \\
+    && python -m pip uninstall --yes pip \\
     && groupadd --system --gid 10001 voicey \\
     && useradd --system --uid 10001 --gid 10001 --home-dir /app \\
          --shell /usr/sbin/nologin voicey

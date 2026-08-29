@@ -24,12 +24,12 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P3 generic SIP Beta loopback | ready-to-run, pending external route/PSTN/human | Commands and checklist below | LiveKit project, operator-managed PBX/carrier trunk, physical endpoints |
 | P3 tier-3 PSTN loopback | ready-to-run, pending credentials/PSTN | Commands below | Funded Twilio or LiveKit SIP path, deployed target agent, reference/judge keys, ngrok for Pipecat, and paid PSTN |
 | P3 managed object-store compatibility | ready-to-run, pending credentials | Command below | Private S3-compatible bucket with create/read/delete permission |
-| P3 Fly results companion | ready-to-run, pending account access | Commands below | Fly signup/account access (the attempted signup was blocked as too many accounts), organization billing, Managed Postgres, and Tigris |
+| P3 Fly results companion | account/CLI green; pending paid-resource authorization | Commands below | Fly Managed Postgres Basic and storage billing; the account has no applicable free credit |
 | P3 cloud-worker deploys | web platform + model/audio green; paid PSTN/human pending | Commands below | Funded carrier route and physical/human endpoint for the remaining phone/browser gates |
 | P4 Railway deploy | companion + paired web model/audio green; paid active-call drain pending | Commands below | Funded carrier call held open across a replacement deployment |
 | P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
 | P4 live rolling drain on every target | ready-to-run, pending credentials/paid calls | P4.1 procedure below, using each target's exact deploy command above | Public Docker ingress plus authenticated Fly, Pipecat Cloud, LiveKit Cloud, and Railway targets with active paid calls |
-| P4 public canary/stable publication | human-only, pending review/publication | Run private `Prepare release artifacts`; no public-upload command is automated | Package-index ownership, human artifact review, and explicit publish approval |
+| P4 public canary/stable publication | canary review green; pending PyPI account challenge/upload | Commands in `docs/releasing.md` | Complete PyPI hCaptcha/email/2FA, create an upload token, publish, and verify a source-free install |
 
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
@@ -65,8 +65,9 @@ The following evidence is complete and is not a gap:
 
 No PSTN call is included: Twilio authentication had expired and the Vobiz
 account showed a negative balance. The user asked not to run a 24-hour soak, so
-that wall-clock gate remains pending by choice. Fly signup was blocked by its
-“too many accounts” response; no card or paid plan was added.
+that wall-clock gate remains pending by choice. Fly account access was restored
+on 2026-08-29, but no Fly resource was created because the production topology
+has no free Managed Postgres plan and the account has no applicable credit.
 
 ## P3 managed object-store compatibility
 
@@ -99,10 +100,17 @@ It does not promote the Fly companion or either cloud deployment.
 
 Local tests prove command selection, explicit adoption, owner-only checkpoints,
 secret rotation continuity, reverse rollback ownership, generated topology,
-platform/signed smoke behavior, and the service's real Postgres preflight. A
-Fly signup attempt on 2026-08-23 was rejected by the provider as too many
-accounts. No card or paid plan was added, so no external Fly resource is
-represented as green.
+platform/signed smoke behavior, and the service's real Postgres preflight.
+
+On 2026-08-29 `fly auth whoami` succeeded as `jigyanshu15@gmail.com` and the
+CLI resolved organization slug `personal`. The account dashboard showed good
+standing, a `$0.00` credit balance, `$0.00` upcoming invoice, and only the free
+10 GB volume-snapshot allowance. Fly's current official pricing lists Managed
+Postgres Basic at `$38/month` plus `$0.28` per provisioned GB-month, prorated.
+Because Voicey's production contract requires Fly Managed Postgres and the user
+authorized free-tier resources only, no app, cluster, bucket, Machine, or
+charge was created. This is a verified billing constraint, not a deployment
+failure, and the external Fly gate remains pending paid-resource authorization.
 
 Install and authenticate the Fly CLI, choose a disposable web-only voicey
 agent project, and run the complete gate from this repository:
@@ -111,8 +119,8 @@ agent project, and run the complete gate from this repository:
 export VOICEY_REPO_ROOT="$PWD"
 export VOICEY_AGENT_PROJECT='/absolute/path/to/web-only-agent-project'
 export VOICEY_FLY_APP='voicey-results-cert'
-export VOICEY_FLY_ORG='exact-org-slug'
-export VOICEY_FLY_REGION='iad'
+export VOICEY_FLY_ORG='personal'
+export VOICEY_FLY_REGION='sin'
 export VOICEY_FLY_PG='voicey-results-cert-pg'
 export VOICEY_FLY_BUCKET='voicey-results-cert-objects'
 fly auth whoami

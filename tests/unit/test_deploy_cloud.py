@@ -189,7 +189,7 @@ class FakeLiveKitCloudRunner:
             return _result(
                 '[{"Name":"voicey-test","ProjectId":"project_123",'
                 '"URL":"wss://voicey-test.livekit.cloud",'
-                '"APIKey":"redacted","APISecret":"redacted"}]'
+                '"APIKey":"redacted","APISecret":"redacted"}]'  # pragma: allowlist secret
             )
         if command[:2] == ("agent", "config"):
             (cwd / "livekit.toml").write_text(
@@ -362,6 +362,8 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     bot = artifacts.bot.read_text(encoding="utf-8")  # type: ignore[union-attr]
     assert "USER 10001:10001" in dockerfile
     assert "FROM dailyco/pipecat-base:0.1.0-py3.13" in dockerfile
+    assert "python -m venv --without-pip --system-site-packages /opt/voicey" in dockerfile
+    assert "python -m pip uninstall --yes pip" in dockerfile
     assert "VOICEY_PROJECT_ROOT=/voicey/project" in dockerfile
     assert "PORT=8080" in dockerfile
     assert 'HOME="/tmp"' in dockerfile
@@ -395,9 +397,10 @@ def test_cloud_artifacts_are_runtime_native_nonroot_and_secret_free(tmp_path: Pa
     lk_marker = (lk_artifacts.context / "requirements.txt").read_text(encoding="utf-8")
     assert lk_marker.startswith("livekit-agents==1.6.7\n")
     assert "httpx>=0.28,<1" in lk_marker
-    assert '"voicey.deploy.cloud_runtime", "livekit"' in (
-        lk_artifacts.dockerfile.read_text(encoding="utf-8")
-    )
+    lk_dockerfile = lk_artifacts.dockerfile.read_text(encoding="utf-8")
+    assert "python -m venv --without-pip /opt/voicey" in lk_dockerfile
+    assert "python -m pip uninstall --yes pip" in lk_dockerfile
+    assert '"voicey.deploy.cloud_runtime", "livekit"' in lk_dockerfile
 
 
 def test_cloud_artifact_rejects_symlink_and_bad_plan(tmp_path: Path) -> None:
@@ -647,8 +650,8 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
         _lk_plan(),
         environment={
             "LIVEKIT_URL": "wss://voicey-test.livekit.cloud",
-            "LIVEKIT_API_KEY": "livekit-key",
-            "LIVEKIT_API_SECRET": "livekit-secret",
+            "LIVEKIT_API_KEY": "livekit-key",  # pragma: allowlist secret
+            "LIVEKIT_API_SECRET": "livekit-secret",  # pragma: allowlist secret
         },
         engine_wheel=_wheel(tmp_path),
         smoke_to="+14155550199",
@@ -709,8 +712,9 @@ async def test_livekit_cloud_create_resume_and_previous_version_rollback(
     assert migrated.state.relay_origin == "https://voicey-results.up.railway.app"
     assert first.smoke.session_smoke
     assert session_smoke.to_numbers == ["+14155550199"]
-    assert session_smoke.environments[0]["LIVEKIT_URL"] == ("wss://voicey-test.livekit.cloud")
-    assert session_smoke.environments[0]["LIVEKIT_API_KEY"] == "livekit-key"
+    smoke_environment = session_smoke.environments[0]
+    assert smoke_environment["LIVEKIT_URL"] == "wss://voicey-test.livekit.cloud"
+    assert smoke_environment["LIVEKIT_API_KEY"] == "livekit-key"  # pragma: allowlist secret
     secret_payload = runner.secret_payloads[0]
     assert "LIVEKIT_API_KEY" not in secret_payload
     assert "LIVEKIT_API_SECRET" not in secret_payload
@@ -745,8 +749,8 @@ async def test_livekit_cloud_smoke_retry_reuses_exact_deployed_artifact(
     )
     environment = {
         "LIVEKIT_URL": "wss://voicey-test.livekit.cloud",
-        "LIVEKIT_API_KEY": "livekit-key",
-        "LIVEKIT_API_SECRET": "livekit-secret",
+        "LIVEKIT_API_KEY": "livekit-key",  # pragma: allowlist secret
+        "LIVEKIT_API_SECRET": "livekit-secret",  # pragma: allowlist secret
     }
 
     sys.modules.pop("agent", None)

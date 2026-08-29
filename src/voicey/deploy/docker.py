@@ -308,7 +308,7 @@ def _dockerfile(*, package_spec: str, wheel_extras: str) -> str:
 FROM python:3.14-slim-bookworm AS build
 ARG VOICEY_PACKAGE="{package_spec}"
 RUN python -m pip install --no-cache-dir uv==0.11.7 \\
-    && python -m venv /opt/voicey
+    && python -m venv --without-pip /opt/voicey
 WORKDIR /app
 COPY . /app
 RUN wheel="$({wheel_find})" \\
@@ -328,6 +328,7 @@ FROM python:3.14-slim-bookworm AS runtime
 RUN apt-get update \\
     && apt-get install --no-install-recommends -y ca-certificates libgomp1 \\
     && rm -rf /var/lib/apt/lists/* \\
+    && python -m pip uninstall --yes pip \\
     && groupadd --system --gid 10001 voicey \\
     && useradd --system --uid 10001 --gid 10001 --home-dir /app --shell /usr/sbin/nologin voicey
 WORKDIR /app

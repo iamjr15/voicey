@@ -30,6 +30,14 @@ to PEP 440.
 
 ### Security
 
+- Constrain the Pipecat extra to NLTK 3.10.2 or newer, resolving
+  PYSEC-2026-3726 before the first public Python canary.
+- Build every Voicey-owned container virtual environment without pip and
+  remove system pip from final stages, eliminating pip's unused vendored
+  build-tool dependency set from runtime images.
+- Keep PyPI credentials out of command arguments and shell history; the first
+  account-wide upload token is revoked after project creation and replaced by
+  a project-scoped token.
 - Raise the Telnyx/companion cryptography floor to 50 and pin the audited
   development installer to pip 26.2+, resolving PYSEC-2026-3552 and
   PYSEC-2026-3721 without suppressions.

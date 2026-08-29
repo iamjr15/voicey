@@ -42,6 +42,11 @@ The wheel and requirements are build inputs, then removed from the runtime
 image. Provider, carrier, webhook, and integrator secrets are never Docker
 build arguments or image layers.
 
+Pinned `uv` installs the application into a virtual environment created with
+`--without-pip`. The runtime image therefore does not carry pip or pip's
+vendored build-tool dependency set; the final stage removes the base image's
+system pip as well.
+
 ## Configure and start
 
 The Compose service reads the agent project's gitignored `.env`, which the

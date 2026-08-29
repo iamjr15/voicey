@@ -82,6 +82,11 @@ Python's import path for the entire hosted session, not only while importing
 `agent.py`, so configured tool modules and runtime-native flow modules remain
 available when Pipecat resolves them lazily.
 
+Voicey's overlay virtual environment is created with `--without-pip`; pinned
+`uv` installs the overlay without introducing another package installer. The
+final stage removes the base image's system pip while otherwise leaving the
+separately pinned Pipecat system package set intact.
+
 ## Deploy and verify
 
 For a web-only project:

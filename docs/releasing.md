@@ -1,8 +1,9 @@
 # Release engineering
 
-Voicey release preparation is automated, but publication is intentionally
-human-only. The workflow never uploads to PyPI, creates a repository, registers
-a name, or mutates a public release.
+Voicey release preparation is automated, but publication requires explicit
+human approval. The workflow never uploads to PyPI, creates a repository,
+registers a name, or mutates a public release. An approved operator may perform
+the upload with the guarded procedure below.
 
 ## Version policy
 
@@ -108,6 +109,55 @@ uv run python tests/verification/run_p4_release_gate.py \
   --report .voicey/verification/p4-stable-report.json
 ```
 
-Publishing remains blocked until the human chooses the final name, executes
-`RENAME.md`, reviews the artifact evidence, and explicitly performs the public
-upload.
+Stable publishing remains blocked until the human reviews the evidence for the
+same release line and explicitly approves that public upload. The separately
+approved first canary follows the procedure below.
+
+## Human-approved PyPI upload
+
+The name is finalized as Voicey and `RENAME.md` is complete. The first public
+Python artifact is the existing `0.0.0.dev0` canary: it reserves the name
+without claiming a stable release while paid, physical, and wall-clock gates
+remain open.
+
+Build from the exact reviewed commit into a fresh directory, validate both
+artifacts, and rerun the installed-wheel canary gate:
+
+```bash
+RELEASE_DIST="$(mktemp -d)"
+uv build --out-dir "$RELEASE_DIST"
+uvx --from twine twine check "$RELEASE_DIST"/*
+VOICEY_WHEEL="$(find "$RELEASE_DIST" -maxdepth 1 -name '*.whl' -type f)"
+uv run python tests/verification/run_p4_release_gate.py \
+  --wheel "$VOICEY_WHEEL" \
+  --channel canary \
+  --report .voicey/verification/p4-pypi-canary-report.json
+```
+
+An unclaimed project cannot have a project-scoped token yet. Create one
+account-wide token for the first upload, enter it through a hidden prompt, and
+upload the exact checked wheel and sdist without putting the token in command
+arguments or shell history:
+
+```bash
+UV_PUBLISH_TOKEN="$(python -c 'import getpass; print(getpass.getpass("PyPI token: "))')" \
+  uv publish --check-url https://pypi.org/simple/ "$RELEASE_DIST"/*
+```
+
+As soon as PyPI creates `voicey`, create a token scoped to that project, store
+it in the operator's credential manager, and revoke the account-wide token.
+
+Verify index bytes from a clean environment with no checkout import path:
+
+```bash
+VERIFY_ROOT="$(mktemp -d)"
+uv venv --python 3.14 "$VERIFY_ROOT/.venv"
+uv pip install --python "$VERIFY_ROOT/.venv/bin/python" \
+  'voicey==0.0.0.dev0'
+(cd "$VERIFY_ROOT" && "$VERIFY_ROOT/.venv/bin/voicey" --version)
+```
+
+Record the PyPI URL, artifact SHA-256, clean-install output, and exact source
+commit in `docs/COMPLETION-REPORT.md`. Never store the account password or
+upload token in the repository, shell history, release report, or generated
+artifact.

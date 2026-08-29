@@ -57,6 +57,10 @@ admission state is reconciled from `AgentServer.active_jobs`; no bound
 session-end callback is serialized into a child.
 It sends worker-only secrets through a temporary `0600` file that is removed
 as soon as the CLI returns.
+Pinned `uv` installs the worker into a virtual environment created with
+`--without-pip`, so the runtime worker does not carry a second package
+installer or its vendored build-tool dependency set. The final stage removes
+the base image's system pip as well.
 LiveKit project credentials injected into the local command remain available
 to the room-smoke client but are not copied into that worker secret file; the
 Cloud agent runtime receives its project credentials from LiveKit itself.

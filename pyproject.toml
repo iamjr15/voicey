@@ -45,7 +45,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-pipecat = ["pipecat-ai[anthropic,cartesia,daily,deepgram,evals,google,webrtc,websocket]==1.6.0"]
+pipecat = [
+  "nltk>=3.10.2,<4",
+  "pipecat-ai[anthropic,cartesia,daily,deepgram,evals,google,webrtc,websocket]==1.6.0",
+]
 livekit = [
   "anthropic==0.120.0",
   "livekit-agents[anthropic,cartesia,deepgram,elevenlabs,google,openai,silero]==1.6.7",

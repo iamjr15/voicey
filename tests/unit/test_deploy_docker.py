@@ -79,6 +79,8 @@ def test_generator_emits_idempotent_secret_free_hardened_artifacts(tmp_path: Pat
     ignored = first.dockerignore.read_text(encoding="utf-8")
     combined = dockerfile + compose + ignored
     assert "USER 10001:10001" in dockerfile
+    assert "python -m venv --without-pip /opt/voicey" in dockerfile
+    assert "python -m pip uninstall --yes pip" in dockerfile
     assert 'CMD ["python", "-m", "voicey.deploy.runtime"]' in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "init: true" in compose

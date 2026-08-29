@@ -235,6 +235,8 @@ def test_fly_plan_and_artifacts_enforce_managed_topology(tmp_path: Path) -> None
     assert "VOICEY_RELAY_CREDENTIAL" not in config
     assert "VOICEY_RESULTS_SECRET" not in config
     assert "voicey.deploy.results_service" in dockerfile
+    assert "python -m venv --without-pip /opt/voicey" in dockerfile
+    assert "python -m pip uninstall --yes pip" in dockerfile
     assert "[companion]" in dockerfile
     assert "[pipecat]" not in dockerfile
     assert "[livekit]" not in dockerfile

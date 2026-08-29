@@ -363,6 +363,8 @@ def test_railway_plan_artifacts_and_helpers_are_strict_and_secret_free(
     assert "--preflight-only" in config["deploy"]["preDeployCommand"]
     assert "voicey.deploy.results_service" in dockerfile
     assert "USER 10001:10001" in dockerfile
+    assert "python -m venv --without-pip /opt/voicey" in dockerfile
+    assert "python -m pip uninstall --yes pip" in dockerfile
     assert "VOICEY_RELAY_CREDENTIAL" not in artifacts.config.read_text()
     assert _variable_reference("Postgres", "DATABASE_URL") == ("${{Postgres.DATABASE_URL}}")
     assert _json_items({"services": [{"id": "one"}, 2]}) == [{"id": "one"}]
