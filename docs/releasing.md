@@ -3,10 +3,10 @@
 Voicey release preparation and stable publication are automated behind explicit
 human approval. The workflow builds without publishing authority, then gives a
 separate protected job only a short-lived OIDC identity. It never stores a PyPI
-token. The public repository is `iamjr15/voicey`; the one-time GitHub/PyPI
-trust binding remains a human-authorized operation. Voicey 1.0.0 used the
-documented bootstrap path because that remote was not yet integrated; OIDC is
-the required steady-state path once the binding exists.
+token. The public repository is `iamjr15/voicey`; its protected GitHub
+environment and exact PyPI Trusted Publisher binding were configured on
+2026-08-29. Voicey 1.0.0 used the documented bootstrap path because that remote
+was not yet integrated; OIDC is the required steady-state path.
 
 ## Version policy
 
@@ -120,7 +120,7 @@ PyPI Trusted Publishing. Build code has no OIDC permission; the publishing job
 does not check out or build source. Duplicate uploads fail closed and PEP 740
 attestations are enabled.
 
-## One-time Trusted Publisher setup
+## Trusted Publisher setup
 
 For the existing `iamjr15/voicey` GitHub repository:
 
@@ -135,8 +135,11 @@ For the existing `iamjr15/voicey` GitHub repository:
 5. Push `v1.1.0`, dispatch the stable channel with that canary run id, review
    the private evidence, and approve the protected environment.
 
-The repository workflow is implemented and tested. Its protected environment
-and PyPI identity binding must both exist before an OIDC publication can run.
+The repository workflow is implemented and tested. Steps 1–3 completed on
+2026-08-29: environment `pypi` requires reviewer `iamjr15`, admits only `v*`
+tags, and PyPI binds `iamjr15/voicey` + `release.yml` + `pypi`. Steps 4–5 are
+the first future OIDC release procedure; they were not faked by republishing the
+already-existing 1.0.0 version.
 
 ## Approved bootstrap upload
 
@@ -210,6 +213,7 @@ unversioned install selected 1.0.0. The superseded `0.0.0.dev0` release is
 yanked, not deleted.
 
 The project-scoped bootstrap token remains only until a Trusted Publishing run
-succeeds. The temporary account-wide claim token still requires manual removal
-because PyPI rejected the supplied account password during the revocation
-attempt; see `docs/GAPS.md`. No credential value is stored in this repository.
+succeeds. The exposed account password was rotated on 2026-08-29 and stored only
+in macOS Keychain. The temporary account-wide claim token still requires removal
+after a fresh PyPI 2FA challenge; see `docs/GAPS.md`. No credential value is
+stored in this repository.

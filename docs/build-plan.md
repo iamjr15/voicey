@@ -177,9 +177,9 @@ cache-disabled clean-install verified from PyPI on Python 3.14. Stable
 `voicey==1.0.0` was then published from exact tagged commit `e414bee` after its
 same-line `1.0.0rc1`, stable installed-wheel, and security gates passed. Public
 wheel/sdist bytes and default plus both-runtime-extra clean installs are
-verified; the development release is yanked. Tokenless release CI is complete,
-while the public GitHub repository, protected environment, and exact PyPI
-Trusted Publisher binding remain human-authorized one-time setup.
+verified; the development release is yanked. The public GitHub repository,
+protected `pypi` environment, and exact PyPI Trusted Publisher binding completed
+on 2026-08-29; the first future OIDC publication remains real release evidence.
 
 Full chaos suite; 24h soak at max_concurrent; drain/zero-downtime redeploy per target (against the rolling-generation invariant test); Prometheus endpoint + opt-in OTLP; **railway target** (platform-managed PG provisioning + migrations + persistence preflight + rolling-generation invariant tests — fly moved to P3 as the companion foundation); `upgrade` + `recipes update-check` drift tooling (AI-merge guidance, never overwrite); **release engineering as concrete tasks (Codex R3, spec §15)**: SemVer policy implementation + deprecation-warning machinery (2-minor minimum), runtime version-range checks with out-of-range warnings + compatibility table, canary channel (`--pre`) validated by first-party recipes before stable, **API/schema snapshot diff in CI** (config schema, webhook payload, CLI surface — docs PR required on change); **docs completion per spec §16 as an enumerated checklist** (per-runtime quickstarts CI-executed verbatim, concepts, per-carrier + per-deploy-target guides, webhook receiving in 3 languages, testing, upgrading, recipe pages, generated API reference, error-catalog pages, troubleshooting index); security pass (signature negative tests, secret-leak scans of logs/records/images, dependency + container audit — baseline scanning already running since P0/P1); **rename step** (RENAME.md executed once the real name is chosen: package dir, pyproject, console script, entry-point groups, imports, docs) → publish to PyPI + launch.
 
@@ -277,9 +277,9 @@ a fresh source-free environment, and compiled/instantiated all four recipes on
 both native runtimes. Canary artifacts remain private; stable requires a green
 same-release-line canary report, reruns the wheel gate, and publishes only from
 an isolated OIDC job after protected-environment approval. The public
-`iamjr15/voicey` repository now preserves the prior npm lineage; its protected
-environment and exact PyPI Trusted Publisher binding remain externally
-authorized setup.
+`iamjr15/voicey` repository now preserves the prior npm lineage. Its protected
+`pypi` environment and exact PyPI Trusted Publisher binding were externally
+authorized and configured on 2026-08-29.
 The bootstrap stable `voicey==1.0.0` release was published from exact tagged
 commit `e414bee` on 2026-08-29 after same-line canary, stable, security, Twine,
 public-byte, and source-free Python 3.14 install verification; its superseded
@@ -309,9 +309,10 @@ canonical Python 3.14 image with no fixed high/critical or secret finding.
 eight local groups against disposable PostgreSQL 17; its five-second soak
 terminalized 864/864 calls at peak 16 with zero active/FD leak. Final full
 suite: 1,127 passed, 41 honest skips, 90.42% branch coverage. The report remains
-truthfully `pending-live`: exact provider/carrier/cloud/object-store, live
-rolling-drain, microphone/wizard/doctor/handset, 24-hour, naming, and public
-publication items stay in `docs/GAPS.md`.
+truthfully `pending-live`: exact provider/carrier/object-store, paid Fly and
+PSTN, live rolling-drain, microphone/wizard/doctor/handset, and 24-hour items
+stay in `docs/GAPS.md`. Public naming, publication, repository integration, and
+Trusted Publisher authorization completed on 2026-08-29.
 
 ## Verification approach
 

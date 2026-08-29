@@ -1001,3 +1001,18 @@ These choices apply the documented proposals authorized in the build mandate and
   or stable semantics, and stable still requires same-line canary evidence.
 - Pin every third-party GitHub Action to an immutable commit across all
   workflows, not only the registry publishing jobs.
+
+## 2026-08-29 — External release authorization completed
+
+- Configure GitHub environment `pypi` with required reviewer `iamjr15`, allow
+  only `v*` deployment tags, and leave self-review enabled because this is the
+  repository's sole current maintainer.
+- Bind the PyPI `voicey` project to the exact Trusted Publisher identity:
+  owner `iamjr15`, repository `voicey`, workflow `release.yml`, environment
+  `pypi`. Store no upload token in GitHub.
+- Do not manufacture a duplicate 1.0.0 upload or an unplanned 1.0.1 solely to
+  exercise OIDC. Retain the project-scoped bootstrap token until the first real
+  future Trusted Publishing release succeeds, then revoke it.
+- Rotate the account password that was exposed during setup and keep the new
+  credential only in macOS Keychain. Removal of the obsolete account-wide claim
+  token remains gated by a fresh PyPI 2FA challenge, not by source changes.

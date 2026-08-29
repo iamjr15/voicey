@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import ClassVar, Literal
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from voicey import __version__
@@ -44,7 +45,9 @@ from voicey.storage.sqlite import SQLiteRepository
 from voicey.telephony.models import NumberInfo, PipecatTarget, RollbackToken
 from voicey.upgrade import UpgradeReport
 
-runner = CliRunner()
+# Rich changes ANSI styling and line wrapping when it detects hosted CI. Keep
+# contract assertions independent of the parent process and terminal width.
+runner = CliRunner(env={"CI": None, "GITHUB_ACTIONS": None, "NO_COLOR": "1", "COLUMNS": "240"})
 
 
 def test_bare_command_prints_status_and_next_step() -> None:
@@ -307,6 +310,7 @@ def test_bare_json_status_is_parseable(monkeypatch: pytest.MonkeyPatch, tmp_path
 def test_command_tree_and_flag_twins_are_exposed() -> None:
     root = runner.invoke(app, ["--help"])
     assert root.exit_code == 0
+    root_output = unstyle(root.stdout)
     for command in (
         "init",
         "dev",
@@ -320,10 +324,11 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
         "recipes",
         "upgrade",
     ):
-        assert command in root.stdout
+        assert command in root_output
 
     init_help = runner.invoke(app, ["init", "--help"])
     assert init_help.exit_code == 0
+    init_output = unstyle(init_help.stdout)
     for flag in (
         "--recipe",
         "--description",
@@ -337,7 +342,7 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
         "--resume",
         "--yes",
     ):
-        assert flag in init_help.stdout
+        assert flag in init_output
 
     for command, expected in (
         (["dev", "--help"], ("--phone", "--no-phone", "--tunnel", "--no-open")),
@@ -430,8 +435,9 @@ def test_command_tree_and_flag_twins_are_exposed() -> None:
     ):
         help_result = runner.invoke(app, command)
         assert help_result.exit_code == 0
+        help_output = unstyle(help_result.stdout)
         for flag in expected:
-            assert flag in help_result.stdout
+            assert flag in help_output
 
 
 def test_noninteractive_init_never_chooses_missing_answer(

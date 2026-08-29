@@ -29,17 +29,16 @@ This file tracks gates that are fully implemented but cannot be truthfully marke
 | P4 Railway deploy | companion + paired web model/audio green; paid active-call drain pending | Commands below | Funded carrier call held open across a replacement deployment |
 | P4 24-hour soak | ready-to-run, pending 24 hours | Command below | 24 hours of uninterrupted self-hosted runner time |
 | P4 live rolling drain on every target | ready-to-run, pending credentials/paid calls | P4.1 procedure below, using each target's exact deploy command above | Public Docker ingress plus authenticated Fly, Pipecat Cloud, LiveKit Cloud, and Railway targets with active paid calls |
-| P4 GitHub/PyPI Trusted Publisher binding | public repository and workflow ready; pending environment/binding | One-time setup in `docs/releasing.md` | Protected `pypi` environment/reviewer and exact PyPI owner/repository/workflow/environment binding |
 
 Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
 
-Security follow-up: remove the temporary account-wide PyPI token named
-`voicey initial claim 2026-08-29` from Account settings → API tokens. PyPI
-rejected the supplied account password during the automated attempt, so this
-token is not represented as revoked. Rotate the account password because it was
-shared in chat. The release uses the separate project-scoped token only.
+Security follow-up: the exposed PyPI password was replaced on 2026-08-29 with a
+high-entropy credential stored only in macOS Keychain. Remove the temporary
+account-wide token named `voicey initial claim 2026-08-29` after completing the
+fresh PyPI 2FA challenge. Keep the project-scoped release token only until the
+first Trusted Publishing release succeeds, then revoke it too.
 
 ## 2026-08-23 free-tier cloud evidence already green
 

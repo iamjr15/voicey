@@ -60,22 +60,11 @@ jobs:
             --wheel "${{ steps.wheel.outputs.path }}" \
             --short-soak-s 30 \
             --max-concurrent 8 \
-            --report p4-gate-report.json
+            --report .voicey/verification/p4-gate-report.json
       - name: Upload every child report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: p4-aggregate-reports
-          path: |
-            p4-gate-report.json
-            p3-from-p4-report.json
-            p4-hardening-report.json
-            p4-short-soak-report.json
-            p4-observability-report.json
-            p4-railway-report.json
-            p4-upgrade-report.json
-            p4-release-report.json
-            p4-docs-report.json
-            p4-docs-quickstarts.json
-            p4-security-report.json
+          path: .voicey/verification/*.json
           if-no-files-found: warn

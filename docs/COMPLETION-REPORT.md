@@ -7,8 +7,8 @@ publicly released. The product is not represented as fully externally
 certified: paid provider media, live PSTN, human audio/handset checks,
 active-call drain, managed-object compatibility, paid Fly resources, and the
 full 24-hour soak remain pending under the repository's reality boundary. The
-tokenless release workflow is complete; activating it requires the one-time
-GitHub environment and PyPI Trusted Publisher binding described below.
+tokenless release workflow, protected GitHub environment, and exact PyPI
+Trusted Publisher binding are configured.
 
 ## Phase gate summary
 
@@ -23,13 +23,13 @@ GitHub environment and PyPI Trusted Publisher binding described below.
 The final aggregate report is
 `.voicey/verification/p4-gate-report.json`. Its
 `local_automated_status` is `green`, its overall status is `pending-live`, and
-all four pending rows name their unpromoted evidence class.
+all three pending rows name their unpromoted evidence class.
 
 ## Final local evidence
 
 - Full Python suite: 1,127 passed, 41 truthful skips, 90.42% branch coverage on
   Python 3.11.
-- Current post-certification regression: 1,184 passed, 41 truthful skips, and
+- Current post-certification regression: 1,186 passed, 41 truthful skips, and
   90.02% coverage; Ruff, formatting, strict Pyright, 11 frontend tests,
   frontend type checking/build, and Python/npm dependency audits are green.
 - Reference-provider text certification: fresh appointment and P3 recipe
@@ -86,6 +86,12 @@ all four pending rows name their unpromoted evidence class.
   installed 148 packages with both runtime extras, imported only from its
   temporary site-packages, reported version 1.0.0, and exposed every recipe on
   both runtimes. A separate cache-disabled unversioned install selected 1.0.0.
+- Release authorization: the public `iamjr15/voicey` repository preserves the
+  npm lineage under `npm-v*` and Python under `v*`. GitHub environment `pypi`
+  requires reviewer `iamjr15` and admits only `v*` tags. PyPI lists the exact
+  Trusted Publisher `iamjr15/voicey`, workflow `release.yml`, environment
+  `pypi`. The first future OIDC publication remains the evidence needed before
+  revoking the bootstrap project token.
 - Fly account/CLI access: authentication succeeded for organization `personal`
   on 2026-08-29. The account has no applicable credit and the production
   Managed Postgres topology is paid, so the free-tier-only constraint prevented
@@ -151,8 +157,8 @@ provider-specific safety boundaries are in [decisions.md](decisions.md).
 
 ## Gaps and human-only remainder
 
-[GAPS.md](GAPS.md) contains 26 ready-to-run or human-only rows: 10 P1, 5 P2, 7
-P3, and 4 P4. Each row identifies its missing credential, paid resource,
+[GAPS.md](GAPS.md) contains 25 ready-to-run or human-only rows: 10 P1, 5 P2, 7
+P3, and 3 P4. Each row identifies its missing credential, paid resource,
 physical input, external route, or wall-clock requirement and gives the exact
 command/checklist. No skipped live test is counted as green.
 
@@ -164,14 +170,12 @@ The remaining human-owned actions are:
    microphone, guided-wizard, doctor-usability, active-call drain, paid Fly, and
    physical-handset procedures when their accounts, balance, or human input
    exist.
-3. Configure the protected `pypi` environment and exact PyPI Trusted Publisher
-   binding for the authorized public `iamjr15/voicey` repository. Once the
-   first OIDC publication succeeds, revoke the bootstrap project token.
-4. Remove the temporary account-wide PyPI token and rotate the PyPI account
-   password as recorded in [GAPS](GAPS.md). Create any remaining domain
-   resources manually.
+3. Complete the fresh PyPI 2FA challenge, remove the temporary account-wide
+   token, and revoke the bootstrap project token after the first OIDC
+   publication succeeds. The exposed account password has already been rotated.
+4. Create any remaining domain resources manually.
 
 Until those items pass, the accurate release state is: implementation complete,
 local automation, free-tier cloud web/model/audio certification, and public
-stable Python 1.0.0 release green; paid/human/time external certification and
-the one-time GitHub/PyPI trust binding remain pending.
+stable Python 1.0.0 release and tokenless release authorization green;
+paid/human/time external certification remains pending.

@@ -13,6 +13,11 @@ to PEP 440.
 - Made branch CI resolve the built wheel by metadata instead of the historical
   development filename, separated non-publishing artifact verification from
   canary/stable promotion, and pinned every third-party Action immutably.
+- Made full hosted Python matrices install every supported integration, isolated
+  CLI contract tests from hosted-terminal styling, and kept generated gate
+  evidence outside repository secret-scan inputs.
+- Configured the protected GitHub `pypi` environment and exact PyPI Trusted
+  Publisher identity for tokenless future releases.
 
 ## 1.0.0 - 2026-08-29
 

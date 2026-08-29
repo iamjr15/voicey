@@ -173,7 +173,7 @@ def main() -> int:
         "pending_count": len(local_pending) + len(external_pending),
         "truthfulness": (
             "green local automation does not promote paid providers, cloud accounts, "
-            "physical handsets, external trust bindings, or the unshortened 24-hour soak"
+            "physical handsets, or the unshortened 24-hour soak"
         ),
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,18 +259,6 @@ def _pending_external_results(max_concurrent: int) -> list[GateResult]:
             status="pending-human",
             command="execute every pending-human checklist in docs/GAPS.md",
             detail="requires microphones, human speech, and physical endpoints",
-        ),
-        GateResult(
-            name="trusted_publisher_environment_and_binding",
-            status="pending-human",
-            command=(
-                "configure the protected pypi environment, then bind the exact "
-                "iamjr15/voicey/release.yml/pypi identity on PyPI"
-            ),
-            detail=(
-                "the public repository and stable CI/CD exist; environment protection "
-                "and PyPI identity binding require external authorization"
-            ),
         ),
     ]
 
