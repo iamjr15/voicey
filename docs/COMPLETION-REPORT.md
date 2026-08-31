@@ -173,9 +173,9 @@ The remaining human-owned actions are:
    microphone, guided-wizard, doctor-usability, active-call drain, paid Fly, and
    physical-handset procedures when their accounts, balance, or human input
    exist.
-3. Complete the fresh PyPI 2FA challenge, remove the temporary account-wide
-   token, and revoke the bootstrap project token after the first OIDC
-   publication succeeds. The exposed account password has already been rotated.
+3. Revoke the bootstrap project token after the first OIDC publication
+   succeeds. The exposed account password was rotated, and the obsolete
+   account-wide token was removed on 2026-08-31.
 4. Create any remaining domain resources manually.
 
 Until those items pass, the accurate release state is: implementation complete,

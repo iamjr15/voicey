@@ -34,12 +34,6 @@ Statuses change to `ready-to-run, pending …` only after the harness,
 configuration, and exact command exist. A row moves to the completion report
 as green only after the command actually passes.
 
-Security follow-up: the exposed PyPI password was replaced on 2026-08-29 with a
-high-entropy credential stored only in macOS Keychain. Remove the temporary
-account-wide token named `voicey initial claim 2026-08-29` after completing the
-fresh PyPI 2FA challenge. Keep the project-scoped release token only until the
-first Trusted Publishing release succeeds, then revoke it too.
-
 ## 2026-08-23 free-tier cloud evidence already green
 
 The following evidence is complete and is not a gap:

@@ -214,6 +214,6 @@ yanked, not deleted.
 
 The project-scoped bootstrap token remains only until a Trusted Publishing run
 succeeds. The exposed account password was rotated on 2026-08-29 and stored only
-in macOS Keychain. The temporary account-wide claim token still requires removal
-after a fresh PyPI 2FA challenge; see `docs/GAPS.md`. No credential value is
-stored in this repository.
+in macOS Keychain. The temporary account-wide claim token was removed on
+2026-08-31, and PyPI security history verified the removal. No credential value
+is stored in this repository.

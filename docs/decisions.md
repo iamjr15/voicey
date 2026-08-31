@@ -1014,5 +1014,5 @@ These choices apply the documented proposals authorized in the build mandate and
   exercise OIDC. Retain the project-scoped bootstrap token until the first real
   future Trusted Publishing release succeeds, then revoke it.
 - Rotate the account password that was exposed during setup and keep the new
-  credential only in macOS Keychain. Removal of the obsolete account-wide claim
-  token remains gated by a fresh PyPI 2FA challenge, not by source changes.
+  credential only in macOS Keychain. The obsolete account-wide claim token was
+  removed after fresh PyPI 2FA and new-device confirmation on 2026-08-31.

@@ -18,6 +18,9 @@ to PEP 440.
   evidence outside repository secret-scan inputs.
 - Configured the protected GitHub `pypi` environment and exact PyPI Trusted
   Publisher identity for tokenless future releases.
+- Removed the temporary all-projects PyPI bootstrap token after rotating the
+  exposed account password; only the project-scoped fallback remains until the
+  first real Trusted Publishing release succeeds.
 
 ## 1.0.0 - 2026-08-29
 
