@@ -37,27 +37,27 @@ dependencies = [
   "pydantic-settings>=2.12,<3",
   "questionary==2.1.1",
   "rich>=13.9.4,<16",
-  "structlog>=25.5,<26",
-  "typer==0.27.0",
+  "structlog>=25.5,<27",
+  "typer==0.27.2",
   "uvicorn[standard]>=0.40,<1",
   "watchfiles>=1.1,<2",
-  "websockets>=13.1,<17",
+  "websockets>=13.1,<18",
 ]
 
 [project.optional-dependencies]
 pipecat = [
   "nltk>=3.10.2,<4",
-  "pipecat-ai[anthropic,cartesia,daily,deepgram,evals,google,webrtc,websocket]==1.6.0",
+  "pipecat-ai[anthropic,cartesia,daily,deepgram,evals,google,webrtc,websocket]==1.8.1",
 ]
 livekit = [
-  "anthropic==0.120.0",
-  "livekit-agents[anthropic,cartesia,deepgram,elevenlabs,google,openai,silero]==1.6.7",
-  "livekit-api==1.2.0",
+  "anthropic==1.3.0",
+  "livekit-agents[anthropic,cartesia,deepgram,elevenlabs,google,openai,silero]==1.7.1",
+  "livekit-api==1.2.1",
 ]
-twilio = ["python-multipart>=0.0.22,<1", "twilio==9.10.9"]
+twilio = ["python-multipart>=0.0.22,<1", "twilio==9.11.0"]
 telnyx = ["cryptography>=50,<51", "python-multipart>=0.0.22,<1"]
 vobiz = ["python-multipart>=0.0.22,<1"]
-plivo = ["plivo==4.61.0", "python-multipart>=0.0.22,<1"]
+plivo = ["plivo==4.62.0", "python-multipart>=0.0.22,<1"]
 tunnel = ["ngrok==1.4.0"]
 cloud = [
     "boto3>=1.40,<2",
@@ -66,10 +66,10 @@ cloud = [
 companion = [
     "boto3>=1.40,<2",
     "cryptography>=50,<51",
-    "plivo==4.61.0",
+    "plivo==4.62.0",
     "psycopg[binary,pool]>=3.2.10,<4",
     "python-multipart>=0.0.22,<1",
-    "twilio==9.10.9",
+    "twilio==9.11.0",
 ]
 
 [project.scripts]
