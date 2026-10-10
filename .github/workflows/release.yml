@@ -96,7 +96,7 @@ jobs:
           echo "wheel=$(find dist -maxdepth 1 -name '*.whl' -type f)" >> "$GITHUB_OUTPUT"
       - name: Download prior canary evidence
         if: inputs.channel == 'stable'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: voicey-canary-${{ inputs.canary_run_id }}
           path: canary-evidence
@@ -144,7 +144,7 @@ jobs:
       id-token: write
     steps:
       - name: Download the verified release bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
           path: release-bundle
