@@ -209,7 +209,7 @@ jobs:
             --report p1-gate-report.json
       - name: Upload truthful phase report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: p1-gate-report
           path: p1-gate-report.json
@@ -247,7 +247,7 @@ jobs:
             --report p2-gate-report.json
       - name: Upload truthful phase reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: p2-gate-reports
           path: |
@@ -313,7 +313,7 @@ jobs:
             --report p3-gate-report.json
       - name: Upload truthful phase reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: p3-gate-reports
           path: |
@@ -394,7 +394,7 @@ jobs:
             --report p4-docs-report.json
       - name: Upload truthful hardening reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: p4-hardening-reports
           path: |
