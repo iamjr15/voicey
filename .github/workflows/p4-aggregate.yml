@@ -43,7 +43,7 @@ jobs:
       - name: Sync complete locked environment
         run: uv sync --frozen --all-extras
       - name: Install pinned Trivy
-        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
         with:
           version: v0.72.0
       - name: Build release-shaped wheel
